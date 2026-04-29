@@ -32,12 +32,21 @@ export default function SchoolLayout() {
                 }}
             />
             <Tabs.Screen
+                name="requests"
+                options={{
+                    title: 'Requests',
+                    tabBarIcon: ({ color, size }) => <Ionicons name="clipboard-outline" size={size} color={color} />,
+                }}
+            />
+            <Tabs.Screen
                 name="profile"
                 options={{
                     title: 'Profile',
                     tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
                 }}
             />
+            {/* Hidden screens */}
+            <Tabs.Screen name="notifications" options={{ href: null, title: 'Notifications' }} />
         </Tabs>
     );
 }

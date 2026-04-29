@@ -14,9 +14,7 @@ export default function AdminLayout() {
                 tabBarActiveTintColor: '#4f46e5',
                 tabBarInactiveTintColor: '#6b7280',
                 tabBarStyle: { borderTopColor: '#e5e7eb' },
-                headerStyle: { backgroundColor: '#ffffff' },
-                headerTintColor: '#111827',
-                headerTitleStyle: { fontWeight: '700' },
+                headerShown: false,
             }}
         >
             <Tabs.Screen
@@ -54,6 +52,10 @@ export default function AdminLayout() {
                     tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
                 }}
             />
+            {/* Hidden from tab bar — navigate programmatically */}
+            <Tabs.Screen name="analytics" options={{ href: null, title: 'Analytics' }} />
+            <Tabs.Screen name="notifications" options={{ href: null, title: 'Notifications' }} />
+            <Tabs.Screen name="requests" options={{ href: null, title: 'Requests' }} />
         </Tabs>
     );
 }

@@ -1,0 +1,11 @@
+{
+  "name": "@eduportal/shared",
+  "version": "1.0.0",
+  "main": "./src/api/index.js",
+  "exports": {
+    ".": "./src/api/index.js",
+    "./api/*": "./src/api/*",
+    "./constants/*": "./src/constants/*",
+    "./utils/*": "./src/utils/*"
+  }
+}

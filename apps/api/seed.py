@@ -52,9 +52,9 @@ async def seed():
             existing = await db.scalar(select(User).where(User.email == email))
             if not existing:
                 school_id = None
-                if role == "school" and "school1" in email:
+                if role in ("school", "school_admin", "school_viewer") and "school1" in email:
                     school_id = school1.id
-                elif role == "school" and "school2" in email:
+                elif role in ("school", "school_admin", "school_viewer") and "school2" in email:
                     school_id = school2.id
                 elif role == "teacher":
                     school_id = school1.id
