@@ -1,0 +1,283 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* PRIMARY COLORS - Sophisticated Indigo/Slate */
+    --primary: 238 83% 62%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 11%;
+
+    --accent: 200 98% 39%;
+    --accent-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --destructive: 349 89% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --danger: 349 89% 60%;
+    --danger-foreground: 0 0% 100%;
+
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+
+    --muted: 214 32% 95%;
+    --muted-foreground: 215 16% 47%;
+
+    /* NEUTRAL PALETTE */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 238 83% 62%;
+
+    /* CHART COLORS */
+    --chart-1: 238 83% 62%;
+    --chart-2: 200 98% 39%;
+    --chart-3: 142 71% 45%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 349 89% 60%;
+
+    /* SYSTEM HEALTH COLORS */
+    --health-good: 142 71% 45%;
+    --health-warning: 38 92% 50%;
+    --health-critical: 349 89% 60%;
+
+    /* INTERACTION TOKENS */
+    --focus-ring-offset: 2px;
+    --focus-ring-color: var(--primary);
+    --tile-hover-scale: 1.02;
+
+    /* RADIUS */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.5rem;
+    --radius: var(--radius-md);
+  }
+
+  .dark {
+    /* NEUTRAL PALETTE (DARK) */
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --border: 215 25% 27%;
+    --input: 215 25% 27%;
+
+    --secondary: 215 25% 27%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 215 25% 27%;
+    --muted-foreground: 215 20% 65%;
+
+    /* CHART COLORS DARK */
+    --chart-1: 238 83% 62%;
+    --chart-2: 200 98% 39%;
+    --chart-3: 142 71% 45%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 349 89% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+    line-height: 1.625;
+    letter-spacing: -0.01em;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Poppins', sans-serif;
+    @apply text-balance tracking-tight text-foreground;
+  }
+
+  h1 {
+    @apply text-[2.5rem] font-bold leading-tight;
+  }
+
+  h2 {
+    @apply text-[2rem] font-bold leading-tight;
+  }
+
+  h3 {
+    @apply text-[1.5rem] font-semibold leading-snug;
+  }
+
+  h4 {
+    @apply text-[1.25rem] font-semibold leading-snug;
+  }
+
+  h5 {
+    @apply text-[1.125rem] font-medium leading-snug;
+  }
+
+  h6 {
+    @apply text-[1rem] font-medium leading-snug;
+  }
+}
+
+@layer components {
+
+  /* PDF Viewer specific styles */
+  .pdf-viewer-container {
+    @apply relative flex flex-col bg-card border border-border/50 rounded-[var(--radius-xl)] overflow-hidden shadow-soft-lg transition-all duration-300;
+  }
+
+  .pdf-viewer-container.fullscreen {
+    @apply fixed inset-0 z-50 rounded-none border-none shadow-none;
+  }
+
+  .pdf-document-wrapper {
+    @apply flex-1 overflow-auto bg-[#e5e7eb] dark:bg-[#0f172a] relative p-4 md:p-8 flex justify-center items-start;
+  }
+
+  .react-pdf__Page {
+    @apply bg-white shadow-xl mb-4 transition-transform duration-200 ease-out origin-top;
+  }
+
+  .react-pdf__Page__canvas {
+    @apply rounded-sm max-w-full;
+  }
+
+  .react-pdf__message--loading,
+  .react-pdf__message--error {
+    @apply flex items-center justify-center p-8 text-muted-foreground;
+  }
+}
+
+@layer utilities {
+  .font-poppins {
+    font-family: 'Poppins', sans-serif;
+  }
+
+  .shadow-soft-sm {
+    box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02);
+  }
+
+  .shadow-soft-md {
+    box-shadow: 0 4px 16px -4px rgba(15, 23, 42, 0.06), 0 2px 6px rgba(15, 23, 42, 0.03);
+  }
+
+  .shadow-soft-lg {
+    box-shadow: 0 10px 32px -8px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
+  }
+
+  .shadow-soft-xl {
+    box-shadow: 0 20px 48px -12px rgba(15, 23, 42, 0.12), 0 8px 24px rgba(15, 23, 42, 0.06);
+  }
+
+  .dark .shadow-soft-sm {
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .dark .shadow-soft-md {
+    box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+
+  .dark .shadow-soft-lg {
+    box-shadow: 0 10px 32px -8px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .dark .shadow-soft-xl {
+    box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .bg-gradient-primary {
+    @apply bg-gradient-to-br from-primary to-accent;
+  }
+
+  .bg-gradient-success {
+    @apply bg-gradient-to-br from-emerald-500 to-emerald-700;
+  }
+
+  .bg-gradient-warning {
+    @apply bg-gradient-to-br from-amber-400 to-amber-600;
+  }
+
+  .bg-gradient-danger {
+    @apply bg-gradient-to-br from-rose-500 to-rose-700;
+  }
+
+  .bg-gradient-subtle {
+    background: radial-gradient(ellipse at top right, hsl(var(--primary) / 0.05), hsl(var(--background)), hsl(var(--secondary) / 0.05));
+  }
+
+  .transition-fast {
+    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .transition-base {
+    transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .transition-slow {
+    transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

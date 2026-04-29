@@ -1,0 +1,25 @@
+{
+  "name": "eduportal-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/mobile",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --prefix apps/web",
+    "dev:mobile": "cd apps/mobile && npx expo start",
+    "dev:mobile:android": "cd apps/mobile && npx expo start --android",
+    "dev:mobile:ios": "cd apps/mobile && npx expo start --ios",
+    "build:web": "npm run build --prefix apps/web",
+    "build:mobile:android": "cd apps/mobile && npx eas build --platform android",
+    "build:mobile:ios": "cd apps/mobile && npx eas build --platform ios",
+    "backend:up": "docker compose up -d",
+    "backend:down": "docker compose down",
+    "lint": "npm run lint --prefix apps/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
