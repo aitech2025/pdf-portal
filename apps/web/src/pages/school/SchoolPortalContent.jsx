@@ -16,13 +16,13 @@ const SchoolPortalContent = ({ school }) => {
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const [pdfs, setPdfs] = useState([]);
-  
+
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState(null);
-  
+
   const [loading, setLoading] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
-  
+
   // Viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentPdf, setCurrentPdf] = useState(null);
@@ -35,14 +35,19 @@ const SchoolPortalContent = ({ school }) => {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      // Filter categories based on school grades. school.grades is an array like ['1-5', '6-10']
-      const gradeFilters = school.grades?.map(g => `categoryType~"${g}"`).join(' || ') || 'id=""';
-      const records = await pb.collection('categories').getList(1, 100, {
-        filter: gradeFilters,
-        sort: 'categoryName',
-        $autoCancel: false
+      const res = await fetch(`/api/schools/${school.id}/categories`, {
+        headers: { Authorization: `Bearer ${pb.authStore.token}` }
       });
-      setCategories(records.items);
+      if (!res.ok) throw new Error('Failed to load categories');
+      const data = await res.json();
+      // Map API response shape to the shape the component expects
+      const cats = (data.items || []).map(item => ({
+        id: item.categoryId,
+        categoryName: item.categoryName,
+        categoryType: item.categoryType,
+        isActive: item.isActive,
+      }));
+      setCategories(cats);
     } catch (err) {
       toast.error('Failed to load categories');
     } finally {
@@ -69,12 +74,21 @@ const SchoolPortalContent = ({ school }) => {
   const fetchPdfs = async (subCategoryId) => {
     try {
       setLoading(true);
-      const records = await pb.collection('pdfs').getList(1, 500, {
-        filter: `subCategoryId="${subCategoryId}"`,
-        sort: '-created',
-        $autoCancel: false
+      const res = await fetch(`/api/pdfs?subCategoryId=${subCategoryId}&per_page=500`, {
+        headers: { Authorization: `Bearer ${pb.authStore.token}` }
       });
-      setPdfs(records.items);
+      if (!res.ok) throw new Error('Failed to load PDFs');
+      const data = await res.json();
+      // Map backend response shape to what the component expects
+      const items = (data.items || []).map(pdf => ({
+        id: pdf.id,
+        fileName: pdf.fileName,
+        fileSize: pdf.fileSize,
+        filePath: pdf.filePath,
+        categoryId: pdf.categoryId,
+        subCategoryId: pdf.subCategoryId,
+      }));
+      setPdfs(items);
       setSelectedPdfIds([]);
     } catch (err) {
       toast.error('Failed to load PDFs');
@@ -96,35 +110,24 @@ const SchoolPortalContent = ({ school }) => {
   };
 
   const logDownload = async (pdfId, type = 'single') => {
-    try {
-      await pb.collection('downloadLogs').create({
-        schoolId: school.id,
-        userId: pb.authStore.model.id,
-        pdfId: pdfId,
-        categoryId: selectedCategory?.id,
-        subCategoryId: selectedSubCategory?.id,
-        downloadType: type
-      }, { $autoCancel: false });
-    } catch (err) {
-      console.error('Failed to log download', err);
-    }
+    // Download logging is handled server-side by the download endpoint
+    // No client-side logging needed
   };
 
   const handleDownloadSingle = async (pdf, e) => {
     e?.stopPropagation();
     try {
-      const url =`/uploads/${pdf.pdfFile}`;
-      const response = await fetch(url);
-      const blob = await response.blob();
-      
+      const res = await fetch(`/api/pdfs/${pdf.id}/download`, {
+        headers: { Authorization: `Bearer ${pb.authStore.token}` }
+      });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
       link.download = pdf.fileName || 'document.pdf';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      await logDownload(pdf.id, 'single');
       toast.success('Download complete');
     } catch (err) {
       toast.error('Download failed');
@@ -133,35 +136,37 @@ const SchoolPortalContent = ({ school }) => {
 
   const handleBulkDownload = async () => {
     if (selectedPdfIds.length === 0) return;
-    
+
     setDownloadingZip(true);
     toast.info(`Preparing ZIP archive for ${selectedPdfIds.length} files...`);
-    
+
     try {
       const zip = new JSZip();
       const folder = zip.folder(selectedSubCategory.subCategoryName || "Downloads");
-      
+
       const filesToDownload = pdfs.filter(p => selectedPdfIds.includes(p.id));
-      
+
       for (const pdf of filesToDownload) {
-        const url =`/uploads/${pdf.pdfFile}`;
-        const response = await fetch(url);
-        const blob = await response.blob();
+        const res = await fetch(`/api/pdfs/${pdf.id}/download`, {
+          headers: { Authorization: `Bearer ${pb.authStore.token}` }
+        });
+        if (!res.ok) throw new Error(`Failed to download ${pdf.fileName}`);
+        const blob = await res.blob();
         folder.file(pdf.fileName || `document-${pdf.id}.pdf`, blob);
       }
-      
+
       const zipContent = await zip.generateAsync({ type: 'blob' });
-      
+
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(zipContent);
       link.download = `${selectedCategory.categoryName}-${selectedSubCategory.subCategoryName}.zip`.replace(/\s+/g, '-');
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      // Log all downloads
+
+      // Log all downloads (handled server-side)
       await Promise.all(filesToDownload.map(pdf => logDownload(pdf.id, 'bulk')));
-      
+
       toast.success('ZIP download complete');
       setSelectedPdfIds([]);
     } catch (err) {
@@ -172,7 +177,7 @@ const SchoolPortalContent = ({ school }) => {
   };
 
   const togglePdfSelection = (id) => {
-    setSelectedPdfIds(prev => 
+    setSelectedPdfIds(prev =>
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
   };
@@ -193,15 +198,15 @@ const SchoolPortalContent = ({ school }) => {
           <h1 className="text-3xl font-bold tracking-tight">Content Library</h1>
           <p className="text-muted-foreground">Browse and download educational materials.</p>
         </div>
-        
+
         {step > 1 && (
           <div className="flex items-center text-sm text-muted-foreground font-medium">
             <button onClick={() => setStep(1)} className="hover:text-primary transition-colors flex items-center">
               Categories
             </button>
             <ChevronRight className="w-4 h-4 mx-1 opacity-50" />
-            <button 
-              onClick={() => step > 2 ? setStep(2) : null} 
+            <button
+              onClick={() => step > 2 ? setStep(2) : null}
               className={`${step === 2 ? 'text-foreground font-semibold' : 'hover:text-primary transition-colors'} flex items-center`}
             >
               {selectedCategory?.categoryName}
@@ -220,7 +225,7 @@ const SchoolPortalContent = ({ school }) => {
         <LoadingSpinner />
       ) : (
         <div className="animate-in fade-in duration-300">
-          
+
           {/* STEP 1: CATEGORIES */}
           {step === 1 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -287,20 +292,20 @@ const SchoolPortalContent = ({ school }) => {
                 <Button variant="outline" size="sm" onClick={() => setStep(2)}>
                   <ArrowLeft className="w-4 h-4 mr-2" /> Back
                 </Button>
-                
+
                 <div className="flex items-center gap-3">
                   <div className="text-sm font-medium text-muted-foreground">
                     {selectedPdfIds.length} selected
                   </div>
-                  <Button 
-                    variant="secondary" 
+                  <Button
+                    variant="secondary"
                     size="sm"
                     onClick={() => setSelectedPdfIds(selectedPdfIds.length === pdfs.length ? [] : pdfs.map(p => p.id))}
                   >
                     {selectedPdfIds.length === pdfs.length ? 'Deselect All' : 'Select All'}
                   </Button>
-                  <Button 
-                    onClick={handleBulkDownload} 
+                  <Button
+                    onClick={handleBulkDownload}
                     disabled={selectedPdfIds.length === 0 || downloadingZip}
                     className="shadow-sm"
                   >
@@ -318,19 +323,19 @@ const SchoolPortalContent = ({ school }) => {
                   </div>
                 ) : (
                   pdfs.map(pdf => (
-                    <Card 
-                      key={pdf.id} 
+                    <Card
+                      key={pdf.id}
                       className={`relative overflow-hidden transition-all group ${selectedPdfIds.includes(pdf.id) ? 'ring-2 ring-primary border-primary' : 'hover:border-primary/50'}`}
                     >
                       <div className="absolute top-3 left-3 z-10">
-                        <Checkbox 
+                        <Checkbox
                           checked={selectedPdfIds.includes(pdf.id)}
                           onCheckedChange={() => togglePdfSelection(pdf.id)}
                           className={`bg-background/80 backdrop-blur-sm ${selectedPdfIds.includes(pdf.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}
                         />
                       </div>
-                      
-                      <div 
+
+                      <div
                         className="cursor-pointer p-6 pt-10 flex flex-col h-full"
                         onClick={() => {
                           setCurrentPdf(pdf);
@@ -341,7 +346,7 @@ const SchoolPortalContent = ({ school }) => {
                           <div className="absolute top-0 right-0 w-4 h-4 bg-background rounded-bl" />
                           <span className="font-bold text-red-600 dark:text-red-400 text-sm">PDF</span>
                         </div>
-                        
+
                         <div className="text-center mt-auto">
                           <h3 className="font-medium text-sm line-clamp-2 mb-1 group-hover:text-primary transition-colors" title={pdf.fileName}>
                             {pdf.fileName}
@@ -351,7 +356,7 @@ const SchoolPortalContent = ({ school }) => {
                           </p>
                         </div>
                       </div>
-                      
+
                       <div className="border-t bg-muted/30 p-2 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-0 left-0 right-0 translate-y-full group-hover:translate-y-0">
                         <Button variant="ghost" size="sm" className="w-full text-xs h-8" onClick={(e) => handleDownloadSingle(pdf, e)}>
                           <Download className="w-3 h-3 mr-2" /> Download
@@ -368,13 +373,13 @@ const SchoolPortalContent = ({ school }) => {
 
       {/* View Modal */}
       {currentPdf && (
-        <PDFViewer 
-          isOpen={viewerOpen} 
+        <PDFViewer
+          isOpen={viewerOpen}
           onClose={() => {
             setViewerOpen(false);
             setTimeout(() => setCurrentPdf(null), 300);
           }}
-          pdfUrl={`/uploads/${currentPdf.pdfFile}`}
+          pdfId={currentPdf.id}
           title={currentPdf.fileName}
           onDownload={() => handleDownloadSingle(currentPdf)}
         />

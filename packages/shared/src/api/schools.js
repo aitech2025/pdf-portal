@@ -16,3 +16,12 @@ export const schoolsApi = {
   toggleSchoolUsers: (id, isActive) =>
     apiFetch(`/api/schools/${id}/toggle-users`, 'POST', { isActive }),
 };
+
+export const schoolCategoryApi = {
+  listAssignedCategories: (schoolId) =>
+    apiFetch(`/api/schools/${schoolId}/categories`),
+  assignCategories: (schoolId, categoryIds) =>
+    apiFetch(`/api/schools/${schoolId}/categories`, 'POST', { categoryIds }),
+  removeCategory: (schoolId, categoryId) =>
+    apiFetch(`/api/schools/${schoolId}/categories/${categoryId}`, 'DELETE'),
+};

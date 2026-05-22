@@ -46,7 +46,13 @@ async def list_onboarding(
     q = select(OnboardingRequest).order_by(OnboardingRequest.created.desc())
     total = await db.scalar(select(func.count()).select_from(q.subquery()))
     result = await db.execute(q.offset((page - 1) * per_page).limit(per_page))
-    return {"items": [_onboard_dict(r) for r in result.scalars().all()], "totalItems": total}
+    return {
+        "items": [_onboard_dict(r) for r in result.scalars().all()],
+        "totalItems": total,
+        "totalPages": (total + per_page - 1) // per_page,
+        "page": page,
+        "perPage": per_page
+    }
 
 @router.post("/onboardingRequests")
 async def create_onboarding(body: dict, db: AsyncSession = Depends(get_db)):
@@ -105,7 +111,13 @@ async def list_user_requests(
     q = q.order_by(UserRequest.created.desc())
     total = await db.scalar(select(func.count()).select_from(q.subquery()))
     result = await db.execute(q.offset((page - 1) * per_page).limit(per_page))
-    return {"items": [_user_req_dict(r) for r in result.scalars().all()], "totalItems": total}
+    return {
+        "items": [_user_req_dict(r) for r in result.scalars().all()],
+        "totalItems": total,
+        "totalPages": (total + per_page - 1) // per_page,
+        "page": page,
+        "perPage": per_page
+    }
 
 @router.post("/userRequests")
 async def create_user_request(body: dict, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):

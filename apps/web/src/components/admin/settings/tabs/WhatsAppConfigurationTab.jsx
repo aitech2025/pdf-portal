@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { SettingSection, InputSetting, ToggleSetting, PasswordField, SelectSetting } from '../SettingComponents.jsx';
 import { Save, Send, MessageCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
+import pb from '@/lib/apiClient';
 
 const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
     const wa = settings?.integrations?.whatsapp || {};
@@ -41,25 +42,26 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
             apiUrl,
         };
         onSave('integrations', {
-            integrations: {
-                ...(settings?.integrations || {}),
-                whatsapp: whatsappConfig,
-            },
+            ...(settings?.integrations || {}),
+            whatsapp: whatsappConfig,
         });
     };
 
     const handleTest = async () => {
+        if (!settings?.id) {
+            toast.error('Save system settings first');
+            return;
+        }
         if (!testNumber) {
             toast.error('Enter a test phone number first');
             return;
         }
         setTesting(true);
         try {
-            // In production this would call the backend test endpoint
-            await new Promise(r => setTimeout(r, 1500));
+            await pb.fetch(`/systemSettings/${settings.id}/test-whatsapp`, 'POST', { to: testNumber });
             toast.success(`Test message sent to ${testNumber}`);
-        } catch {
-            toast.error('Failed to send test message');
+        } catch (err) {
+            toast.error(err.message || 'Failed to send test message');
         } finally {
             setTesting(false);
         }

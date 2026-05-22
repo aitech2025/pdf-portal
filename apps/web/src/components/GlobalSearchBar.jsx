@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, FileText, School, Users, ChevronRight, Loader2 } from 'lucide-react';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 import { useDebounce } from '@/hooks/useDebounce.js';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -27,17 +27,17 @@ const GlobalSearchBar = () => {
       try {
         const filter = `id != ""`; // Basic base filter
         const searchFilter = `~ "${debouncedQuery}"`;
-        
+
         const [pdfRes, schoolRes, userRes] = await Promise.all([
-          pb.collection('pdfs').getList(1, 3, { filter: `fileName ${searchFilter}`, $autoCancel: false }),
-          pb.collection('schools').getList(1, 2, { filter: `schoolName ${searchFilter}`, $autoCancel: false }),
-          pb.collection('users').getList(1, 2, { filter: `name ${searchFilter} || email ${searchFilter}`, $autoCancel: false })
+          client.fetch('/pdfs', 'GET', null, { page: 1, per_page: 3, filter: `fileName ${searchFilter}` }),
+          client.fetch('/schools', 'GET', null, { page: 1, per_page: 2, filter: `schoolName ${searchFilter}` }),
+          client.fetch('/users', 'GET', null, { page: 1, per_page: 2, filter: `name ${searchFilter} || email ${searchFilter}` })
         ]);
 
         setResults({
-          pdfs: pdfRes.items,
-          schools: schoolRes.items,
-          users: userRes.items
+          pdfs: pdfRes.items || pdfRes,
+          schools: schoolRes.items || schoolRes,
+          users: userRes.items || userRes
         });
         setIsOpen(true);
       } catch (err) {
@@ -80,8 +80,8 @@ const GlobalSearchBar = () => {
         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary">
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
         </div>
-        <Input 
-          placeholder="Search resources, schools, users... (Press Enter)" 
+        <Input
+          placeholder="Search resources, schools, users... (Press Enter)"
           className="pl-9 pr-4 bg-muted/30 border-transparent focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-primary/20 rounded-full h-10 transition-all shadow-none"
           value={query}
           onChange={(e) => {
@@ -106,8 +106,8 @@ const GlobalSearchBar = () => {
               <div className="mb-2">
                 <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Resources</div>
                 {results.pdfs.map(pdf => (
-                  <button 
-                    key={pdf.id} 
+                  <button
+                    key={pdf.id}
                     onClick={() => handleNavigate(`/search?q=${encodeURIComponent(pdf.fileName)}`)}
                     className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/50 rounded-[var(--radius-md)] transition-colors"
                   >
@@ -127,8 +127,8 @@ const GlobalSearchBar = () => {
               <div className="mb-2">
                 <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Schools</div>
                 {results.schools.map(school => (
-                  <button 
-                    key={school.id} 
+                  <button
+                    key={school.id}
                     onClick={() => handleNavigate(`/admin/schools`)}
                     className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/50 rounded-[var(--radius-md)] transition-colors"
                   >
@@ -142,13 +142,13 @@ const GlobalSearchBar = () => {
                 ))}
               </div>
             )}
-            
+
             {results.users.length > 0 && (
               <div className="mb-2">
                 <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Users</div>
                 {results.users.map(user => (
-                  <button 
-                    key={user.id} 
+                  <button
+                    key={user.id}
                     onClick={() => handleNavigate(`/admin/schools-and-users`)}
                     className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/50 rounded-[var(--radius-md)] transition-colors"
                   >
@@ -164,8 +164,8 @@ const GlobalSearchBar = () => {
               </div>
             )}
           </div>
-          
-          <button 
+
+          <button
             onClick={() => handleNavigate(`/search?q=${encodeURIComponent(query)}`)}
             className="p-3 bg-muted/30 border-t border-border/50 text-sm font-medium text-primary hover:bg-muted/50 flex items-center justify-center transition-colors"
           >

@@ -4,7 +4,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { Redirect } from 'expo-router';
 
 export default function SchoolLayout() {
-    const { user } = useAuth();
+    const { user, canWrite } = useAuth();
     const schoolRoles = ['school_admin', 'school_viewer', 'teacher', 'school'];
     if (!user || !schoolRoles.includes(user.role)) return <Redirect href="/(auth)/login" />;
 
@@ -17,36 +17,21 @@ export default function SchoolLayout() {
                 headerShown: false,
             }}
         >
-            <Tabs.Screen
-                name="index"
-                options={{
-                    title: 'Dashboard',
-                    tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="portal"
-                options={{
-                    title: 'Library',
-                    tabBarIcon: ({ color, size }) => <Ionicons name="library-outline" size={size} color={color} />,
-                }}
-            />
+            <Tabs.Screen name="index" options={{ title: 'Dashboard', tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} /> }} />
+            <Tabs.Screen name="portal" options={{ title: 'Library', tabBarIcon: ({ color, size }) => <Ionicons name="library-outline" size={size} color={color} /> }} />
             <Tabs.Screen
                 name="requests"
                 options={{
+                    href: canWrite ? undefined : null,
                     title: 'Requests',
-                    tabBarIcon: ({ color, size }) => <Ionicons name="clipboard-outline" size={size} color={color} />,
+                    tabBarIcon: ({ color, size }) => <Ionicons name="clipboard-outline" size={size} color={color} />
                 }}
             />
-            <Tabs.Screen
-                name="profile"
-                options={{
-                    title: 'Profile',
-                    tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
-                }}
-            />
+            <Tabs.Screen name="analytics" options={{ title: 'Analytics', tabBarIcon: ({ color, size }) => <Ionicons name="bar-chart-outline" size={size} color={color} /> }} />
+            <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} /> }} />
             {/* Hidden screens */}
             <Tabs.Screen name="notifications" options={{ href: null, title: 'Notifications' }} />
+            <Tabs.Screen name="settings" options={{ href: null, title: 'Settings' }} />
         </Tabs>
     );
 }

@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Loader2, FolderTree, BookOpen, Users, Beaker, Compass, Lightbulb, Target, Award, Zap, Sparkles, Globe, Heart, Brain, Code, Palette, Music, Camera, Microscope, Atom, Dna, Rocket, Cpu, Database, Network, Shield, Lock, Key, Settings, Wrench, Hammer, Hammer as Drill, Sword as Saw, Ruler, Calculator, BarChart3, TrendingUp, PieChart, LineChart, Activity, HeartPulse as Pulse, Wind, Droplet, Flame, Leaf, Mountain, Sun, Moon, Star, Cloud, CloudRain, CloudSnow, Wind as WindIcon, Waves, Anchor, Compass as CompassIcon, Map, Navigation, MapPin, Flag, Bookmark, Tag, Tag as Label, Badge, Layers, Grid, List, Table, Columns, Rows, Square, Circle, Triangle, Hexagon, Pentagon, Octagon, Diamond, Cross, Plus, Minus, X, Check, CheckCircle, AlertCircle, Info, HelpCircle, Bug as Question, Copy, Clipboard, Trash2, Edit2, Eye, EyeOff, Search, Filter, Download, Upload, Share2, Link, Mail, MessageSquare, Phone, Video, Mic, Volume2, Volume, VolumeX, Headphones, Radio, Wifi, WifiOff, Bluetooth, Smartphone, Tablet, Monitor, Tv, Watch, Cpu as CpuIcon, HardDrive, Disc, Disc3, FlipHorizontal as Floppy, Save, Folder, FolderOpen, File, FileText, FileCode, FileImage, FileVideo, FileAudio, FileArchive, FileCheck, FileX, FileMinus, FilePlus, FileQuestion, FileSearch, FileJson, FileText as FileXml, FileJson as FileYaml, FileText as FileToml, FileOutput as FileConfig, FileSearch as FileSettings, FileOutput as FileUser, FileSearch as FileUsers, FileKey, FileKey as FileSecret, FileLock, FileLock as FileUnlock, FileHeart as FileShield, FileWarning as FileAlert, FileWarning, Files as FileInfo, FileQuestion as FileHelp, FileQuestion as FileQuestionIcon, FileSearch as FileSearchIcon, FileJson as FileJsonIcon, FileText as FileXmlIcon, FileJson as FileYamlIcon, FileText as FileTomlIcon, FileOutput as FileConfigIcon, FileSearch as FileSettingsIcon, FileOutput as FileUserIcon, FileSearch as FileUsersIcon, FileKey as FileKeyIcon, FileKey as FileSecretIcon, FileLock as FileLockIcon, FileLock as FileUnlockIcon, FileHeart as FileShieldIcon, FileWarning as FileAlertIcon, FileWarning as FileWarningIcon, Files as FileInfoIcon, FileQuestion as FileHelpIcon } from 'lucide-react';
+import client from '@/lib/apiClient';
 
 // Static icon mapping object
 const ICON_MAP = {
@@ -149,6 +150,7 @@ const ICON_MAP = {
 };
 
 const categorySchema = z.object({
+  programId: z.string().optional().or(z.literal('')),
   categoryName: z.string().min(2, "Name must be at least 2 characters").max(100, "Name is too long"),
   categoryType: z.enum(["Grade 1-5", "Grade 6-10"], { required_error: "Please select a category type" }),
   description: z.string().max(500, "Description is too long").optional().or(z.literal('')),
@@ -168,11 +170,13 @@ const DynamicIconPreview = ({ iconName }) => {
 
 const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [programs, setPrograms] = useState([]);
   const isEditing = !!category;
 
   const form = useForm({
     resolver: zodResolver(categorySchema),
     defaultValues: {
+      programId: '',
       categoryName: '',
       categoryType: '',
       description: '',
@@ -183,9 +187,17 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
   });
 
   useEffect(() => {
+    if (!isOpen) return;
+    client.fetch('/programs')
+      .then((res) => setPrograms(res.items || []))
+      .catch(() => setPrograms([]));
+  }, [isOpen]);
+
+  useEffect(() => {
     if (isOpen) {
       if (category) {
         form.reset({
+          programId: category.programId || '',
           categoryName: category.categoryName || '',
           categoryType: category.categoryType || '',
           description: category.description || '',
@@ -195,6 +207,7 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
         });
       } else {
         form.reset({
+          programId: '',
           categoryName: '',
           categoryType: '',
           description: '',
@@ -224,9 +237,33 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
         <DialogHeader>
           <DialogTitle className="text-xl font-poppins">{isEditing ? 'Edit Category' : 'Add New Category'}</DialogTitle>
         </DialogHeader>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
+            <FormField
+              control={form.control}
+              name="programId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Program</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a program (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {programs.map((program) => (
+                        <SelectItem key={program.id} value={program.id}>
+                          {program.programCode} - {program.programName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>Assign this category to a program hierarchy.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="categoryName"
@@ -247,12 +284,10 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Category Type <span className="text-destructive">*</span></FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select an educational level" />
-                      </SelectTrigger>
-                    </FormControl>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an educational level" />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Grade 1-5">Grade 1-5</SelectItem>
                       <SelectItem value="Grade 6-10">Grade 6-10</SelectItem>
@@ -270,10 +305,10 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
                 <FormItem>
                   <FormLabel>Description</FormLabel>
                   <FormControl>
-                    <Textarea 
-                      placeholder="Brief description of this category..." 
-                      className="resize-none h-20" 
-                      {...field} 
+                    <Textarea
+                      placeholder="Brief description of this category..."
+                      className="resize-none h-20"
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -341,7 +376,7 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
               <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting || !form.formState.isDirty}>
+              <Button type="submit" disabled={isSubmitting || (isEditing && !form.formState.isDirty) || !form.formState.isValid}>
                 {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Category'}
               </Button>
             </DialogFooter>

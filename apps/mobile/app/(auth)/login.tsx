@@ -6,13 +6,16 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 
+type LoginMode = 'school' | 'teacher';
+
 export default function LoginScreen() {
-    const { login } = useAuth();
+    const { login, logout } = useAuth();
     const router = useRouter();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPwd, setShowPwd] = useState(false);
+    const [mode, setMode] = useState<LoginMode>('school');
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -23,6 +26,18 @@ export default function LoginScreen() {
         try {
             const user = await login(email.trim(), password);
             const platformRoles = ['platform_admin', 'admin', 'moderator', 'platform_viewer'];
+
+            if (mode === 'teacher' && user.role !== 'teacher') {
+                await logout();
+                Alert.alert('Role mismatch', 'This account is not a teacher account. Switch to School login.');
+                return;
+            }
+            if (mode === 'school' && user.role === 'teacher') {
+                await logout();
+                Alert.alert('Role mismatch', 'This account is a teacher account. Switch to Teacher login.');
+                return;
+            }
+
             if (platformRoles.includes(user.role)) {
                 router.replace('/(admin)');
             } else {
@@ -42,21 +57,42 @@ export default function LoginScreen() {
         >
             <View className="flex-1 justify-center px-6">
                 {/* Logo */}
-                <View className="items-center mb-10">
+                <View className="items-center mb-8">
                     <View className="w-16 h-16 rounded-2xl bg-primary items-center justify-center mb-4">
-                        <Text className="text-white text-2xl font-bold">E</Text>
+                        <Text className="text-white text-xl font-bold">I</Text>
                     </View>
-                    <Text className="text-3xl font-bold text-foreground">EduPortal</Text>
-                    <Text className="text-muted mt-1 text-base">Sign in to your account</Text>
+                    <Text className="text-3xl font-bold text-foreground">I-ICON EduShare</Text>
+                    <Text className="text-muted mt-1 text-base">
+                        {mode === 'school' ? 'School Login Portal' : 'Teacher Login Portal'}
+                    </Text>
                 </View>
 
                 {/* Form */}
                 <View className="space-y-4">
+                    <View className="bg-card border border-border rounded-xl p-1 flex-row">
+                        <TouchableOpacity
+                            className={`flex-1 rounded-lg py-2.5 items-center ${mode === 'school' ? 'bg-primary' : 'bg-transparent'}`}
+                            onPress={() => setMode('school')}
+                        >
+                            <Text className={`font-semibold ${mode === 'school' ? 'text-white' : 'text-foreground'}`}>
+                                School
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            className={`flex-1 rounded-lg py-2.5 items-center ${mode === 'teacher' ? 'bg-primary' : 'bg-transparent'}`}
+                            onPress={() => setMode('teacher')}
+                        >
+                            <Text className={`font-semibold ${mode === 'teacher' ? 'text-white' : 'text-foreground'}`}>
+                                Teacher
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
                     <View>
                         <Text className="text-sm font-medium text-foreground mb-1.5">Email Address</Text>
                         <TextInput
                             className="bg-card border border-border rounded-xl px-4 py-3.5 text-foreground text-base"
-                            placeholder="you@example.com"
+                            placeholder={mode === 'school' ? 'school-admin@domain.com' : 'teacher@domain.com'}
                             placeholderTextColor="#9ca3af"
                             value={email}
                             onChangeText={setEmail}
@@ -91,8 +127,14 @@ export default function LoginScreen() {
                     >
                         {loading
                             ? <ActivityIndicator color="#fff" />
-                            : <Text className="text-white font-semibold text-base">Sign In</Text>}
+                            : <Text className="text-white font-semibold text-base">
+                                {mode === 'school' ? 'Sign In as School User' : 'Sign In as Teacher'}
+                            </Text>}
                     </TouchableOpacity>
+
+                    <Text className="text-center text-xs text-muted mt-2">
+                        Forgot password? Use the web portal reset flow.
+                    </Text>
                 </View>
             </View>
         </KeyboardAvoidingView>

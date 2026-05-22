@@ -285,7 +285,8 @@ logger.error = (msg, options) => {
 
 export default defineConfig({
 	optimizeDeps: {
-		include: allDeps,
+		exclude: ['monorepo'],
+		include: ['pdfjs-dist', 'react-pdf'],
 	},
 	customLogger: logger,
 	plugins: [
@@ -296,10 +297,17 @@ export default defineConfig({
 	server: {
 		port: 3000,
 		cors: true,
-		headers: {
-			'Cross-Origin-Embedder-Policy': 'credentialless',
-		},
 		allowedHosts: true,
+		proxy: {
+			'/api': {
+				target: 'http://localhost:8000',
+				changeOrigin: true,
+			},
+			'/uploads': {
+				target: 'http://localhost:8000',
+				changeOrigin: true,
+			},
+		},
 	},
 	resolve: {
 		extensions: ['.jsx', '.js', '.tsx', '.ts', '.json',],

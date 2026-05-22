@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "EduPortal",
-    "slug": "educontent",
+    "name": "i-icon academy",
+    "slug": "iiconacademy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "eduportal",
+    "scheme": "iiconacademy",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.eduportal.app",
+      "bundleIdentifier": "com.iiconacademy.app",
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Used to update your profile picture.",
@@ -26,7 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#4f46e5"
       },
-      "package": "com.eduportal.app",
+      "package": "com.iiconacademy.app",
       "versionCode": 1,
       "permissions": [
         "INTERNET",
@@ -49,7 +49,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "https://51c768ac-1770-4ed5-af6a-ff9f69a1bac6.preview.emergentagent.com",
+      "apiUrl": "http://192.168.1.9:8000",
       "eas": {
         "projectId": "03dce7fa-888b-4d00-8a34-a7003391ebe6"
       },

@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean, Integer, DateTime, ForeignKey, JSON
+from sqlalchemy import String, Boolean, Integer, DateTime, ForeignKey, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -9,11 +9,17 @@ def gen_id():
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        Index('idx_user_role', 'role'),
+        Index('idx_user_school_id', 'school_id'),
+        Index('idx_user_is_active', 'is_active'),
+        Index('idx_user_created', 'created'),
+    )
 
     id: Mapped[str] = mapped_column(String(15), primary_key=True, default=gen_id)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(50), default="school_viewer")
     # Roles:
     # platform_admin   - full access to all features
@@ -51,3 +57,4 @@ class User(Base):
     ratings: Mapped[list["PDFRating"]] = relationship("PDFRating", back_populates="user")
     comments: Mapped[list["Comment"]] = relationship("Comment", back_populates="user")
     preferences: Mapped["UserPreferences"] = relationship("UserPreferences", back_populates="user", uselist=False)
+    auth_tokens: Mapped[list["AuthToken"]] = relationship("AuthToken", back_populates="user")

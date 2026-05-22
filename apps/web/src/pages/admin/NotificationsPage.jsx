@@ -90,6 +90,9 @@ const NotificationsPage = () => {
           <p className="text-muted-foreground mt-1">Stay updated with system activities and requests.</p>
         </div>
         <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => navigate('/admin/broadcast')} className="shadow-soft-sm bg-card hover:bg-muted/50">
+            <Bell className="w-4 h-4 mr-2 text-primary" /> Send Broadcast
+          </Button>
           <Button variant="outline" onClick={markAllAsRead} className="shadow-soft-sm bg-card hover:bg-muted/50">
             <Check className="w-4 h-4 mr-2 text-primary" /> Mark all read
           </Button>

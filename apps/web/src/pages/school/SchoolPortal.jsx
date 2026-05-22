@@ -11,6 +11,15 @@ import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 
+// Fetch categories assigned to a school via the backend API
+const fetchAssignedCategories = async (schoolId) => {
+  const res = await fetch(`/api/schools/${schoolId}/categories`, {
+    headers: { Authorization: `Bearer ${pb.authStore.token}` }
+  });
+  if (!res.ok) throw new Error('Failed to load categories');
+  return res.json();
+};
+
 const SchoolPortal = () => {
   const { currentUser } = useAuth();
   const [stats, setStats] = useState(null);
@@ -22,18 +31,24 @@ const SchoolPortal = () => {
     const fetchData = async () => {
       if (!currentUser?.schoolId) return;
       try {
-        const [cats, downloads, pdfs] = await Promise.all([
-          pb.collection('categories').getList(1, 6, { filter: 'isActive=true', sort: 'categoryName', $autoCancel: false }),
+        const [catsData, downloads] = await Promise.all([
+          fetchAssignedCategories(currentUser.schoolId),
           pb.collection('downloadLogs').getList(1, 4, { filter: `schoolId="${currentUser.schoolId}"`, expand: 'pdfId,categoryId', sort: '-created', $autoCancel: false }),
-          pb.collection('pdfs').getList(1, 1, { $autoCancel: false })
         ]);
 
+        const cats = (catsData.items || []).slice(0, 6).map(item => ({
+          id: item.categoryId,
+          categoryName: item.categoryName,
+          categoryType: item.categoryType,
+          isActive: item.isActive,
+        }));
+
         setStats({
-          availablePdfs: pdfs.totalItems,
+          availablePdfs: 0,
           myDownloads: downloads.totalItems,
-          activeCategories: cats.totalItems
+          activeCategories: cats.length
         });
-        setCategories(cats.items);
+        setCategories(cats);
         setRecentDownloads(downloads.items);
       } catch (error) {
         console.error(error);
@@ -55,9 +70,9 @@ const SchoolPortal = () => {
             <p className="text-white/90 text-lg max-w-xl">Discover, download, and share high-quality educational materials curated for your institution.</p>
           </div>
           <div className="w-full md:w-auto min-w-[300px]">
-            <Input 
+            <Input
               icon={Search}
-              placeholder="Search for materials..." 
+              placeholder="Search for materials..."
               className="bg-white/20 border-white/30 text-white placeholder:text-white/60 focus-visible:bg-white focus-visible:text-foreground h-12"
             />
           </div>
@@ -114,7 +129,7 @@ const SchoolPortal = () => {
               View Directory <ArrowRight className="w-4 h-4 ml-1" />
             </Link>
           </div>
-          
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {categories.length === 0 && !loading ? (
               <div className="col-span-2 p-10 text-center border border-dashed rounded-[var(--radius-lg)] bg-card shadow-soft-sm">

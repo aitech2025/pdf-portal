@@ -13,6 +13,7 @@ import UserListTable from './UserListTable.jsx';
 import CreateUserModal from './CreateUserModal.jsx';
 import EditUserModal from './EditUserModal.jsx';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog.jsx';
+import CategoryAccessPanel from './CategoryAccessPanel.jsx';
 import pb from '@/lib/apiClient';
 
 const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
@@ -24,6 +25,7 @@ const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [assignedCount, setAssignedCount] = useState(0);
 
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
@@ -187,6 +189,9 @@ const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
                       <TabsTrigger value="users" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-3 pt-2">
                         Users <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 h-4">{users.length}</Badge>
                       </TabsTrigger>
+                      <TabsTrigger value="categories" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-3 pt-2">
+                        Categories <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0 h-4">{assignedCount}</Badge>
+                      </TabsTrigger>
                     </TabsList>
                   </div>
 
@@ -287,6 +292,10 @@ const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
                           onToggleStatus={handleUserStatusToggle}
                         />
                       </div>
+                    </TabsContent>
+
+                    <TabsContent value="categories" className="m-0">
+                      <CategoryAccessPanel schoolId={schoolId} onCountChange={setAssignedCount} />
                     </TabsContent>
                   </div>
                 </Tabs>

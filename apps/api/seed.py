@@ -9,15 +9,23 @@ from app.auth import hash_password
 
 USERS = [
     # email, password, name, role
-    ("admin@educontent.com",   "Admin@1234",   "Admin",          "platform_admin"),
-    ("school1@educontent.com", "School1@1234", "School One",     "school_admin"),
-    ("school2@educontent.com", "School2@1234", "School Two",     "school_admin"),
+    ("admin@iiconacademy.com",   "Admin@1234",   "Admin",          "platform_admin"),
+    ("school1@iiconacademy.com", "School1@1234", "School One",     "school_admin"),
+    ("school2@iiconacademy.com", "School2@1234", "School Two",     "school_admin"),
     ("teacher@school1.com",    "Teacher@1234", "Teacher School1","teacher"),
 ]
 
 async def seed():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    print("Starting seed process...")
+    print(f"Database URL: {engine.url}")
+
+    try:
+        from migrate_schema import run_migrations
+        await run_migrations()
+        print("Database schema migrated successfully")
+    except Exception as e:
+        print(f"ERROR migrating schema: {e}")
+        raise
 
     async with AsyncSessionLocal() as db:
         from sqlalchemy import select
@@ -28,7 +36,7 @@ async def seed():
             school1 = School(
                 school_name="School One",
                 school_id="SCH001",
-                email="school1@educontent.com",
+                email="school1@iiconacademy.com",
                 is_active=True,
             )
             db.add(school1)
@@ -40,7 +48,7 @@ async def seed():
             school2 = School(
                 school_name="School Two",
                 school_id="SCH002",
-                email="school2@educontent.com",
+                email="school2@iiconacademy.com",
                 is_active=True,
             )
             db.add(school2)
@@ -80,11 +88,39 @@ async def seed():
         # --- System settings ---
         ss = await db.scalar(select(SystemSettings))
         if not ss:
-            db.add(SystemSettings(app_name="EduContent"))
+            db.add(SystemSettings(app_name="i-icon academy"))
             print("Created system settings")
+
+        # --- Sample Categories ---
+        categories_data = [
+            ("Mathematics", "academic", "Mathematics and related subjects", True, 1),
+            ("Science", "academic", "Science subjects", True, 2),
+            ("Languages", "academic", "Language learning materials", True, 3),
+            ("Arts", "extracurricular", "Arts and creative subjects", True, 4),
+            ("Sports", "extracurricular", "Sports and physical education", True, 5),
+        ]
+        
+        for cat_name, cat_type, desc, active, order in categories_data:
+            existing_cat = await db.scalar(select(Category).where(Category.category_name == cat_name))
+            if not existing_cat:
+                cat = Category(
+                    category_name=cat_name,
+                    category_type=cat_type,
+                    description=desc,
+                    is_active=active,
+                    display_order=order,
+                )
+                db.add(cat)
+                print(f"Created category: {cat_name}")
 
         await db.commit()
         print("Seed complete.")
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    try:
+        asyncio.run(seed())
+    except Exception as e:
+        print(f"ERROR during seed: {e}")
+        import traceback
+        traceback.print_exc()
+        exit(1)

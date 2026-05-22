@@ -67,6 +67,9 @@ async def list_audit_logs(
             }
         } for l in logs],
         "totalItems": total,
+        "totalPages": (total + per_page - 1) // per_page,
+        "page": page,
+        "perPage": per_page
     }
 
 @router.get("/downloadLogs")
@@ -85,4 +88,7 @@ async def list_download_logs(
             "downloadedAt": l.downloaded_at.isoformat() if l.downloaded_at else None,
         } for l in logs],
         "totalItems": total,
+        "totalPages": (total + per_page - 1) // per_page,
+        "page": page,
+        "perPage": per_page
     }

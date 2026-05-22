@@ -20,9 +20,9 @@ const DeactivatedSchoolModal = ({ message }) => {
         <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mb-6">
           <AlertCircle className="w-8 h-8 text-destructive" />
         </div>
-        
+
         <h2 className="text-2xl font-bold tracking-tight">Access Suspended</h2>
-        
+
         <p className="text-muted-foreground">
           Your institution's profile has been deactivated. You currently do not have access to the educational content portal.
         </p>
@@ -35,7 +35,7 @@ const DeactivatedSchoolModal = ({ message }) => {
         )}
 
         <div className="pt-4 space-y-3">
-          <Button className="w-full" variant="default" onClick={() => window.location.href = "mailto:admin@eduportal.com"}>
+          <Button className="w-full" variant="default" onClick={() => window.location.href = "mailto:admin@iiconacademy.com"}>
             Contact Administrator
           </Button>
           <Button className="w-full" variant="outline" onClick={handleLogout}>

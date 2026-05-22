@@ -40,7 +40,7 @@ const HomePage = () => {
       <section className="min-h-[90vh] flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-20 relative overflow-hidden">
         {/* Gradient Background */}
         <div className="absolute inset-0 bg-gradient-subtle pointer-events-none" />
-        
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -55,7 +55,7 @@ const HomePage = () => {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary mb-6 border border-primary/20"
           >
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-sm font-medium">Welcome to EduPortal</span>
+            <span className="text-sm font-medium">Welcome to i-icon academy</span>
           </motion.div>
 
           {/* Main Heading */}
@@ -134,7 +134,7 @@ const HomePage = () => {
             className="text-center mb-16"
           >
             <h2 className="text-3xl sm:text-4xl font-poppins font-bold text-foreground mb-4">
-              Why Choose EduPortal?
+              Why Choose i-icon academy?
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Everything you need to manage educational content and engage your community
@@ -182,7 +182,7 @@ const HomePage = () => {
             Ready to get started?
           </h2>
           <p className="text-lg text-primary-foreground/90 mb-8">
-            Join thousands of educators and administrators using EduPortal to transform education.
+            Join thousands of educators and administrators using i-icon academy to transform education.
           </p>
           <Button
             onClick={handleSignIn}
@@ -234,7 +234,7 @@ const HomePage = () => {
             </div>
           </div>
           <div className="border-t border-border pt-8 flex flex-col sm:flex-row justify-between items-center text-sm text-muted-foreground">
-            <p>&copy; 2026 EduPortal. All rights reserved.</p>
+            <p>&copy; 2026 i-icon academy. All rights reserved.</p>
             <div className="flex gap-6 mt-4 sm:mt-0">
               <a href="#" className="hover:text-foreground transition-colors">Twitter</a>
               <a href="#" className="hover:text-foreground transition-colors">LinkedIn</a>

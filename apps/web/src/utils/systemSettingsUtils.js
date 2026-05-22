@@ -1,6 +1,6 @@
 
 export const DEFAULT_SETTINGS = {
-  appName: 'EduPortal',
+  appName: 'i-icon academy',
   appDescription: 'Educational Resource Management System',
   primaryColor: '#4f46e5',
   secondaryColor: '#10b981',
@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS = {
   smtpUsername: '',
   smtpPassword: '',
   emailFromAddress: 'noreply@example.com',
-  emailFromName: 'EduPortal System',
+  emailFromName: 'i-icon academy System',
   enableTLS: true,
   enableSSL: false,
   featureFlags: {

@@ -35,7 +35,7 @@ const GuestSignupForm = () => {
         ...formData,
         status: 'pending'
       }, { $autoCancel: false });
-      
+
       setIsSubmitted(true);
       toast.success('Request submitted successfully!');
     } catch (err) {
@@ -53,9 +53,9 @@ const GuestSignupForm = () => {
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-40 mix-blend-soft-light">
         <svg viewBox="0 0 100vw 100vh" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
           <filter id="noiseFilter">
-            <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="3" stitchTiles="stitch"/>
+            <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="3" stitchTiles="stitch" />
           </filter>
-          <rect width="100%" height="100%" filter="url(#noiseFilter)"/>
+          <rect width="100%" height="100%" filter="url(#noiseFilter)" />
         </svg>
       </div>
 
@@ -72,7 +72,7 @@ const GuestSignupForm = () => {
         </Button>
       </div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
@@ -88,7 +88,7 @@ const GuestSignupForm = () => {
                 Request Access
               </h1>
               <p className="text-muted-foreground mt-3 text-lg max-w-[360px]">
-                Join EduPortal to manage your school's digital resources seamlessly.
+                Join i-icon academy to manage your school's digital resources seamlessly.
               </p>
             </div>
 
@@ -110,7 +110,7 @@ const GuestSignupForm = () => {
                       />
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="pointOfContactName" className="text-foreground font-medium">Your Name</Label>
                     <div className="relative">
@@ -158,9 +158,9 @@ const GuestSignupForm = () => {
                     </div>
                   </div>
 
-                  <Button 
-                    type="submit" 
-                    className="w-full h-12 text-base font-semibold mt-4 bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all shadow-soft-md group" 
+                  <Button
+                    type="submit"
+                    className="w-full h-12 text-base font-semibold mt-4 bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all shadow-soft-md group"
                     disabled={loading}
                   >
                     {loading ? (
@@ -178,7 +178,7 @@ const GuestSignupForm = () => {
                 </form>
               </CardContent>
             </Card>
-            
+
             <p className="text-center text-muted-foreground mt-8">
               Already have an account?{' '}
               <Link to="/login" className="text-foreground font-semibold hover:text-primary transition-base underline decoration-border underline-offset-4 hover:decoration-primary">
@@ -189,7 +189,7 @@ const GuestSignupForm = () => {
         ) : (
           <Card className="border-border/50 shadow-soft-xl bg-card/80 backdrop-blur-2xl text-center py-12 px-6">
             <CardContent className="flex flex-col items-center p-0">
-              <motion.div 
+              <motion.div
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: "spring", bounce: 0.5, duration: 0.6 }}
@@ -201,8 +201,8 @@ const GuestSignupForm = () => {
               <p className="text-muted-foreground text-lg mb-8 max-w-[320px] mx-auto">
                 Thank you for your interest. Our team will review your application and get back to you shortly at <span className="font-medium text-foreground">{formData.email}</span>.
               </p>
-              <Button 
-                onClick={() => navigate('/')} 
+              <Button
+                onClick={() => navigate('/')}
                 variant="outline"
                 className="h-12 px-8 text-base font-medium shadow-sm transition-all hover:bg-muted"
               >

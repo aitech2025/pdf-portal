@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,13 +28,17 @@ const CategoriesManagement = () => {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const records = await pb.collection('categories').getList(1, 100, {
-        sort: '-created',
-        $autoCancel: false
+      console.log('Fetching categories...');
+      const response = await client.fetch('/categories', 'GET', null, {
+        page: 1,
+        per_page: 100,
+        sort: '-created'
       });
-      setCategories(records.items);
+      console.log('Categories response:', response);
+      setCategories(response.items || response || []);
     } catch (err) {
-      toast.error('Failed to fetch categories');
+      console.error('Error fetching categories:', err);
+      toast.error('Failed to fetch categories: ' + (err.message || 'Unknown error'));
     } finally {
       setLoading(false);
     }
@@ -48,16 +52,17 @@ const CategoriesManagement = () => {
     e.preventDefault();
     try {
       if (editingId) {
-        await pb.collection('categories').update(editingId, formData, { $autoCancel: false });
+        await client.fetch(`/categories/${editingId}`, 'PATCH', formData);
         toast.success('Category updated successfully');
       } else {
-        await pb.collection('categories').create(formData, { $autoCancel: false });
+        await client.fetch('/categories', 'POST', formData);
         toast.success('Category created successfully');
       }
       setIsOpen(false);
       resetForm();
       fetchCategories();
     } catch (err) {
+      console.error('Error saving category:', err);
       toast.error(err.message || 'An error occurred');
     }
   };
@@ -65,10 +70,11 @@ const CategoriesManagement = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this category?')) {
       try {
-        await pb.collection('categories').delete(id, { $autoCancel: false });
+        await client.fetch(`/categories/${id}`, 'DELETE');
         toast.success('Category deleted');
         fetchCategories();
       } catch (err) {
+        console.error('Error deleting category:', err);
         toast.error('Failed to delete category');
       }
     }
@@ -90,8 +96,8 @@ const CategoriesManagement = () => {
     setIsOpen(true);
   };
 
-  const filteredCategories = categories.filter(c => 
-    c.categoryName.toLowerCase().includes(search.toLowerCase())
+  const filteredCategories = categories.filter(c =>
+    c.categoryName && c.categoryName.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -112,7 +118,7 @@ const CategoriesManagement = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if(!open) resetForm(); }}>
+          <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" /> Add Category</Button>
             </DialogTrigger>
@@ -123,18 +129,18 @@ const CategoriesManagement = () => {
               <form onSubmit={handleSubmit} className="space-y-4 pt-4">
                 <div className="space-y-2">
                   <Label>Category Name</Label>
-                  <Input 
-                    required 
+                  <Input
+                    required
                     value={formData.categoryName}
-                    onChange={e => setFormData({...formData, categoryName: e.target.value})}
+                    onChange={e => setFormData({ ...formData, categoryName: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Category Type</Label>
-                  <Select 
-                    required 
-                    value={formData.categoryType} 
-                    onValueChange={v => setFormData({...formData, categoryType: v})}
+                  <Select
+                    required
+                    value={formData.categoryType}
+                    onValueChange={v => setFormData({ ...formData, categoryType: v })}
                   >
                     <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                     <SelectContent>
@@ -145,9 +151,9 @@ const CategoriesManagement = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Description</Label>
-                  <Textarea 
+                  <Textarea
                     value={formData.description}
-                    onChange={e => setFormData({...formData, description: e.target.value})}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
                   />
                 </div>
                 <Button type="submit" className="w-full">{editingId ? 'Update' : 'Create'}</Button>

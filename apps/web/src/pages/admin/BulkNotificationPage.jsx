@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import pb from '@/lib/apiClient';
+import React, { useEffect, useMemo, useState } from 'react';
+import client from '@/lib/apiClient';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,59 +10,76 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import PageTransition from '@/components/PageTransition.jsx';
 import PageHeader from '@/components/PageHeader.jsx';
-import { Send, Mail, MessageSquare, AlertCircle } from 'lucide-react';
+import { Send, Mail, MessageSquare, AlertCircle, BellRing } from 'lucide-react';
 
 const BulkNotificationPage = () => {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
-  const [recipientType, setRecipientType] = useState('all_active');
-  const [channel, setChannel] = useState('email');
+  const [recipientType, setRecipientType] = useState('all_schools');
+  const [channels, setChannels] = useState(['in_app']);
+  const [schools, setSchools] = useState([]);
+  const [selectedSchoolIds, setSelectedSchoolIds] = useState([]);
+  const [loadingSchools, setLoadingSchools] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const loadSchools = async () => {
+      try {
+        setLoadingSchools(true);
+        const res = await client.fetch('/schools', 'GET', null, { per_page: 500, sort: 'schoolName' });
+        setSchools(res.items || []);
+      } catch (err) {
+        toast.error('Failed to load schools');
+      } finally {
+        setLoadingSchools(false);
+      }
+    };
+    loadSchools();
+  }, []);
+
+  const selectedSchoolsCount = useMemo(() => selectedSchoolIds.length, [selectedSchoolIds]);
+
+  const toggleChannel = (name) => {
+    setChannels((prev) => (prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]));
+  };
+
+  const toggleSchool = (id) => {
+    setSelectedSchoolIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   const handleSend = async () => {
     if (!subject || !message) {
       toast.error('Subject and message are required');
       return;
     }
-    
+    if (!channels.length) {
+      toast.error('Select at least one delivery channel');
+      return;
+    }
+    if (recipientType === 'selected_schools' && !selectedSchoolIds.length) {
+      toast.error('Please select at least one school');
+      return;
+    }
+
     setLoading(true);
     try {
-      let filter = '';
-      if (recipientType === 'all_active') filter = 'isActive=true';
-      else if (recipientType === 'all_inactive') filter = 'isActive=false';
-      
-      const schools = await pb.collection('schools').getList(1, 500, { filter, $autoCancel: false });
-      
-      if (schools.items.length === 0) {
-        toast.warning('No schools found matching the criteria');
-        setLoading(false);
-        return;
-      }
+      const result = await client.fetch('/notifications/admin/send', 'POST', {
+        subject,
+        message,
+        type: 'bulk_announcement',
+        channels,
+        targetMode: recipientType,
+        schoolIds: recipientType === 'selected_schools' ? selectedSchoolIds : [],
+      });
 
-      let count = 0;
-      for (const school of schools.items) {
-        const personalizedMsg = message.replace(/{SchoolName}/g, school.schoolName);
-        
-        // Find admin user for this school
-        const users = await pb.collection('users').getList(1, 1, { filter: `schoolId="${school.id}"`, $autoCancel: false });
-        if (users.items.length > 0) {
-          await pb.collection('notifications').create({
-            recipientId: users.items[0].id,
-            type: 'bulk_announcement',
-            subject: subject,
-            message: personalizedMsg,
-            notificationMethod: channel,
-            status: 'pending'
-          }, { $autoCancel: false });
-          count++;
-        }
-      }
-      
-      toast.success(`Successfully queued ${count} notifications`);
+      toast.success(
+        `Queued ${result.created} notifications (${result.sent} sent, ${result.failed} failed) for ${result.totalRecipients} recipients`
+      );
       setSubject('');
       setMessage('');
+      setSelectedSchoolIds([]);
     } catch (err) {
-      toast.error('Failed to send notifications');
+      toast.error(err.message || 'Failed to send notifications');
     } finally {
       setLoading(false);
     }
@@ -115,28 +132,54 @@ const BulkNotificationPage = () => {
                 <Label className="text-base">Recipients</Label>
                 <RadioGroup value={recipientType} onValueChange={setRecipientType} className="flex flex-col space-y-2">
                   <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/50 bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer">
-                    <RadioGroupItem value="all_active" id="r1" />
-                    <Label htmlFor="r1" className="flex-1 cursor-pointer font-medium">All Active Schools</Label>
+                    <RadioGroupItem value="all_schools" id="r1" />
+                    <Label htmlFor="r1" className="flex-1 cursor-pointer font-medium">All Schools</Label>
                   </div>
                   <div className="flex items-center space-x-3 p-3 rounded-lg border border-border/50 bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer">
-                    <RadioGroupItem value="all_inactive" id="r2" />
-                    <Label htmlFor="r2" className="flex-1 cursor-pointer font-medium">Deactivated Schools Only</Label>
+                    <RadioGroupItem value="selected_schools" id="r2" />
+                    <Label htmlFor="r2" className="flex-1 cursor-pointer font-medium">
+                      Selected Schools {selectedSchoolsCount > 0 ? `(${selectedSchoolsCount})` : ''}
+                    </Label>
                   </div>
                 </RadioGroup>
+                {recipientType === 'selected_schools' && (
+                  <div className="max-h-56 overflow-y-auto border rounded-lg p-3 bg-background space-y-2">
+                    {loadingSchools ? (
+                      <p className="text-sm text-muted-foreground">Loading schools...</p>
+                    ) : schools.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No schools found.</p>
+                    ) : (
+                      schools.map((school) => (
+                        <label key={school.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedSchoolIds.includes(school.id)}
+                            onChange={() => toggleSchool(school.id)}
+                          />
+                          <span>{school.schoolName}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3">
                 <Label className="text-base">Delivery Channel</Label>
-                <RadioGroup value={channel} onValueChange={setChannel} className="flex gap-4">
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="email" id="c1" />
-                    <Label htmlFor="c1" className="flex items-center cursor-pointer"><Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Email</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="whatsapp" id="c2" />
-                    <Label htmlFor="c2" className="flex items-center cursor-pointer"><MessageSquare className="w-4 h-4 mr-2 text-muted-foreground" /> WhatsApp</Label>
-                  </div>
-                </RadioGroup>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={channels.includes('in_app')} onChange={() => toggleChannel('in_app')} />
+                    <BellRing className="w-4 h-4 text-muted-foreground" /> In-app
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={channels.includes('email')} onChange={() => toggleChannel('email')} />
+                    <Mail className="w-4 h-4 text-muted-foreground" /> Email
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={channels.includes('whatsapp')} onChange={() => toggleChannel('whatsapp')} />
+                    <MessageSquare className="w-4 h-4 text-muted-foreground" /> WhatsApp
+                  </label>
+                </div>
               </div>
 
               <Button onClick={handleSend} disabled={loading || !message || !subject} className="w-full h-12 text-base">

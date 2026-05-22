@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Document, Page, pdfjs } from 'react-pdf';
+import { Document, Page } from 'react-pdf';
+import '@/lib/setupPdfWorker.js';
 import { 
   ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight, 
   Download, Printer, Share2, Info, BookmarkPlus, Search, RotateCw
@@ -13,9 +14,6 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
-
-// Set worker path for react-pdf
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
 
 const AdvancedPDFViewer = ({ url, title, metadata, onDownload }) => {
   const [numPages, setNumPages] = useState(null);

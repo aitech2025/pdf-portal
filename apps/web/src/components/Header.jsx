@@ -1,6 +1,5 @@
 
 import React from 'react';
-import pb from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useNavigate, Link } from 'react-router-dom';
 import { Menu, Settings, LogOut, Zap, User } from 'lucide-react';
@@ -51,7 +50,7 @@ const Header = () => {
           <div className="w-8 h-8 rounded-[var(--radius-md)] bg-gradient-primary flex items-center justify-center shadow-soft-sm">
             <Zap className="h-5 w-5 text-white" />
           </div>
-          <span className="font-poppins font-bold text-lg tracking-tight hidden sm:inline-block">EduPortal</span>
+          <span className="font-poppins font-bold text-lg tracking-tight hidden sm:inline-block">i-icon academy</span>
         </Link>
       </div>
 

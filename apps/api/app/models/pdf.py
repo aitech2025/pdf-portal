@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean, Integer, Float, DateTime, ForeignKey, Text
+from sqlalchemy import String, Boolean, Integer, Float, DateTime, ForeignKey, Text, Index, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -9,10 +9,19 @@ def gen_id():
 
 class PDF(Base):
     __tablename__ = "pdfs"
+    __table_args__ = (
+        Index('idx_pdf_category_id', 'category_id'),
+        Index('idx_pdf_sub_category_id', 'sub_category_id'),
+        Index('idx_pdf_status', 'status'),
+        Index('idx_pdf_is_active', 'is_active'),
+        Index('idx_pdf_created', 'created'),
+        Index('idx_pdf_uploaded_by', 'uploaded_by'),
+    )
 
     id: Mapped[str] = mapped_column(String(15), primary_key=True, default=gen_id)
     file_name: Mapped[str] = mapped_column(String(500), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    file_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     category_id: Mapped[str | None] = mapped_column(String(15), ForeignKey("categories.id"), nullable=True)
     sub_category_id: Mapped[str | None] = mapped_column(String(15), ForeignKey("sub_categories.id"), nullable=True)
@@ -43,11 +52,17 @@ class PDF(Base):
 
 class PDFVersion(Base):
     __tablename__ = "pdf_versions"
+    __table_args__ = (
+        Index('idx_pdf_version_pdf_id', 'pdf_id'),
+        Index('idx_pdf_version_is_current', 'is_current'),
+        Index('idx_pdf_version_upload_date', 'upload_date'),
+    )
 
     id: Mapped[str] = mapped_column(String(15), primary_key=True, default=gen_id)
-    pdf_id: Mapped[str] = mapped_column(String(15), ForeignKey("pdfs.id"), nullable=False, index=True)
+    pdf_id: Mapped[str] = mapped_column(String(15), ForeignKey("pdfs.id"), nullable=False)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    file_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     uploaded_by: Mapped[str] = mapped_column(String(15), ForeignKey("users.id"), nullable=False)
     version_notes: Mapped[str | None] = mapped_column(Text, nullable=True)

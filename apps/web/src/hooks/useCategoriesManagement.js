@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 export const useCategoriesManagement = () => {
@@ -14,11 +14,11 @@ export const useCategoriesManagement = () => {
     setLoading(true);
     try {
       const [catsRes, subCatsRes] = await Promise.all([
-        pb.collection('categories').getFullList({ sort: 'displayOrder,categoryName', $autoCancel: false }),
-        pb.collection('subCategories').getFullList({ sort: 'displayOrder,subCategoryName', $autoCancel: false })
+        client.fetch('/categories', 'GET', null, { sort: 'displayOrder,categoryName' }),
+        client.fetch('/subCategories', 'GET', null, { sort: 'displayOrder,subCategoryName' })
       ]);
-      setCategories(catsRes);
-      setSubCategories(subCatsRes);
+      setCategories(catsRes.items || catsRes);
+      setSubCategories(subCatsRes.items || subCatsRes);
       setError(null);
     } catch (err) {
       console.error('Error fetching categories data:', err);
@@ -32,41 +32,19 @@ export const useCategoriesManagement = () => {
   useEffect(() => {
     fetchData();
 
-    // Real-time subscriptions
-    pb.collection('categories').subscribe('*', function (e) {
-      if (e.action === 'create') {
-        setCategories(prev => [...prev, e.record].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || a.categoryName.localeCompare(b.categoryName)));
-      } else if (e.action === 'update') {
-        setCategories(prev => prev.map(c => c.id === e.record.id ? e.record : c).sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || a.categoryName.localeCompare(b.categoryName)));
-      } else if (e.action === 'delete') {
-        setCategories(prev => prev.filter(c => c.id !== e.record.id));
-      }
-    });
-
-    pb.collection('subCategories').subscribe('*', function (e) {
-      if (e.action === 'create') {
-        setSubCategories(prev => [...prev, e.record].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || a.subCategoryName.localeCompare(b.subCategoryName)));
-      } else if (e.action === 'update') {
-        setSubCategories(prev => prev.map(s => s.id === e.record.id ? e.record : s).sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || a.subCategoryName.localeCompare(b.subCategoryName)));
-      } else if (e.action === 'delete') {
-        setSubCategories(prev => prev.filter(s => s.id !== e.record.id));
-      }
-    });
-
-    return () => {
-      pb.collection('categories').unsubscribe('*');
-      pb.collection('subCategories').unsubscribe('*');
-    };
+    // Note: Real-time subscriptions would need WebSocket implementation
+    // Removed pb.collection().subscribe() calls as they're PocketBase-specific
   }, [fetchData]);
 
   const loadPdfCount = async (subCategoryId) => {
     if (pdfCounts[subCategoryId] !== undefined) return; // Already cached
     try {
-      const res = await pb.collection('pdfs').getList(1, 1, {
-        filter: `subCategoryId = "${subCategoryId}"`,
-        $autoCancel: false
+      const res = await client.fetch('/pdfs', 'GET', null, {
+        page: 1,
+        per_page: 1,
+        subCategoryId
       });
-      setPdfCounts(prev => ({ ...prev, [subCategoryId]: res.totalItems }));
+      setPdfCounts(prev => ({ ...prev, [subCategoryId]: res.totalItems || 0 }));
     } catch (err) {
       console.error('Failed to fetch PDF count for subcategory', subCategoryId, err);
     }
@@ -77,7 +55,7 @@ export const useCategoriesManagement = () => {
       const isDuplicate = categories.some(c => c.categoryName.toLowerCase() === data.categoryName.toLowerCase());
       if (isDuplicate) throw new Error('A category with this name already exists.');
 
-      const record = await pb.collection('categories').create(data, { $autoCancel: false });
+      const record = await client.fetch('/categories', 'POST', data);
       // Optimistic update — subscription may not fire in all environments
       setCategories(prev => [...prev, record].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || a.categoryName.localeCompare(b.categoryName)));
       toast.success('Category created successfully');
@@ -93,7 +71,7 @@ export const useCategoriesManagement = () => {
       const isDuplicate = categories.some(c => c.id !== id && c.categoryName.toLowerCase() === data.categoryName.toLowerCase());
       if (isDuplicate) throw new Error('A category with this name already exists.');
 
-      const record = await pb.collection('categories').update(id, data, { $autoCancel: false });
+      const record = await client.fetch(`/categories/${id}`, 'PATCH', data);
       setCategories(prev => prev.map(c => c.id === id ? record : c).sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || a.categoryName.localeCompare(b.categoryName)));
       toast.success('Category updated successfully');
       return record;
@@ -103,9 +81,13 @@ export const useCategoriesManagement = () => {
     }
   };
 
-  const deleteCategory = async (id) => {
+  const deleteCategory = async (id, options = {}) => {
     try {
-      await pb.collection('categories').delete(id, { $autoCancel: false });
+      await client.fetch(`/categories/${id}`, 'DELETE', null, {
+        force: options.force ? 'true' : undefined,
+        archive: options.archive ? 'true' : undefined,
+        reassignTo: options.reassignTo,
+      });
       setCategories(prev => prev.filter(c => c.id !== id));
       toast.success('Category deleted successfully');
     } catch (err) {
@@ -119,7 +101,7 @@ export const useCategoriesManagement = () => {
       const isDuplicate = subCategories.some(s => s.categoryId === data.categoryId && s.subCategoryName.toLowerCase() === data.subCategoryName.toLowerCase());
       if (isDuplicate) throw new Error('A sub-category with this name already exists in this category.');
 
-      const record = await pb.collection('subCategories').create(data, { $autoCancel: false });
+      const record = await client.fetch('/subCategories', 'POST', data);
       setSubCategories(prev => [...prev, record].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || a.subCategoryName.localeCompare(b.subCategoryName)));
       toast.success('Sub-category created successfully');
       return record;
@@ -134,7 +116,7 @@ export const useCategoriesManagement = () => {
       const isDuplicate = subCategories.some(s => s.id !== id && s.categoryId === data.categoryId && s.subCategoryName.toLowerCase() === data.subCategoryName.toLowerCase());
       if (isDuplicate) throw new Error('A sub-category with this name already exists in this category.');
 
-      const record = await pb.collection('subCategories').update(id, data, { $autoCancel: false });
+      const record = await client.fetch(`/subCategories/${id}`, 'PATCH', data);
       setSubCategories(prev => prev.map(s => s.id === id ? record : s).sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || a.subCategoryName.localeCompare(b.subCategoryName)));
       toast.success('Sub-category updated successfully');
       return record;
@@ -146,7 +128,7 @@ export const useCategoriesManagement = () => {
 
   const deleteSubCategory = async (id) => {
     try {
-      await pb.collection('subCategories').delete(id, { $autoCancel: false });
+      await client.fetch(`/subCategories/${id}`, 'DELETE');
       setSubCategories(prev => prev.filter(s => s.id !== id));
       toast.success('Sub-category deleted successfully');
     } catch (err) {

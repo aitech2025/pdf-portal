@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 
 export function useAdminDashboardData(dateRange = '30d') {
   const [data, setData] = useState({
@@ -52,22 +52,22 @@ export function useAdminDashboardData(dateRange = '30d') {
       try {
         // Fetch totals using getList with limit 1 to get totalItems efficiently
         const [
-          usersRes, schoolsRes, pdfsRes, downloadsRes, 
+          usersRes, schoolsRes, pdfsRes, downloadsRes,
           recentUploads, recentDownloads, recentUsers, recentEvents,
           pendingSchools, pendingUsers
         ] = await Promise.all([
-          pb.collection('users').getList(1, 1, { $autoCancel: false }),
-          pb.collection('schools').getList(1, 1, { $autoCancel: false }),
-          pb.collection('pdfs').getList(1, 1, { $autoCancel: false }),
-          pb.collection('downloadLogs').getList(1, 1, { $autoCancel: false }),
-          
-          pb.collection('pdfs').getList(1, 10, { sort: '-created', $autoCancel: false }),
-          pb.collection('downloadLogs').getList(1, 10, { sort: '-created', expand: 'userId,pdfId', $autoCancel: false }),
-          pb.collection('users').getList(1, 10, { sort: '-created', $autoCancel: false }),
-          pb.collection('auditLogs').getList(1, 10, { sort: '-created', expand: 'userId', $autoCancel: false }),
-          
-          pb.collection('onboardingRequests').getList(1, 1, { filter: 'status="pending"', $autoCancel: false }),
-          pb.collection('userRequests').getList(1, 1, { filter: 'status="pending"', $autoCancel: false })
+          client.fetch('/users', 'GET', null, { page: 1, per_page: 1 }),
+          client.fetch('/schools', 'GET', null, { page: 1, per_page: 1 }),
+          client.fetch('/pdfs', 'GET', null, { page: 1, per_page: 1 }),
+          client.fetch('/downloadLogs', 'GET', null, { page: 1, per_page: 1 }),
+
+          client.fetch('/pdfs', 'GET', null, { page: 1, per_page: 10, sort: '-created' }),
+          client.fetch('/downloadLogs', 'GET', null, { page: 1, per_page: 10, sort: '-created', expand: 'userId,pdfId' }),
+          client.fetch('/users', 'GET', null, { page: 1, per_page: 10, sort: '-created' }),
+          client.fetch('/auditLogs', 'GET', null, { page: 1, per_page: 10, sort: '-created', expand: 'userId' }),
+
+          client.fetch('/onboardingRequests', 'GET', null, { page: 1, per_page: 1, filter: 'status="pending"' }),
+          client.fetch('/userRequests', 'GET', null, { page: 1, per_page: 1, filter: 'status="pending"' })
         ]);
 
         // Mocking complex chart data for premium UI feel without heavy aggregation queries

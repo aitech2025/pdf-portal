@@ -50,14 +50,19 @@ const VersionHistoryModal = ({ isOpen, onClose, pdf, onVersionChanged }) => {
     }
   };
 
-  const handleDownload = (version) => {
-    const url =`/uploads/${version.pdfFile}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${pdf.fileName}_v${version.versionNumber}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleDownload = async (version) => {
+    try {
+      const blob = await pb.fetchPdfVersionBlob(version.id);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${pdf.fileName}_v${version.versionNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    } catch {
+      alert('Download failed');
+    }
   };
 
   if (viewingVersion) {
@@ -76,7 +81,8 @@ const VersionHistoryModal = ({ isOpen, onClose, pdf, onVersionChanged }) => {
           </div>
           <div className="flex-1 overflow-hidden relative">
             <EnhancedPDFViewer 
-              pdfRecord={viewingVersion} 
+              pdfRecord={pdf}
+              versionId={viewingVersion.id}
               className="h-full border-none rounded-none"
             />
           </div>

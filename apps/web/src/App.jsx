@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Route, Routes, BrowserRouter as Router, Navigate } from 'react-router-dom';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 import { AuthProvider } from '@/contexts/AuthContext.jsx';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import ProtectedRoute from '@/components/ProtectedRoute.jsx';
@@ -9,6 +9,9 @@ import AppLayout from '@/components/AppLayout.jsx';
 
 import HomePage from '@/pages/HomePage.jsx';
 import LoginPage from '@/pages/LoginPage.jsx';
+import ForgotPasswordPage from '@/pages/ForgotPasswordPage.jsx';
+import ResetPasswordPage from '@/pages/ResetPasswordPage.jsx';
+import VerifyEmailPage from '@/pages/VerifyEmailPage.jsx';
 import MaintenanceModePage from '@/pages/MaintenanceModePage.jsx';
 import GuestSignupForm from '@/pages/GuestSignupForm.jsx';
 import UserProfilePage from '@/pages/UserProfilePage.jsx';
@@ -22,6 +25,8 @@ import AdminDashboard from '@/pages/AdminDashboard.jsx';
 import AdvancedAnalyticsDashboard from '@/pages/admin/AdvancedAnalyticsDashboard.jsx';
 import AnalyticsReports from '@/pages/admin/AnalyticsReports.jsx';
 import CategoriesAndSubcategoriesPage from '@/pages/admin/CategoriesAndSubcategoriesPage.jsx';
+import CategoriesManagementTest from '@/pages/admin/CategoriesManagementTest.jsx';
+import SimpleTest from '@/pages/admin/SimpleTest.jsx';
 import PDFUploadManagement from '@/pages/admin/PDFUploadManagement.jsx';
 import SchoolManagement from '@/pages/admin/SchoolManagement.jsx';
 import SchoolsAndUsersPage from '@/pages/admin/SchoolsAndUsersPage.jsx';
@@ -34,6 +39,8 @@ import ExportDataPage from '@/pages/ExportDataPage.jsx';
 import ContentModeration from '@/pages/admin/ContentModeration.jsx';
 import SystemSettings from '@/pages/admin/SystemSettings.jsx';
 import NotificationsPage from '@/pages/admin/NotificationsPage.jsx';
+import BulkNotificationPage from '@/pages/admin/BulkNotificationPage.jsx';
+import ProgramsManagementPage from '@/pages/admin/ProgramsManagementPage.jsx';
 
 // School Routes
 import SchoolDashboard from '@/pages/SchoolDashboard.jsx';
@@ -46,29 +53,53 @@ function AppContent() {
   const [isMaintenance, setIsMaintenance] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const checkMaintenance = async () => {
       try {
-        const res = await pb.collection('maintenanceMode').getList(1, 1, { $autoCancel: false });
-        if (res.items.length > 0) {
+        const res = await client.fetch('/maintenanceMode');
+        if (res.items?.length > 0) {
           setIsMaintenance(res.items[0].isEnabled);
           setMaintenanceMessage(res.items[0].message || '');
         }
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error('Failed to check maintenance mode:', e);
+        // Don't block the app if maintenance check fails
+        setError(e);
+      }
       setLoading(false);
     };
     checkMaintenance();
 
-    pb.collection('maintenanceMode').subscribe('*', (e) => {
-      setIsMaintenance(e.record.isEnabled);
-      setMaintenanceMessage(e.record.message || '');
-    });
+    try {
+      client.subscribe('maintenanceMode', (e) => {
+        setIsMaintenance(e.record.isEnabled);
+        setMaintenanceMessage(e.record.message || '');
+      });
+    } catch (e) {
+      console.error('Failed to subscribe to maintenance mode:', e);
+    }
 
-    return () => pb.collection('maintenanceMode').unsubscribe('*');
+    return () => {
+      try {
+        client.unsubscribe('maintenanceMode');
+      } catch (e) {
+        console.error('Failed to unsubscribe from maintenance mode:', e);
+      }
+    };
   }, []);
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <MaintenanceAwareRoutes isMaintenance={isMaintenance} maintenanceMessage={maintenanceMessage} />
@@ -94,6 +125,9 @@ function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/signup" element={<GuestSignupForm />} />
 
       {/* Shared Authenticated Routes */}
@@ -120,9 +154,13 @@ function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
               <Route path="bulk-create" element={<BulkCreationPage />} />
               <Route path="export" element={<ExportDataPage />} />
               <Route path="categories-management" element={<CategoriesAndSubcategoriesPage />} />
+              <Route path="programs" element={<ProgramsManagementPage />} />
+              <Route path="categories-test" element={<CategoriesManagementTest />} />
+              <Route path="simple-test" element={<SimpleTest />} />
               <Route path="audit-logs" element={<AuditLogsPage />} />
               <Route path="settings" element={<SystemSettings />} />
               <Route path="notifications" element={<NotificationsPage />} />
+              <Route path="broadcast" element={<BulkNotificationPage />} />
             </Routes>
           </AppLayout>
         </ProtectedRoute>

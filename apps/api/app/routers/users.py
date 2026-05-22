@@ -38,7 +38,13 @@ async def list_users(
     result = await db.execute(q)
     users = result.scalars().all()
 
-    return {"items": [_user_dict(u) for u in users], "totalItems": total, "page": page, "perPage": per_page}
+    return {
+        "items": [_user_dict(u) for u in users],
+        "totalItems": total,
+        "totalPages": (total + per_page - 1) // per_page,
+        "page": page,
+        "perPage": per_page
+    }
 
 @router.get("/{user_id}")
 async def get_user(user_id: str, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):

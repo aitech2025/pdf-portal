@@ -14,6 +14,7 @@ import RequestDetailPanel from '@/components/RequestDetailPanel.jsx';
 import RejectionReasonModal from '@/components/RejectionReasonModal.jsx';
 import SchoolDetailsModal from '@/components/admin/schools/SchoolDetailsModal.jsx';
 import CreateSchoolDialog from '@/components/admin/schools/CreateSchoolDialog.jsx';
+import CategoryAssignmentModal from '@/components/admin/schools/CategoryAssignmentModal.jsx';
 import { useLocation } from 'react-router-dom';
 
 const SchoolsAndUsersPage = () => {
@@ -36,6 +37,8 @@ const SchoolsAndUsersPage = () => {
   const [selectedSchoolId, setSelectedSchoolId] = useState(null);
   const [isSchoolModalOpen, setIsSchoolModalOpen] = useState(false);
   const [isCreateSchoolOpen, setIsCreateSchoolOpen] = useState(false);
+  const [isCategoryAssignmentOpen, setIsCategoryAssignmentOpen] = useState(false);
+  const [categoryAssignmentSchool, setCategoryAssignmentSchool] = useState(null);
 
   const token = pb.authStore.token;
 
@@ -105,6 +108,10 @@ const SchoolsAndUsersPage = () => {
       toast.success(`School "${request.schoolName}" created. ID: ${schoolData.schoolId}. Password sent via email.`);
       setIsPanelOpen(false);
       fetchData();
+
+      // Prompt for category assignment
+      setCategoryAssignmentSchool({ id: schoolData.id, name: request.schoolName });
+      setIsCategoryAssignmentOpen(true);
     } catch (err) {
       toast.error('Failed to approve: ' + err.message);
     } finally {
@@ -188,6 +195,10 @@ const SchoolsAndUsersPage = () => {
       }, { $autoCancel: false });
       toast.success(`Revoked — school "${request.schoolName}" created. ID: ${schoolData.schoolId}`);
       fetchData();
+
+      // Prompt for category assignment
+      setCategoryAssignmentSchool({ id: schoolData.id, name: request.schoolName });
+      setIsCategoryAssignmentOpen(true);
     } catch (err) {
       toast.error('Failed to revoke: ' + err.message);
     } finally {
@@ -527,6 +538,16 @@ const SchoolsAndUsersPage = () => {
         isOpen={isCreateSchoolOpen}
         onClose={() => setIsCreateSchoolOpen(false)}
         onSuccess={fetchData}
+      />
+
+      <CategoryAssignmentModal
+        isOpen={isCategoryAssignmentOpen}
+        onClose={() => {
+          setIsCategoryAssignmentOpen(false);
+          setCategoryAssignmentSchool(null);
+        }}
+        schoolId={categoryAssignmentSchool?.id}
+        schoolName={categoryAssignmentSchool?.name}
       />
     </PageTransition>
   );

@@ -13,4 +13,6 @@ export const notificationsApi = {
   },
   deleteNotification: (id) =>
     apiFetch(`/api/notifications/${id}`, 'DELETE'),
+  adminSend: (data) =>
+    apiFetch('/api/notifications/admin/send', 'POST', data),
 };

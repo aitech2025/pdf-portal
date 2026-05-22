@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import hashlib
+import secrets
 from jose import JWTError, jwt
 import bcrypt
 from fastapi import Depends, HTTPException, status
@@ -23,6 +25,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def generate_random_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
@@ -56,4 +66,11 @@ def require_role(*roles: str):
 
 require_admin = require_role("admin", "platform_admin")
 require_admin_or_moderator = require_role("admin", "platform_admin", "moderator")
-require_school = require_role("school", "school_admin", "admin", "platform_admin")
+require_school = require_role(
+    "school",
+    "school_admin",
+    "school_viewer",
+    "teacher",
+    "admin",
+    "platform_admin",
+)

@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { toast } from 'sonner';
 
@@ -16,15 +16,16 @@ export const useNotifications = () => {
       setLoading(false);
       return;
     }
-    
+
     try {
       setLoading(true);
-      const res = await pb.collection('notifications').getList(1, 500, {
+      const res = await client.fetch('/notifications', 'GET', null, {
+        page: 1,
+        per_page: 500,
         filter: `recipientId = "${currentUser.id}"`,
-        sort: '-created',
-        $autoCancel: false
+        sort: '-created'
       });
-      setNotifications(res.items);
+      setNotifications(res.items || res);
       setError(null);
     } catch (err) {
       console.error('Error fetching notifications:', err);
@@ -38,32 +39,15 @@ export const useNotifications = () => {
   useEffect(() => {
     fetchNotifications();
 
-    if (currentUser) {
-      // Subscribe to real-time updates
-      pb.collection('notifications').subscribe('*', function (e) {
-        if (e.record.recipientId !== currentUser.id) return;
-
-        if (e.action === 'create') {
-          setNotifications(prev => [e.record, ...prev]);
-          toast.info(e.record.subject, { description: e.record.message });
-        } else if (e.action === 'update') {
-          setNotifications(prev => prev.map(n => n.id === e.record.id ? e.record : n));
-        } else if (e.action === 'delete') {
-          setNotifications(prev => prev.filter(n => n.id !== e.record.id));
-        }
-      });
-
-      return () => {
-        pb.collection('notifications').unsubscribe('*');
-      };
-    }
+    // Note: Real-time subscriptions would need WebSocket implementation
+    // Removed pb.collection().subscribe() calls as they're PocketBase-specific
   }, [currentUser, fetchNotifications]);
 
   const markAsRead = async (id) => {
     try {
       // Optimistic update
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-      await pb.collection('notifications').update(id, { read: true }, { $autoCancel: false });
+      await client.fetch(`/notifications/${id}`, 'PATCH', { read: true });
     } catch (err) {
       console.error('Error marking as read:', err);
       // Revert on error
@@ -74,7 +58,7 @@ export const useNotifications = () => {
   const markAsUnread = async (id) => {
     try {
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: false } : n));
-      await pb.collection('notifications').update(id, { read: false }, { $autoCancel: false });
+      await client.fetch(`/notifications/${id}`, 'PATCH', { read: false });
     } catch (err) {
       console.error('Error marking as unread:', err);
       fetchNotifications();
@@ -84,7 +68,7 @@ export const useNotifications = () => {
   const deleteNotification = async (id) => {
     try {
       setNotifications(prev => prev.filter(n => n.id !== id));
-      await pb.collection('notifications').delete(id, { $autoCancel: false });
+      await client.fetch(`/notifications/${id}`, 'DELETE');
       toast.success('Notification deleted');
     } catch (err) {
       console.error('Error deleting notification:', err);
@@ -97,8 +81,8 @@ export const useNotifications = () => {
     try {
       setLoading(true);
       // Delete in batches or one by one
-      const deletePromises = notifications.map(n => 
-        pb.collection('notifications').delete(n.id, { $autoCancel: false }).catch(() => null)
+      const deletePromises = notifications.map(n =>
+        client.fetch(`/notifications/${n.id}`, 'DELETE').catch(() => null)
       );
       await Promise.all(deletePromises);
       setNotifications([]);
@@ -111,16 +95,16 @@ export const useNotifications = () => {
       setLoading(false);
     }
   };
-  
+
   const markAllAsRead = async () => {
     try {
       const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
       if (unreadIds.length === 0) return;
-      
+
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      
-      const updatePromises = unreadIds.map(id => 
-        pb.collection('notifications').update(id, { read: true }, { $autoCancel: false }).catch(() => null)
+
+      const updatePromises = unreadIds.map(id =>
+        client.fetch(`/notifications/${id}`, 'PATCH', { read: true }).catch(() => null)
       );
       await Promise.all(updatePromises);
       toast.success('All marked as read');

@@ -90,15 +90,15 @@ const PDFUploadManagement = () => {
       try {
         setUploadProgress(Math.floor((i / totalFiles) * 100) + 10);
 
-        // Check if PDF with same name exists in this category/subcategory
-        const existingRes = await pb.collection('pdfs').getList(1, 1, {
-          filter: `fileName = "${file.name}" && categoryId = "${uploadCat}" && subCategoryId = "${uploadSubCat}"`,
+        const existingRes = await pb.collection('pdfs').getList(1, 200, {
+          subCategoryId: uploadSubCat,
           $autoCancel: false
         });
+        const existingPdf = existingRes.items.find(
+          (p) => p.fileName === file.name && p.categoryId === uploadCat
+        );
 
-        if (existingRes.items.length > 0) {
-          // Create new version
-          const existingPdf = existingRes.items[0];
+        if (existingPdf) {
           await uploadNewVersion(existingPdf.id, file, versionNotes, currentUser.id);
           successCount++;
 
@@ -113,29 +113,15 @@ const PDFUploadManagement = () => {
 
           const formData = new FormData();
           formData.append('pdf_id', newPdfId);
-          formData.append('pdfFile', file);
+          formData.append('file', file);
           formData.append('fileName', file.name);
-          formData.append('fileSize', file.size);
           formData.append('categoryId', uploadCat);
           formData.append('subCategoryId', uploadSubCat);
           formData.append('isActive', 'true');
           formData.append('status', 'approved');
-          formData.append('currentVersion', 1);
-          formData.append('versionNotes', versionNotes);
+          formData.append('versionNotes', versionNotes || 'Initial upload');
 
-          const newRecord = await pb.collection('pdfs').create(formData, { $autoCancel: false });
-
-          // Create initial version record
-          const versionData = new FormData();
-          versionData.append('pdfId', newRecord.id);
-          versionData.append('versionNumber', 1);
-          versionData.append('uploadedBy', currentUser.id);
-          versionData.append('fileSize', file.size);
-          versionData.append('versionNotes', versionNotes || 'Initial upload');
-          versionData.append('pdfFile', file);
-          versionData.append('isCurrent', true);
-
-          await pb.collection('pdfVersions').create(versionData, { $autoCancel: false });
+          const newRecord = await pb.uploadPdf(formData);
 
           successCount++;
 

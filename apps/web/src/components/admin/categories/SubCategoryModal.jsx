@@ -148,9 +148,7 @@ const ICON_MAP = {
 
 const subCategorySchema = z.object({
   subCategoryName: z.string().min(2, "Name must be at least 2 characters").max(100, "Name is too long"),
-  programName: z.string().min(2, "Program name is required").max(100, "Program name is too long"),
-  objective: z.string().max(500, "Objective is too long").optional().or(z.literal('')),
-  descriptive: z.string().max(500, "Description is too long").optional().or(z.literal('')),
+  description: z.string().max(500, "Description is too long").optional().or(z.literal('')),
   icon: z.string().optional().or(z.literal('')),
   isActive: z.boolean().default(true),
   displayOrder: z.coerce.number().int().min(0).optional().default(0)
@@ -173,9 +171,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
     resolver: zodResolver(subCategorySchema),
     defaultValues: {
       subCategoryName: '',
-      programName: '',
-      objective: '',
-      descriptive: '',
+      description: '',
       icon: '',
       isActive: true,
       displayOrder: 0
@@ -187,9 +183,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
       if (subCategory) {
         form.reset({
           subCategoryName: subCategory.subCategoryName || '',
-          programName: subCategory.programName || '',
-          objective: subCategory.objective || '',
-          descriptive: subCategory.descriptive || '',
+          description: subCategory.description || '',
           icon: subCategory.icon || '',
           isActive: subCategory.isActive !== false,
           displayOrder: subCategory.displayOrder || 0
@@ -197,9 +191,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
       } else {
         form.reset({
           subCategoryName: '',
-          programName: '',
-          objective: '',
-          descriptive: '',
+          description: '',
           icon: '',
           isActive: true,
           displayOrder: 0
@@ -226,68 +218,34 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
         <DialogHeader>
           <DialogTitle className="text-xl font-poppins">{isEditing ? 'Edit Sub-Category' : `Add Sub-Category to ${categoryName}`}</DialogTitle>
         </DialogHeader>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="subCategoryName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Topic / Sub-Category Name <span className="text-destructive">*</span></FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. Physics, Algebra..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="programName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Program Name <span className="text-destructive">*</span></FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. Core Curriculum..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
             <FormField
               control={form.control}
-              name="objective"
+              name="subCategoryName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Learning Objective</FormLabel>
+                  <FormLabel>Sub-Category Name <span className="text-destructive">*</span></FormLabel>
                   <FormControl>
-                    <Textarea 
-                      placeholder="What students will learn..." 
-                      className="resize-none h-16" 
-                      {...field} 
-                    />
+                    <Input placeholder="e.g. Physics, Algebra..." {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            
+
             <FormField
               control={form.control}
-              name="descriptive"
+              name="description"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Description</FormLabel>
                   <FormControl>
-                    <Textarea 
-                      placeholder="Detailed description of the topic..." 
-                      className="resize-none h-16" 
-                      {...field} 
+                    <Textarea
+                      placeholder="Detailed description of the sub-category..."
+                      className="resize-none h-20"
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />

@@ -96,15 +96,15 @@ const PDFManagement = () => {
       }
       
       const formData = new FormData();
-      formData.append('pdfFile', file);
+      formData.append('file', file);
       formData.append('fileName', file.name);
-      formData.append('fileSize', file.size);
       formData.append('categoryId', selectedCat);
       formData.append('subCategoryId', selectedSubCat);
-      formData.append('isActive', true);
+      formData.append('isActive', 'true');
+      formData.append('status', 'approved');
 
       try {
-        await pb.collection('pdfs').create(formData, { $autoCancel: false });
+        await pb.uploadPdf(formData);
         successCount++;
       } catch (err) {
         toast.error(`Failed to upload ${file.name}`);

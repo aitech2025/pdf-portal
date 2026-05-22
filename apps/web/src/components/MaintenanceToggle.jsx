@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -12,12 +12,13 @@ const MaintenanceToggle = () => {
   useEffect(() => {
     const fetchMaintenance = async () => {
       try {
-        const res = await pb.collection('maintenanceMode').getList(1, 1, { $autoCancel: false });
-        if (res.items.length > 0) {
-          setRecord(res.items[0]);
-          setIsEnabled(res.items[0].isEnabled);
+        const res = await client.fetch('/maintenanceMode', 'GET', null, { page: 1, per_page: 1 });
+        const items = res.items || res;
+        if (items.length > 0) {
+          setRecord(items[0]);
+          setIsEnabled(items[0].isEnabled);
         } else {
-          const newRecord = await pb.collection('maintenanceMode').create({ isEnabled: false }, { $autoCancel: false });
+          const newRecord = await client.fetch('/maintenanceMode', 'POST', { isEnabled: false });
           setRecord(newRecord);
         }
       } catch (err) {
@@ -30,7 +31,7 @@ const MaintenanceToggle = () => {
   const handleToggle = async (checked) => {
     if (!record) return;
     try {
-      await pb.collection('maintenanceMode').update(record.id, { isEnabled: checked }, { $autoCancel: false });
+      await client.fetch(`/maintenanceMode/${record.id}`, 'PATCH', { isEnabled: checked });
       setIsEnabled(checked);
       toast.success(`Maintenance mode ${checked ? 'enabled' : 'disabled'}`);
     } catch (err) {

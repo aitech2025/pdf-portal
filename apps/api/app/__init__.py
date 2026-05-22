@@ -1,1 +1,1 @@
-# EduContent API
+# i-icon academy API

@@ -27,8 +27,8 @@ const SchoolSettings = () => {
 
   return (
     <PageTransition>
-      <PageHeader 
-        title="Account Settings" 
+      <PageHeader
+        title="Account Settings"
         description="Manage your profile, security preferences, and notifications."
         breadcrumbs={[{ label: 'Settings' }]}
       />
@@ -36,22 +36,22 @@ const SchoolSettings = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
         {/* Settings Navigation */}
         <div className="flex flex-col space-y-2">
-          <Button 
-            variant={activeTab === 'profile' ? 'secondary' : 'ghost'} 
+          <Button
+            variant={activeTab === 'profile' ? 'secondary' : 'ghost'}
             className={`justify-start font-medium ${activeTab === 'profile' ? 'bg-muted/80' : 'text-muted-foreground'}`}
             onClick={() => setActiveTab('profile')}
           >
             <User className="w-4 h-4 mr-3" /> Profile
           </Button>
-          <Button 
-            variant={activeTab === 'security' ? 'secondary' : 'ghost'} 
+          <Button
+            variant={activeTab === 'security' ? 'secondary' : 'ghost'}
             className={`justify-start font-medium ${activeTab === 'security' ? 'bg-muted/80' : 'text-muted-foreground'}`}
             onClick={() => setActiveTab('security')}
           >
             <Lock className="w-4 h-4 mr-3" /> Security
           </Button>
-          <Button 
-            variant={activeTab === 'notifications' ? 'secondary' : 'ghost'} 
+          <Button
+            variant={activeTab === 'notifications' ? 'secondary' : 'ghost'}
             className={`justify-start font-medium ${activeTab === 'notifications' ? 'bg-muted/80' : 'text-muted-foreground'}`}
             onClick={() => setActiveTab('notifications')}
           >
@@ -90,7 +90,7 @@ const SchoolSettings = () => {
                       <p className="text-xs text-muted-foreground">Email changes require admin approval.</p>
                     </div>
                   </div>
-                  
+
                   <div className="pt-4 flex justify-end">
                     <Button type="submit" disabled={loading}>
                       {loading ? 'Saving...' : 'Save Changes'}
@@ -136,7 +136,7 @@ const SchoolSettings = () => {
                   <p className="text-sm text-muted-foreground mb-4">
                     If you need to permanently deactivate your institution's access, please contact the system administrator.
                   </p>
-                  <Button variant="destructive" onClick={() => toast.info('Please contact admin@eduportal.com for deactivation.')}>
+                  <Button variant="destructive" onClick={() => toast.info('Please contact admin@iiconacademy.com for deactivation.')}>
                     Request Account Deactivation
                   </Button>
                 </CardContent>

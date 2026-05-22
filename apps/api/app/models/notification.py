@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -9,9 +9,15 @@ def gen_id():
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = (
+        Index('idx_notification_recipient_id', 'recipient_id'),
+        Index('idx_notification_status', 'status'),
+        Index('idx_notification_created', 'created'),
+        Index('idx_notification_read', 'read'),
+    )
 
     id: Mapped[str] = mapped_column(String(15), primary_key=True, default=gen_id)
-    recipient_id: Mapped[str] = mapped_column(String(15), ForeignKey("users.id"), nullable=False, index=True)
+    recipient_id: Mapped[str] = mapped_column(String(15), ForeignKey("users.id"), nullable=False)
     type: Mapped[str] = mapped_column(String(100), nullable=False)
     subject: Mapped[str] = mapped_column(String(500), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)

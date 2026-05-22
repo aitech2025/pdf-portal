@@ -32,7 +32,7 @@ const exportDashboardReport = (data) => {
 
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  doc.text('EduPortal Dashboard Report', 14, 20);
+  doc.text('i-icon academy Dashboard Report', 14, 20);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100);
@@ -92,8 +92,8 @@ const exportDashboardReport = (data) => {
 
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.text('EduPortal — Confidential', 14, 285);
-  doc.save(`eduportal-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.text('i-icon academy — Confidential', 14, 285);
+  doc.save(`iiconacademy-report-${new Date().toISOString().slice(0, 10)}.pdf`);
 };
 
 const AdminDashboard = () => {

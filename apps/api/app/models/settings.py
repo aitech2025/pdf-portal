@@ -21,7 +21,7 @@ class SystemSettings(Base):
     __tablename__ = "system_settings"
 
     id: Mapped[str] = mapped_column(String(15), primary_key=True, default=gen_id)
-    app_name: Mapped[str] = mapped_column(String(255), nullable=False, default="EduContent")
+    app_name: Mapped[str] = mapped_column(String(255), nullable=False, default="i-icon academy")
     app_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     app_logo: Mapped[str | None] = mapped_column(String(500), nullable=True)
     app_favicon: Mapped[str | None] = mapped_column(String(500), nullable=True)

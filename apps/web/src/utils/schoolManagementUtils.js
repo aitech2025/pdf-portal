@@ -1,6 +1,6 @@
 
 import Papa from 'papaparse';
-import pb from '@/lib/apiClient.js';
+import client from '@/lib/apiClient.js';
 
 export const SCHOOL_STATUSES = {
   ACTIVE: 'Active',
@@ -11,7 +11,7 @@ export const SCHOOL_STATUSES = {
 
 export function formatSchoolData(school) {
   if (!school) return null;
-  
+
   let status = SCHOOL_STATUSES.PENDING; // Default or infer from rules
   if (school.isActive) {
     status = SCHOOL_STATUSES.ACTIVE;
@@ -49,16 +49,16 @@ export function generateSchoolCode() {
 export async function calculateSchoolStats(schoolId) {
   try {
     const [usersRes, pdfsRes, downloadsRes] = await Promise.all([
-      pb.collection('users').getList(1, 1, { filter: `schoolId="${schoolId}"`, $autoCancel: false }),
-      pb.collection('pdfs').getList(1, 1, { filter: `schoolId="${schoolId}"`, $autoCancel: false }), // Assuming pdfs have schoolId or are linked via collections
-      pb.collection('downloadLogs').getList(1, 1, { filter: `schoolId="${schoolId}"`, $autoCancel: false })
+      client.fetch('/users', 'GET', null, { page: 1, per_page: 1, filter: `schoolId="${schoolId}"` }),
+      client.fetch('/pdfs', 'GET', null, { page: 1, per_page: 1, filter: `schoolId="${schoolId}"` }), // Assuming pdfs have schoolId or are linked via collections
+      client.fetch('/downloadLogs', 'GET', null, { page: 1, per_page: 1, filter: `schoolId="${schoolId}"` })
     ]);
 
     return {
-      totalUsers: usersRes.totalItems,
-      totalPdfs: pdfsRes.totalItems,
-      totalDownloads: downloadsRes.totalItems,
-      avgDownloads: pdfsRes.totalItems > 0 ? (downloadsRes.totalItems / pdfsRes.totalItems).toFixed(1) : 0
+      totalUsers: usersRes.totalItems || 0,
+      totalPdfs: pdfsRes.totalItems || 0,
+      totalDownloads: downloadsRes.totalItems || 0,
+      avgDownloads: (pdfsRes.totalItems || 0) > 0 ? ((downloadsRes.totalItems || 0) / (pdfsRes.totalItems || 1)).toFixed(1) : 0
     };
   } catch (error) {
     console.error("Failed to calculate school stats", error);
@@ -83,7 +83,7 @@ export function exportSchoolsToCSV(schools, filename = 'schools_export.csv') {
   const csv = Papa.unparse(data);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  
+
   if (navigator.msSaveBlob) {
     navigator.msSaveBlob(blob, filename);
   } else {

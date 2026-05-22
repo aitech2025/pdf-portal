@@ -6,7 +6,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { apiFetch } from '../../src/lib/apiClient';
 
 export default function SchoolDashboard() {
-    const { user } = useAuth();
+    const { user, canWrite } = useAuth();
     const router = useRouter();
     const [stats, setStats] = useState({ totalDownloads: 0, totalUsers: 0 });
     const [loading, setLoading] = useState(true);
@@ -80,13 +80,23 @@ export default function SchoolDashboard() {
                             <Ionicons name="library-outline" size={22} color="#4f46e5" />
                             <Text className="text-xs font-medium text-foreground mt-1.5">Browse Library</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                            onPress={() => router.push('/(school)/requests')}
-                        >
-                            <Ionicons name="clipboard-outline" size={22} color="#059669" />
-                            <Text className="text-xs font-medium text-foreground mt-1.5">User Requests</Text>
-                        </TouchableOpacity>
+                        {canWrite ? (
+                            <TouchableOpacity
+                                className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
+                                onPress={() => router.push('/(school)/requests')}
+                            >
+                                <Ionicons name="clipboard-outline" size={22} color="#059669" />
+                                <Text className="text-xs font-medium text-foreground mt-1.5">User Requests</Text>
+                            </TouchableOpacity>
+                        ) : (
+                            <TouchableOpacity
+                                className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
+                                onPress={() => router.push('/(school)/portal')}
+                            >
+                                <Ionicons name="bookmarks-outline" size={22} color="#059669" />
+                                <Text className="text-xs font-medium text-foreground mt-1.5">My Library</Text>
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity
                             className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
                             onPress={() => router.push('/(school)/notifications')}
@@ -94,6 +104,31 @@ export default function SchoolDashboard() {
                             <Ionicons name="notifications-outline" size={22} color="#d97706" />
                             <Text className="text-xs font-medium text-foreground mt-1.5">Notifications</Text>
                         </TouchableOpacity>
+                    </View>
+                    <View className="flex-row gap-3 mt-3">
+                        <TouchableOpacity
+                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
+                            onPress={() => router.push('/(school)/analytics')}
+                        >
+                            <Ionicons name="bar-chart-outline" size={22} color="#7c3aed" />
+                            <Text className="text-xs font-medium text-foreground mt-1.5">Analytics</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
+                            onPress={() => router.push('/(school)/profile')}
+                        >
+                            <Ionicons name="person-outline" size={22} color="#6b7280" />
+                            <Text className="text-xs font-medium text-foreground mt-1.5">My Profile</Text>
+                        </TouchableOpacity>
+                        {canWrite && (
+                            <TouchableOpacity
+                                className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
+                                onPress={() => router.push('/(school)/settings')}
+                            >
+                                <Ionicons name="settings-outline" size={22} color="#0891b2" />
+                                <Text className="text-xs font-medium text-foreground mt-1.5">Settings</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
             </View>

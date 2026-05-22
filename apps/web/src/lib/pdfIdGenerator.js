@@ -1,5 +1,5 @@
 
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 
 /**
  * Generates a unique PDF ID based on category, subcategory, and date.
@@ -22,20 +22,22 @@ export const generatePdfId = async (category, subCategory) => {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
-  
+
   const basePrefix = `${catCode}${subCatCode}${year}${month}`;
 
   try {
     // Query existing PDFs with the same prefix to find the next sequential number
-    const records = await pb.collection('pdfs').getList(1, 1, {
+    const response = await client.fetch('/pdfs', 'GET', null, {
+      page: 1,
+      per_page: 1,
       filter: `pdf_id ~ "${basePrefix}"`,
-      sort: '-pdf_id',
-      $autoCancel: false
+      sort: '-pdf_id'
     });
 
+    const records = response.items || response;
     let sequence = 1;
-    if (records.items.length > 0 && records.items[0].pdf_id) {
-      const lastId = records.items[0].pdf_id;
+    if (records.length > 0 && records[0].pdf_id) {
+      const lastId = records[0].pdf_id;
       const parts = lastId.split('-');
       if (parts.length > 1) {
         const lastSeq = parseInt(parts[parts.length - 1], 10);

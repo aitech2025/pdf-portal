@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '../src/context/AuthContext';
 import { initApiClient } from '../src/lib/apiClient';
 import Constants from 'expo-constants';
+import '../global.css';
 
 SplashScreen.preventAutoHideAsync();
 

@@ -1,6 +1,6 @@
 
 import { useState, useCallback } from 'react';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 export const useSchoolUserManagement = () => {
@@ -12,21 +12,21 @@ export const useSchoolUserManagement = () => {
     const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const numbers = "0123456789";
     const symbols = "!@#$%^&*";
-    
+
     const allChars = lowercase + uppercase + numbers + symbols;
     let password = "";
-    
+
     // Ensure at least one of each type
     password += lowercase[Math.floor(Math.random() * lowercase.length)];
     password += uppercase[Math.floor(Math.random() * uppercase.length)];
     password += numbers[Math.floor(Math.random() * numbers.length)];
     password += symbols[Math.floor(Math.random() * symbols.length)];
-    
+
     // Fill the rest
     for (let i = 0; i < 8; i++) {
       password += allChars[Math.floor(Math.random() * allChars.length)];
     }
-    
+
     // Shuffle
     return password.split('').sort(() => 0.5 - Math.random()).join('');
   };
@@ -46,7 +46,7 @@ export const useSchoolUserManagement = () => {
         emailVisibility: true
       };
 
-      const newUser = await pb.collection('users').create(payload, { $autoCancel: false });
+      const newUser = await client.fetch('/users', 'POST', payload);
       toast.success('User created and assigned successfully.');
       return { user: newUser, password };
     } catch (err) {
@@ -61,7 +61,7 @@ export const useSchoolUserManagement = () => {
   const updateSchool = async (schoolId, schoolData) => {
     setLoading(true);
     try {
-      const updated = await pb.collection('schools').update(schoolId, schoolData, { $autoCancel: false });
+      const updated = await client.fetch(`/schools/${schoolId}`, 'PATCH', schoolData);
       toast.success('School details updated.');
       return updated;
     } catch (err) {
@@ -76,12 +76,11 @@ export const useSchoolUserManagement = () => {
   const getSchoolUsers = useCallback(async (schoolId) => {
     setLoading(true);
     try {
-      const users = await pb.collection('users').getFullList({
+      const response = await client.fetch('/users', 'GET', null, {
         filter: `schoolId = "${schoolId}"`,
-        sort: '-created',
-        $autoCancel: false
+        sort: '-created'
       });
-      return users;
+      return response.items || response;
     } catch (err) {
       console.error('Error fetching users:', err);
       toast.error('Failed to fetch school users');
@@ -94,7 +93,7 @@ export const useSchoolUserManagement = () => {
   const editUser = async (userId, userData) => {
     setLoading(true);
     try {
-      const updated = await pb.collection('users').update(userId, userData, { $autoCancel: false });
+      const updated = await client.fetch(`/users/${userId}`, 'PATCH', userData);
       toast.success('User updated successfully.');
       return updated;
     } catch (err) {
@@ -109,7 +108,7 @@ export const useSchoolUserManagement = () => {
   const deleteUser = async (userId) => {
     setLoading(true);
     try {
-      await pb.collection('users').delete(userId, { $autoCancel: false });
+      await client.fetch(`/users/${userId}`, 'DELETE');
       toast.success('User deleted successfully.');
       return true;
     } catch (err) {

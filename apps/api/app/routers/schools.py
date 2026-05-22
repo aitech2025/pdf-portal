@@ -58,19 +58,30 @@ async def list_schools(
             School.school_id.ilike(f"%{filter}%"),
             School.point_of_contact_name.ilike(f"%{filter}%"),
         ))
-
+    
+    # Count total
+    count_result = await db.execute(select(func.count()).select_from(q.subquery()))
+    total = count_result.scalar()
+    
+    # Sort
     desc = sort.startswith("-")
     field = sort.lstrip("+-")
     col_map = {"schoolName": School.school_name, "created": School.created, "schoolId": School.school_id}
     col = col_map.get(field, School.created)
     q = q.order_by(col.desc() if desc else col.asc())
-
-    total = await db.scalar(select(func.count()).select_from(q.subquery()))
+    
+    # Paginate
     q = q.offset((page - 1) * per_page).limit(per_page)
     result = await db.execute(q)
     schools = result.scalars().all()
-
-    return {"items": [_school_dict(s) for s in schools], "totalItems": total, "page": page, "perPage": per_page}
+    
+    return {
+        "items": [_school_dict(s) for s in schools],
+        "totalItems": total,
+        "totalPages": (total + per_page - 1) // per_page,
+        "page": page,
+        "perPage": per_page
+    }
 
 @router.get("/{school_id}")
 async def get_school(school_id: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):

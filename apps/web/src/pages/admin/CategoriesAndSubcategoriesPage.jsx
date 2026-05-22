@@ -158,11 +158,12 @@ const DynamicIcon = ({ name, className, defaultIcon: DefaultIcon = FolderTree })
 };
 
 const CategoriesAndSubcategoriesPage = () => {
-  const { 
-    categories, 
-    subCategories, 
-    loading, 
-    pdfCounts, 
+  const {
+    categories,
+    subCategories,
+    loading,
+    error,
+    pdfCounts,
     loadPdfCount,
     createCategory,
     updateCategory,
@@ -179,7 +180,7 @@ const CategoriesAndSubcategoriesPage = () => {
   // Modal States
   const [catModalOpen, setCatModalOpen] = useState(false);
   const [editingCat, setEditingCat] = useState(null);
-  
+
   const [subCatModalOpen, setSubCatModalOpen] = useState(false);
   const [editingSubCat, setEditingSubCat] = useState(null);
 
@@ -187,18 +188,26 @@ const CategoriesAndSubcategoriesPage = () => {
   const [deletingItem, setDeletingItem] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Debug logging
+  useEffect(() => {
+    console.log('Categories:', categories);
+    console.log('SubCategories:', subCategories);
+    console.log('Loading:', loading);
+    console.log('Error:', error);
+  }, [categories, subCategories, loading, error]);
+
   const selectedCategory = useMemo(() => categories.find(c => c.id === selectedCategoryId) || null, [categories, selectedCategoryId]);
 
   const filteredCategories = useMemo(() => {
-    return categories.filter(c => c.categoryName.toLowerCase().includes(catSearch.toLowerCase()));
+    if (!Array.isArray(categories)) return [];
+    return categories.filter(c => c && c.categoryName && c.categoryName.toLowerCase().includes(catSearch.toLowerCase()));
   }, [categories, catSearch]);
 
   const activeSubCategories = useMemo(() => {
-    if (!selectedCategoryId) return [];
+    if (!selectedCategoryId || !Array.isArray(subCategories)) return [];
     return subCategories
-      .filter(s => s.categoryId === selectedCategoryId)
-      .filter(s => s.subCategoryName.toLowerCase().includes(subCatSearch.toLowerCase()) || 
-                   (s.programName && s.programName.toLowerCase().includes(subCatSearch.toLowerCase())));
+      .filter(s => s && s.categoryId === selectedCategoryId)
+      .filter(s => s && s.subCategoryName && s.subCategoryName.toLowerCase().includes(subCatSearch.toLowerCase()));
   }, [subCategories, selectedCategoryId, subCatSearch]);
 
   useEffect(() => {
@@ -268,23 +277,23 @@ const CategoriesAndSubcategoriesPage = () => {
   const SidebarContent = () => (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="p-4 border-b border-border/50 shrink-0 space-y-4">
-        <Button 
-          className="w-full justify-start shadow-sm" 
+        <Button
+          className="w-full justify-start shadow-sm"
           onClick={() => { setEditingCat(null); setCatModalOpen(true); }}
         >
           <Plus className="w-4 h-4 mr-2" /> Add Category
         </Button>
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Find categories..." 
-            value={catSearch} 
+          <Input
+            placeholder="Find categories..."
+            value={catSearch}
             onChange={e => setCatSearch(e.target.value)}
             className="pl-9 bg-background/50 h-9"
           />
         </div>
       </div>
-      
+
       <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
         {loading ? (
           Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-[var(--radius-md)]" />)
@@ -298,15 +307,15 @@ const CategoriesAndSubcategoriesPage = () => {
           filteredCategories.map(cat => {
             const isSelected = selectedCategoryId === cat.id;
             const subCatCount = subCategories.filter(s => s.categoryId === cat.id).length;
-            
+
             return (
-              <div 
+              <div
                 key={cat.id}
                 onClick={() => setSelectedCategoryId(cat.id)}
                 className={cn(
                   "flex items-center gap-3 p-3 rounded-[var(--radius-md)] cursor-pointer transition-all duration-200 group border",
-                  isSelected 
-                    ? "bg-primary/10 border-primary/20 shadow-sm" 
+                  isSelected
+                    ? "bg-primary/10 border-primary/20 shadow-sm"
                     : "bg-transparent border-transparent hover:bg-muted/50 hover:border-border/50"
                 )}
               >
@@ -324,7 +333,7 @@ const CategoriesAndSubcategoriesPage = () => {
                     <Layers className="w-3 h-3" /> {subCatCount} subs
                   </p>
                 </div>
-                
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
                     <Button variant="ghost" size="icon" className={cn("h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity", isSelected && "opacity-100")}>
@@ -397,7 +406,7 @@ const CategoriesAndSubcategoriesPage = () => {
                 <div className="absolute right-0 top-0 opacity-[0.03] pointer-events-none transform translate-x-1/4 -translate-y-1/4">
                   <DynamicIcon name={selectedCategory.icon} className="w-64 h-64" />
                 </div>
-                
+
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 relative z-10">
                   <div className="flex items-start gap-5">
                     <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner border border-primary/20 shrink-0">
@@ -407,9 +416,9 @@ const CategoriesAndSubcategoriesPage = () => {
                       <div className="flex items-center gap-3 mb-2">
                         <h2 className="text-2xl sm:text-3xl font-bold font-poppins text-foreground">{selectedCategory.categoryName}</h2>
                         {selectedCategory.isActive ? (
-                          <BadgeComponent variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"><CheckCircle2 className="w-3 h-3 mr-1"/> Active</BadgeComponent>
+                          <BadgeComponent variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"><CheckCircle2 className="w-3 h-3 mr-1" /> Active</BadgeComponent>
                         ) : (
-                          <BadgeComponent variant="outline" className="bg-muted text-muted-foreground"><XCircle className="w-3 h-3 mr-1"/> Inactive</BadgeComponent>
+                          <BadgeComponent variant="outline" className="bg-muted text-muted-foreground"><XCircle className="w-3 h-3 mr-1" /> Inactive</BadgeComponent>
                         )}
                       </div>
                       <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
@@ -439,8 +448,8 @@ const CategoriesAndSubcategoriesPage = () => {
                   <div className="flex items-center gap-3 w-full sm:w-auto">
                     <div className="relative flex-1 sm:w-64">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        placeholder="Search sub-categories..." 
+                      <Input
+                        placeholder="Search sub-categories..."
                         value={subCatSearch}
                         onChange={e => setSubCatSearch(e.target.value)}
                         className="pl-9 h-9 bg-background shadow-sm"
@@ -468,12 +477,12 @@ const CategoriesAndSubcategoriesPage = () => {
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                       <AnimatePresence>
                         {activeSubCategories.map(sub => (
-                          <motion.div 
+                          <motion.div
                             layout
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95 }}
-                            key={sub.id} 
+                            key={sub.id}
                             className="group flex flex-col p-5 bg-card border border-border/50 rounded-[var(--radius-lg)] hover:border-primary/30 hover:shadow-soft-md transition-all duration-200 relative overflow-hidden"
                           >
                             {!sub.isActive && (
@@ -481,16 +490,15 @@ const CategoriesAndSubcategoriesPage = () => {
                                 <span className="absolute -top-[30px] left-[5px] text-[10px] font-bold text-muted-foreground uppercase transform rotate-45">Off</span>
                               </div>
                             )}
-                            
+
                             <div className="flex items-start gap-4 mb-4">
                               <div className="w-12 h-12 rounded-[var(--radius-md)] bg-accent/10 flex items-center justify-center text-accent shrink-0">
                                 <DynamicIcon name={sub.icon} defaultIcon={FileText} className="w-6 h-6" />
                               </div>
                               <div className="flex-1 min-w-0 pr-8">
                                 <h4 className="text-base font-semibold text-foreground truncate group-hover:text-primary transition-colors">{sub.subCategoryName}</h4>
-                                <p className="text-sm font-medium text-muted-foreground truncate">{sub.programName}</p>
                               </div>
-                              
+
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="absolute right-2 top-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -510,7 +518,7 @@ const CategoriesAndSubcategoriesPage = () => {
                             </div>
 
                             <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
-                              {sub.objective || sub.descriptive || "No description provided."}
+                              {sub.description || "No description provided."}
                             </p>
 
                             <div className="flex items-center justify-between pt-4 border-t border-border/50 mt-auto">
@@ -540,23 +548,23 @@ const CategoriesAndSubcategoriesPage = () => {
         </Card>
       </div>
 
-      <CategoryModal 
-        isOpen={catModalOpen} 
-        onClose={() => setCatModalOpen(false)} 
+      <CategoryModal
+        isOpen={catModalOpen}
+        onClose={() => setCatModalOpen(false)}
         onSave={handleSaveCategory}
         category={editingCat}
       />
 
-      <SubCategoryModal 
-        isOpen={subCatModalOpen} 
-        onClose={() => setSubCatModalOpen(false)} 
+      <SubCategoryModal
+        isOpen={subCatModalOpen}
+        onClose={() => setSubCatModalOpen(false)}
         onSave={handleSaveSubCategory}
         subCategory={editingSubCat}
         categoryName={selectedCategory?.categoryName}
       />
 
       {deletingItem && (
-        <DeleteConfirmationDialog 
+        <DeleteConfirmationDialog
           isOpen={deleteDialogOpen}
           onClose={() => setDeleteDialogOpen(false)}
           onConfirm={confirmDelete}

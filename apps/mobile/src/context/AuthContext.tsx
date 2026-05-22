@@ -19,6 +19,7 @@ interface AuthContextType {
     loading: boolean;
     login: (email: string, password: string) => Promise<User>;
     logout: () => Promise<void>;
+    updateUser: (data: Partial<User>) => Promise<void>;
     isPlatform: boolean;
     isSchool: boolean;
     canWrite: boolean;
@@ -51,11 +52,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return u;
     };
 
+    const updateUser = async (data: Partial<User>) => {
+        const updated = await authApi.updateMe(data);
+        const merged = { ...user, ...updated } as User;
+        setUser(merged);
+        await SecureStore.setItemAsync('auth_user', JSON.stringify(merged));
+    };
+
     const logout = async () => {
-        await authApi.logout();
+        // Clear local state and storage first — don't depend on API call succeeding
         setUser(null);
-        await SecureStore.deleteItemAsync('auth_user');
-        await SecureStore.deleteItemAsync('auth_token');
+        try { await SecureStore.deleteItemAsync('auth_user'); } catch { }
+        try { await SecureStore.deleteItemAsync('auth_token'); } catch { }
+        try { await SecureStore.deleteItemAsync('auth_refresh_token'); } catch { }
+        // Best-effort server logout — ignore errors
+        try { await authApi.logout(); } catch { }
     };
 
     const role = user?.role ?? '';
@@ -66,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             loading,
             login,
             logout,
+            updateUser,
             isPlatform: isPlatformRole(role),
             isSchool: isSchoolRole(role),
             canWrite: canWrite(role),

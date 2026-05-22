@@ -34,14 +34,14 @@ const MaintenanceModePage = ({ message }) => {
         </div>
 
         <div className="space-y-4">
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">We're upgrading EduPortal</h1>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">We're upgrading i-icon academy</h1>
           <p className="text-lg md:text-xl text-muted-foreground leading-relaxed max-w-lg mx-auto">
             {displayMessage}
           </p>
         </div>
 
         <div className="pt-8 flex flex-col sm:flex-row gap-4 justify-center items-center">
-          <Button size="lg" className="w-full sm:w-auto h-12 px-8" onClick={() => window.location.href = "mailto:admin@eduportal.com"}>
+          <Button size="lg" className="w-full sm:w-auto h-12 px-8" onClick={() => window.location.href = "mailto:admin@iiconacademy.com"}>
             <Mail className="w-5 h-5 mr-2" /> Contact Support
           </Button>
           {isAuthenticated && (

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 import { toast } from 'sonner';
 import { Search, ShieldAlert, KeyRound, Eye, Trash2, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ const SchoolManagementPage = () => {
   const [schools, setSchools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  
+
   // Deactivation state
   const [isDeactivateOpen, setIsDeactivateOpen] = useState(false);
   const [selectedSchool, setSelectedSchool] = useState(null);
@@ -24,11 +24,12 @@ const SchoolManagementPage = () => {
   const fetchSchools = async () => {
     try {
       setLoading(true);
-      const records = await pb.collection('schools').getList(1, 100, {
-        sort: '-created',
-        $autoCancel: false
+      const response = await client.fetch('/schools', 'GET', null, {
+        page: 1,
+        per_page: 100,
+        sort: '-created'
       });
-      setSchools(records.items);
+      setSchools(response.items || response);
     } catch (err) {
       toast.error('Failed to fetch schools');
     } finally {
@@ -47,7 +48,7 @@ const SchoolManagementPage = () => {
       setIsDeactivateOpen(true);
     } else {
       try {
-        await pb.collection('schools').update(school.id, { isActive: true, deactivationMessage: '' }, { $autoCancel: false });
+        await client.fetch(`/schools/${school.id}`, 'PATCH', { isActive: true, deactivationMessage: '' });
         toast.success(`${school.schoolName} activated successfully.`);
         fetchSchools();
       } catch (err) {
@@ -59,10 +60,10 @@ const SchoolManagementPage = () => {
   const confirmDeactivation = async () => {
     if (!selectedSchool) return;
     try {
-      await pb.collection('schools').update(selectedSchool.id, { 
-        isActive: false, 
-        deactivationMessage: deactivationReason 
-      }, { $autoCancel: false });
+      await client.fetch(`/schools/${selectedSchool.id}`, 'PATCH', {
+        isActive: false,
+        deactivationMessage: deactivationReason
+      });
       toast.success(`${selectedSchool.schoolName} deactivated.`);
       setIsDeactivateOpen(false);
       fetchSchools();
@@ -74,7 +75,7 @@ const SchoolManagementPage = () => {
   const handleDelete = async (id) => {
     if (window.confirm('WARNING: Deleting a school will permanently remove it. Continue?')) {
       try {
-        await pb.collection('schools').delete(id, { $autoCancel: false });
+        await client.fetch(`/schools/${id}`, 'DELETE');
         toast.success('School deleted');
         fetchSchools();
       } catch (err) {
@@ -92,20 +93,21 @@ const SchoolManagementPage = () => {
 
     try {
       // Find the auth user linked to this school email
-      const users = await pb.collection('users').getList(1, 1, { filter: `email="${school.email}"`, $autoCancel: false });
-      if (users.items.length === 0) {
+      const response = await client.fetch('/users', 'GET', null, { page: 1, per_page: 1, filter: `email="${school.email}"` });
+      const users = response.items || response;
+      if (users.length === 0) {
         toast.error("Linked user account not found.");
         return;
       }
-      
-      const userId = users.items[0].id;
-      await pb.collection('users').update(userId, {
+
+      const userId = users[0].id;
+      await client.fetch(`/users/${userId}`, 'PATCH', {
         password: newPassword,
         passwordConfirm: newPassword
-      }, { $autoCancel: false });
+      });
 
       // Also update reference in schools collection
-      await pb.collection('schools').update(school.id, { password: newPassword }, { $autoCancel: false });
+      await client.fetch(`/schools/${school.id}`, 'PATCH', { password: newPassword });
 
       toast.success(`Password reset for ${school.email}. New password: ${newPassword}`);
     } catch (err) {
@@ -113,8 +115,8 @@ const SchoolManagementPage = () => {
     }
   };
 
-  const filteredSchools = schools.filter(s => 
-    s.schoolName.toLowerCase().includes(search.toLowerCase()) || 
+  const filteredSchools = schools.filter(s =>
+    s.schoolName.toLowerCase().includes(search.toLowerCase()) ||
     (s.location && s.location.toLowerCase().includes(search.toLowerCase()))
   );
 
@@ -150,7 +152,7 @@ const SchoolManagementPage = () => {
             </p>
             <div className="space-y-2">
               <label className="text-sm font-medium">Reason (Optional)</label>
-              <Textarea 
+              <Textarea
                 placeholder="E.g., Subscription expired..."
                 value={deactivationReason}
                 onChange={(e) => setDeactivationReason(e.target.value)}

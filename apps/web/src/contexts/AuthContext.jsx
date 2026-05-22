@@ -39,12 +39,12 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    const authData = await client.collection('users').authWithPassword(email, password);
+    const authData = await client.login(email, password);
     return authData;
   };
 
-  const logout = () => {
-    client.authStore.clear();
+  const logout = async () => {
+    await client.logout();
     setCurrentUser(null);
   };
 

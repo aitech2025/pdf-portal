@@ -69,7 +69,7 @@ const LoginPage = () => {
             <Zap className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-[2.25rem] font-poppins font-bold tracking-tight text-foreground text-center">Welcome back</h2>
-          <p className="text-muted-foreground mt-2 text-center text-lg">Sign in to your EduPortal account</p>
+          <p className="text-muted-foreground mt-2 text-center text-lg">Sign in to your i-icon academy account</p>
         </div>
 
         <Card className="border-none shadow-soft-xl bg-card/80 backdrop-blur-2xl">
@@ -99,9 +99,9 @@ const LoginPage = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password" className="text-foreground font-medium">Password</Label>
-                  <a href="#" className="text-sm font-medium text-primary hover:text-primary/80 transition-base">
+                  <Link to="/forgot-password" className="text-sm font-medium text-primary hover:text-primary/80 transition-base">
                     Forgot password?
-                  </a>
+                  </Link>
                 </div>
                 <Input
                   id="password"
@@ -131,6 +131,10 @@ const LoginPage = () => {
                 Sign In
                 {!loading && <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />}
               </Button>
+              <p className="text-center text-sm text-muted-foreground">
+                Need to verify your account?{' '}
+                <Link to="/verify-email" className="text-primary hover:text-primary/80">Verify email</Link>
+              </p>
             </form>
           </CardContent>
         </Card>

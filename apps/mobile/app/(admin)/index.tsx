@@ -19,6 +19,11 @@ const QUICK_ACTIONS = [
     { label: 'Analytics', icon: 'bar-chart', color: '#7c3aed', route: '/(admin)/analytics' },
     { label: 'Requests', icon: 'clipboard', color: '#2563eb', route: '/(admin)/requests' },
     { label: 'Notifications', icon: 'notifications', color: '#d97706', route: '/(admin)/notifications' },
+    { label: 'Audit Logs', icon: 'list', color: '#059669', route: '/(admin)/audit' },
+    { label: 'Upload PDF', icon: 'cloud-upload', color: '#4f46e5', route: '/(admin)/upload' },
+    { label: 'Broadcast', icon: 'megaphone', color: '#db2777', route: '/(admin)/broadcast' },
+    { label: 'Bulk Create', icon: 'layers', color: '#0891b2', route: '/(admin)/bulk' },
+    { label: 'Settings', icon: 'settings', color: '#6b7280', route: '/(admin)/settings' },
 ];
 
 export default function AdminDashboard() {
@@ -95,8 +100,8 @@ export default function AdminDashboard() {
                 {/* Quick Actions */}
                 <View>
                     <Text className="text-sm font-semibold text-muted mb-2 uppercase tracking-wider">Quick Access</Text>
-                    <View className="flex-row gap-3">
-                        {QUICK_ACTIONS.map(action => (
+                    <View className="flex-row gap-3 mb-3">
+                        {QUICK_ACTIONS.slice(0, 4).map(action => (
                             <TouchableOpacity
                                 key={action.label}
                                 className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
@@ -105,7 +110,21 @@ export default function AdminDashboard() {
                                 <View className="w-10 h-10 rounded-xl items-center justify-center mb-2" style={{ backgroundColor: action.color + '18' }}>
                                     <Ionicons name={action.icon as any} size={20} color={action.color} />
                                 </View>
-                                <Text className="text-xs font-medium text-foreground">{action.label}</Text>
+                                <Text className="text-xs font-medium text-foreground text-center">{action.label}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                    <View className="flex-row gap-3">
+                        {QUICK_ACTIONS.slice(4, 8).map(action => (
+                            <TouchableOpacity
+                                key={action.label}
+                                className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
+                                onPress={() => router.push(action.route as any)}
+                            >
+                                <View className="w-10 h-10 rounded-xl items-center justify-center mb-2" style={{ backgroundColor: action.color + '18' }}>
+                                    <Ionicons name={action.icon as any} size={20} color={action.color} />
+                                </View>
+                                <Text className="text-xs font-medium text-foreground text-center">{action.label}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>

@@ -1,4 +1,4 @@
-from sqlalchemy import String, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import String, DateTime, ForeignKey, Text, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -9,6 +9,12 @@ def gen_id():
 
 class DownloadLog(Base):
     __tablename__ = "download_logs"
+    __table_args__ = (
+        Index('idx_download_log_user_id', 'user_id'),
+        Index('idx_download_log_pdf_id', 'pdf_id'),
+        Index('idx_download_log_school_id', 'school_id'),
+        Index('idx_download_log_downloaded_at', 'downloaded_at'),
+    )
 
     id: Mapped[str] = mapped_column(String(15), primary_key=True, default=gen_id)
     school_id: Mapped[str] = mapped_column(String(15), ForeignKey("schools.id"), nullable=False)
@@ -27,6 +33,11 @@ class DownloadLog(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index('idx_audit_log_user_id', 'user_id'),
+        Index('idx_audit_log_action', 'action'),
+        Index('idx_audit_log_timestamp', 'timestamp'),
+    )
 
     id: Mapped[str] = mapped_column(String(15), primary_key=True, default=gen_id)
     user_id: Mapped[str] = mapped_column(String(15), ForeignKey("users.id"), nullable=False)
@@ -44,6 +55,11 @@ class AuditLog(Base):
 
 class AnalyticsEvent(Base):
     __tablename__ = "analytics_events"
+    __table_args__ = (
+        Index('idx_analytics_event_type', 'event_type'),
+        Index('idx_analytics_timestamp', 'timestamp'),
+        Index('idx_analytics_user_id', 'user_id'),
+    )
 
     id: Mapped[str] = mapped_column(String(15), primary_key=True, default=gen_id)
     user_id: Mapped[str | None] = mapped_column(String(15), ForeignKey("users.id"), nullable=True)

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { SettingSection, InputSetting, SelectSetting, ToggleSetting, PasswordField } from '../SettingComponents.jsx';
 import { Save, Mail, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import pb from '@/lib/apiClient';
 
 const EmailConfigurationTab = ({ settings, onSave, saving }) => {
   const [localSettings, setLocalSettings] = useState(settings);
@@ -31,9 +32,20 @@ const EmailConfigurationTab = ({ settings, onSave, saving }) => {
     });
   };
 
-  const handleTestEmail = () => {
-    toast.info('Sending test email...');
-    setTimeout(() => toast.success('Test email sent successfully!'), 1500);
+  const handleTestEmail = async () => {
+    if (!settings?.id) {
+      toast.error('Save system settings first');
+      return;
+    }
+    const to = window.prompt('Enter recipient email for test message:', localSettings.supportEmail || localSettings.emailFromAddress || '');
+    if (!to) return;
+    try {
+      toast.info('Sending test email...');
+      await pb.fetch(`/systemSettings/${settings.id}/test-email`, 'POST', { to });
+      toast.success('Test email sent successfully!');
+    } catch (err) {
+      toast.error(err.message || 'Failed to send test email');
+    }
   };
 
   return (

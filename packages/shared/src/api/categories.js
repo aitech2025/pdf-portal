@@ -7,8 +7,8 @@ export const categoriesApi = {
     apiFetch('/api/categories', 'POST', data),
   updateCategory: (id, data) =>
     apiFetch(`/api/categories/${id}`, 'PATCH', data),
-  deleteCategory: (id) =>
-    apiFetch(`/api/categories/${id}`, 'DELETE'),
+  deleteCategory: (id, options = null) =>
+    apiFetch(`/api/categories/${id}`, 'DELETE', null, options),
   listSubCategories: (categoryId) =>
     apiFetch('/api/subCategories', 'GET', null, categoryId ? { category_id: categoryId } : null),
   createSubCategory: (data) =>

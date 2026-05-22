@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, FileText,
   Settings, ShieldAlert, BarChart3, FolderTree,
-  UploadCloud, Database, LogOut, ChevronLeft, ChevronRight,
+  UploadCloud, Database, LogOut, ChevronLeft, ChevronRight, Layers, MessageSquare,
   UserCog
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
@@ -23,11 +23,13 @@ const Sidebar = () => {
     { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
     { name: 'Schools', path: '/admin/schools-and-users', icon: Building2 },
     { name: 'Users', path: '/admin/users', icon: Users },
+    { name: 'Programs', path: '/admin/programs', icon: Layers },
     { name: 'Categories', path: '/admin/categories-management', icon: FolderTree },
     { name: 'Content Library', path: '/admin/content-dashboard', icon: FileText },
     ...(canWrite ? [
       { name: 'Upload PDFs', path: '/admin/pdf-upload', icon: UploadCloud },
       { name: 'Bulk Create', path: '/admin/bulk-create', icon: UserCog },
+      { name: 'Broadcast', path: '/admin/broadcast', icon: MessageSquare },
     ] : []),
     { name: 'Audit Logs', path: '/admin/audit-logs', icon: Database },
     ...(canWrite ? [{ name: 'Settings', path: '/admin/settings', icon: Settings }] : []),
@@ -66,7 +68,7 @@ const Sidebar = () => {
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
                 <span className="text-primary-foreground font-bold text-sm">E</span>
               </div>
-              <span className="font-poppins font-bold text-base tracking-tight text-foreground truncate">EduPortal</span>
+              <span className="font-poppins font-bold text-base tracking-tight text-foreground truncate">i-icon academy</span>
             </div>
           )}
           {collapsed && (

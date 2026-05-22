@@ -60,7 +60,7 @@ const SettingsPage = () => {
                     <form onSubmit={handleSave} className="space-y-6">
                       <div className="grid gap-2">
                         <Label htmlFor="portalName">Portal Name</Label>
-                        <Input id="portalName" defaultValue="EduPortal Production" />
+                        <Input id="portalName" defaultValue="i-icon academy Production" />
                       </div>
                       <div className="grid gap-2">
                         <Label>Language</Label>

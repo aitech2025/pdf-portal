@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import pb from '@/lib/apiClient';
+import client from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 export const usePDFVersioning = () => {
@@ -12,7 +12,7 @@ export const usePDFVersioning = () => {
     setError(null);
     try {
       // Get current PDF to find the next version number
-      const pdf = await pb.collection('pdfs').getOne(pdfId, { $autoCancel: false });
+      const pdf = await client.fetch(`/pdfs/${pdfId}`);
       const nextVersion = (pdf.currentVersion || 0) + 1;
 
       // Create new version record
@@ -25,26 +25,7 @@ export const usePDFVersioning = () => {
       formData.append('pdfFile', file);
       formData.append('isCurrent', true);
 
-      const versionRecord = await pb.collection('pdfVersions').create(formData, { $autoCancel: false });
-
-      // Update previous current versions to false
-      const previousVersions = await pb.collection('pdfVersions').getFullList({
-        filter: `pdfId = "${pdfId}" && id != "${versionRecord.id}" && isCurrent = true`,
-        $autoCancel: false
-      });
-
-      for (const prev of previousVersions) {
-        await pb.collection('pdfVersions').update(prev.id, { isCurrent: false }, { $autoCancel: false });
-      }
-
-      // Update main PDF record
-      const pdfUpdateData = new FormData();
-      pdfUpdateData.append('currentVersion', nextVersion);
-      pdfUpdateData.append('versionNotes', notes || '');
-      pdfUpdateData.append('pdfFile', file); // Update the main file as well for easy access
-      pdfUpdateData.append('fileSize', file.size);
-
-      await pb.collection('pdfs').update(pdfId, pdfUpdateData, { $autoCancel: false });
+      const versionRecord = await client.fetch('/pdfVersions', 'POST', formData);
 
       toast.success(`Version ${nextVersion} uploaded successfully`);
       return versionRecord;
@@ -62,13 +43,12 @@ export const usePDFVersioning = () => {
     setLoading(true);
     setError(null);
     try {
-      const records = await pb.collection('pdfVersions').getFullList({
+      const response = await client.fetch('/pdfVersions', 'GET', null, {
         filter: `pdfId = "${pdfId}"`,
         sort: '-versionNumber',
-        expand: 'uploadedBy',
-        $autoCancel: false
+        expand: 'uploadedBy'
       });
-      return records;
+      return response.items || response;
     } catch (err) {
       console.error('Error fetching version history:', err);
       setError(err);
@@ -84,13 +64,13 @@ export const usePDFVersioning = () => {
     setError(null);
     try {
       // Set all to not current
-      const allVersions = await pb.collection('pdfVersions').getFullList({
-        filter: `pdfId = "${pdfId}"`,
-        $autoCancel: false
+      const response = await client.fetch('/pdfVersions', 'GET', null, {
+        filter: `pdfId = "${pdfId}"`
       });
+      const allVersions = response.items || response;
 
       for (const v of allVersions) {
-        await pb.collection('pdfVersions').update(v.id, { isCurrent: v.id === versionId }, { $autoCancel: false });
+        await client.fetch(`/pdfVersions/${v.id}`, 'PATCH', { isCurrent: v.id === versionId });
       }
 
       // We need to fetch the actual file from the version to update the main PDF record
@@ -101,9 +81,9 @@ export const usePDFVersioning = () => {
       // Since we can't easily copy files between records in client-side JS without downloading/uploading,
       // we will just update the metadata and rely on the viewer to check `currentVersion`.
 
-      await pb.collection('pdfs').update(pdfId, {
+      await client.fetch(`/pdfs/${pdfId}`, 'PATCH', {
         currentVersion: versionNumber,
-      }, { $autoCancel: false });
+      });
 
       toast.success(`Version ${versionNumber} is now current`);
     } catch (err) {
@@ -120,10 +100,10 @@ export const usePDFVersioning = () => {
     setLoading(true);
     setError(null);
     try {
-      const versions = await pb.collection('pdfVersions').getFullList({
-        filter: `pdfId = "${pdfId}"`,
-        $autoCancel: false
+      const response = await client.fetch('/pdfVersions', 'GET', null, {
+        filter: `pdfId = "${pdfId}"`
       });
+      const versions = response.items || response;
 
       if (versions.length <= 1) {
         throw new Error('Cannot delete the only version of a PDF.');
@@ -131,7 +111,7 @@ export const usePDFVersioning = () => {
 
       const versionToDelete = versions.find(v => v.id === versionId);
 
-      await pb.collection('pdfVersions').delete(versionId, { $autoCancel: false });
+      await client.fetch(`/pdfVersions/${versionId}`, 'DELETE');
 
       // If we deleted the current version, make the latest remaining one current
       if (versionToDelete?.isCurrent) {
@@ -154,12 +134,14 @@ export const usePDFVersioning = () => {
 
   const getCurrentVersion = async (pdfId) => {
     try {
-      const records = await pb.collection('pdfVersions').getList(1, 1, {
+      const response = await client.fetch('/pdfVersions', 'GET', null, {
+        page: 1,
+        per_page: 1,
         filter: `pdfId = "${pdfId}" && isCurrent = true`,
-        expand: 'uploadedBy',
-        $autoCancel: false
+        expand: 'uploadedBy'
       });
-      return records.items[0] || null;
+      const items = response.items || response;
+      return items[0] || null;
     } catch (err) {
       console.error('Error fetching current version:', err);
       return null;

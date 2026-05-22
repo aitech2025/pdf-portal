@@ -1,5 +1,7 @@
 # EduPortal — Monorepo Architecture
 
+> **Full guide:** See [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) for implementation details, deployment steps, environment variables, API reference, notifications, and operations runbooks.
+
 ## Project Structure
 
 ```

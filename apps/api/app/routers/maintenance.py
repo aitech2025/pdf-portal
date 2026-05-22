@@ -6,6 +6,8 @@ from app.models.settings import MaintenanceMode, SystemSettings, UserPreferences
 from app.models.user import User
 from app.auth import get_current_user, require_admin
 from app.services.websocket import manager
+from app.services.email import send_email
+from app.services.whatsapp import send_whatsapp_message
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
@@ -63,7 +65,7 @@ async def update_system_settings(ss_id: str, body: dict, db: AsyncSession = Depe
         "supportEmail": "support_email", "supportPhone": "support_phone",
         "timezone": "timezone", "language": "language",
         "maintenanceMode": "maintenance_mode", "maintenanceMessage": "maintenance_message",
-        "emailProvider": "email_provider", "smtpHost": "smtp_host",
+        "smtpHost": "smtp_host",
         "smtpPort": "smtp_port", "smtpUsername": "smtp_username",
         "smtpPassword": "smtp_password", "emailFromAddress": "email_from_address",
         "emailFromName": "email_from_name", "enableTLS": "enable_tls",
@@ -86,6 +88,53 @@ async def update_system_settings(ss_id: str, body: dict, db: AsyncSession = Depe
     await db.commit()
     await db.refresh(ss)
     return _ss_dict(ss)
+
+
+@router.post("/systemSettings/{ss_id}/test-email")
+async def test_email_settings(
+    ss_id: str,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    result = await db.execute(select(SystemSettings).where(SystemSettings.id == ss_id))
+    ss = result.scalar_one_or_none()
+    if not ss:
+        raise HTTPException(404, "Not found")
+    to = str(body.get("to") or "").strip()
+    if not to:
+        raise HTTPException(400, "Recipient email is required")
+    await send_email(
+        to,
+        "I-ICON EduShare: Email configuration test",
+        "<p>This is a test email from I-ICON EduShare settings.</p>",
+    )
+    return {"message": "Test email sent"}
+
+
+@router.post("/systemSettings/{ss_id}/test-whatsapp")
+async def test_whatsapp_settings(
+    ss_id: str,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    result = await db.execute(select(SystemSettings).where(SystemSettings.id == ss_id))
+    ss = result.scalar_one_or_none()
+    if not ss:
+        raise HTTPException(404, "Not found")
+    to = str(body.get("to") or "").strip()
+    if not to:
+        raise HTTPException(400, "Recipient mobile number is required")
+    whatsapp_config = (ss.integrations or {}).get("whatsapp", {})
+    ok, detail = await send_whatsapp_message(
+        to,
+        "I-ICON EduShare: WhatsApp configuration test.",
+        whatsapp_config,
+    )
+    if not ok:
+        raise HTTPException(400, detail)
+    return {"message": "Test WhatsApp message sent"}
 
 @router.get("/userPreferences")
 async def get_preferences(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -121,7 +170,7 @@ def _ss_dict(ss: SystemSettings) -> dict:
         "supportEmail": ss.support_email, "supportPhone": ss.support_phone,
         "timezone": ss.timezone, "language": ss.language,
         "maintenanceMode": ss.maintenance_mode, "maintenanceMessage": ss.maintenance_message,
-        "emailProvider": ss.email_provider, "smtpHost": ss.smtp_host,
+        "smtpHost": ss.smtp_host,
         "smtpPort": ss.smtp_port, "smtpUsername": ss.smtp_username,
         "smtpPassword": ss.smtp_password, "emailFromAddress": ss.email_from_address,
         "emailFromName": ss.email_from_name, "enableTLS": ss.enable_tls,

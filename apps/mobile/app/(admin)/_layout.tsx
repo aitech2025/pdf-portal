@@ -17,45 +17,21 @@ export default function AdminLayout() {
                 headerShown: false,
             }}
         >
-            <Tabs.Screen
-                name="index"
-                options={{
-                    title: 'Dashboard',
-                    tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="schools"
-                options={{
-                    title: 'Schools',
-                    tabBarIcon: ({ color, size }) => <Ionicons name="business-outline" size={size} color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="users"
-                options={{
-                    title: 'Users',
-                    tabBarIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="pdfs"
-                options={{
-                    title: 'Content',
-                    tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" size={size} color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="profile"
-                options={{
-                    title: 'Profile',
-                    tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
-                }}
-            />
-            {/* Hidden from tab bar — navigate programmatically */}
+            <Tabs.Screen name="index" options={{ title: 'Dashboard', tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} /> }} />
+            <Tabs.Screen name="schools" options={{ title: 'Schools', tabBarIcon: ({ color, size }) => <Ionicons name="business-outline" size={size} color={color} /> }} />
+            <Tabs.Screen name="users" options={{ title: 'Users', tabBarIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} /> }} />
+            <Tabs.Screen name="pdfs" options={{ title: 'Content', tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" size={size} color={color} /> }} />
+            <Tabs.Screen name="categories" options={{ title: 'Categories', tabBarIcon: ({ color, size }) => <Ionicons name="folder-outline" size={size} color={color} /> }} />
+            <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} /> }} />
+            {/* Hidden screens */}
             <Tabs.Screen name="analytics" options={{ href: null, title: 'Analytics' }} />
             <Tabs.Screen name="notifications" options={{ href: null, title: 'Notifications' }} />
             <Tabs.Screen name="requests" options={{ href: null, title: 'Requests' }} />
+            <Tabs.Screen name="audit" options={{ href: null, title: 'Audit Logs' }} />
+            <Tabs.Screen name="upload" options={{ href: null, title: 'Upload PDF' }} />
+            <Tabs.Screen name="broadcast" options={{ href: null, title: 'Broadcast' }} />
+            <Tabs.Screen name="settings" options={{ href: null, title: 'Settings' }} />
+            <Tabs.Screen name="bulk" options={{ href: null, title: 'Bulk Create' }} />
         </Tabs>
     );
 }
