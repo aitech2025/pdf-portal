@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Building2, FileText,
   Settings, ShieldAlert, BarChart3, FolderTree,
   UploadCloud, Database, LogOut, ChevronLeft, ChevronRight, Layers, MessageSquare,
-  UserCog
+  UserCog, BookOpen, Bookmark, Bell
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSidebar } from './AppLayout.jsx';
@@ -38,6 +38,9 @@ const Sidebar = () => {
   const schoolLinks = [
     { name: 'Dashboard', path: '/school/dashboard', icon: LayoutDashboard },
     { name: 'Portal', path: '/school/portal', icon: FileText },
+    { name: 'Browse PDFs', path: '/school/portal/browse', icon: BookOpen },
+    { name: 'Bookmarks', path: '/school/bookmarks', icon: Bookmark },
+    { name: 'Messages', path: '/notifications', icon: Bell },
     ...(canWrite ? [{ name: 'User Requests', path: '/school/user-requests', icon: Users }] : []),
     { name: 'Analytics', path: '/school/analytics', icon: BarChart3 },
     ...(canWrite ? [{ name: 'Settings', path: '/school/settings', icon: Settings }] : []),

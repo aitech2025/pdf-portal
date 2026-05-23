@@ -179,10 +179,20 @@ const ContentDashboard = () => {
                             {pdf.fileName}
                           </p>
                           
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                            <span className="text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-sm border border-border/50 truncate max-w-[120px]">
-                              {pdf.expand?.categoryId?.categoryName || 'Uncategorized'}
-                            </span>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
+                            <Badge variant="outline" className="text-[10px] h-5 font-normal">
+                              {pdf.categoryName || pdf.expand?.categoryId?.categoryName || 'No category'}
+                            </Badge>
+                            {(pdf.subCategoryName || pdf.expand?.subCategoryId?.subCategoryName) && (
+                              <Badge variant="secondary" className="text-[10px] h-5 font-normal">
+                                {pdf.subCategoryName || pdf.expand?.subCategoryId?.subCategoryName}
+                              </Badge>
+                            )}
+                            {(pdf.programName || pdf.expand?.programId?.programName) && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {pdf.programName || pdf.expand?.programId?.programName}
+                              </span>
+                            )}
                             <span className="text-xs text-muted-foreground font-medium">
                               {formatBytes(pdf.fileSize)}
                             </span>

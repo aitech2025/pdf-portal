@@ -86,34 +86,20 @@ const SchoolsAndUsersPage = () => {
     }
     setActionLoading(p => ({ ...p, [request.id]: true }));
     try {
-      // Create school via backend (auto-generates school ID, creates admin user, sends email)
-      const schoolData = await apiFetch('/api/schools', 'POST', {
-        schoolName: request.schoolName,
-        email: request.email,
-        mobileNumber: request.mobileNumber,
-        pointOfContactName: request.pointOfContactName,
-        location: request.location,
-        address: request.address,
-        grades: request.grades,
-        isActive: true,
-        sendEmail: true,
-      });
-
-      // Mark request as approved
-      await pb.collection('onboardingRequests').update(request.id, {
-        status: 'approved',
-        approvedAt: new Date().toISOString(),
-      }, { $autoCancel: false });
-
-      toast.success(`School "${request.schoolName}" created. ID: ${schoolData.schoolId}. Password sent via email.`);
+      const result = await pb.fetch(`/onboardingRequests/${request.id}`, 'PATCH', { status: 'approved' });
+      const schoolData = result.school || result;
+      if (result.generatedPassword) {
+        toast.info(`School login password: ${result.generatedPassword}`, { duration: 12000 });
+      }
+      toast.success(
+        `School "${request.schoolName}" approved. ID: ${schoolData.schoolId || schoolData.school_id || '—'}`
+      );
       setIsPanelOpen(false);
       fetchData();
-
-      // Prompt for category assignment
       setCategoryAssignmentSchool({ id: schoolData.id, name: request.schoolName });
       setIsCategoryAssignmentOpen(true);
     } catch (err) {
-      toast.error('Failed to approve: ' + err.message);
+      toast.error('Failed to approve: ' + (err.message || 'Unknown error'));
     } finally {
       setActionLoading(p => ({ ...p, [request.id]: false }));
     }

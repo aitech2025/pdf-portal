@@ -138,7 +138,7 @@ const SchoolPortal = () => {
               </div>
             ) : (
               categories.map(cat => (
-                <Link key={cat.id} to={`/school/portal/category/${cat.id}`}>
+                <Link key={cat.id} to="/school/portal/browse">
                   <Card className="h-full shadow-soft-sm hover:shadow-soft-lg transition-base border-border/50 group cursor-pointer overflow-hidden relative bg-card">
                     <div className="absolute -right-6 -top-6 w-24 h-24 bg-primary/5 rounded-full blur-xl group-hover:bg-primary/10 transition-base"></div>
                     <CardHeader className="pb-3 relative z-10">

@@ -148,31 +148,47 @@ pdf-portal/
 
 | Layer | Technologies |
 |-------|----------------|
-| API | Python 3.12, FastAPI, SQLAlchemy 2 (async), asyncpg, Pydantic, python-jose, bcrypt |
-| Database | PostgreSQL 16 |
+| API | Node.js 22, Fastify 5, Mongoose 8, Zod, fastify-jwt, bcryptjs |
+| Database | MongoDB 8 |
 | Web | React 18, Vite, Tailwind, shadcn/ui, React Router |
 | Mobile | Expo SDK ~54, Expo Router, NativeWind, SecureStore |
 | Shared | Plain JS modules (`@eduportal/shared`) |
-| Containers | Docker Compose, Nginx (web), Uvicorn workers (API) |
+| Containers | Docker Compose, Nginx (web), Node runtime (API) |
 
 ---
 
 ## 5. Repository structure
 
-### 5.1 Backend (`apps/api`)
+### 5.1 Backend (`apps/api-node`)
 
 | Path | Purpose |
 |------|---------|
-| `app/main.py` | App factory, CORS, GZip, router registration, optional static uploads |
-| `app/config.py` | Environment-driven settings |
-| `app/database.py` | Async engine + session (connection pooling for Postgres) |
-| `app/models/` | SQLAlchemy models |
-| `app/routers/` | HTTP route handlers |
-| `app/services/` | Email, WhatsApp, WebSocket manager |
-| `app/auth.py` | JWT, password hashing, role guards |
-| `entrypoint.sh` | init_db → wait_for_db → seed → uvicorn |
-| `seed.py` | Default users, schools, categories |
-| `tests/` | Pytest + Hypothesis property tests |
+| `src/server.ts` | Runtime bootstrap, DB connect, graceful shutdown |
+| `src/app.ts` | Fastify app factory, plugins, route registration |
+| `src/config/env.ts` | Environment-driven settings |
+| `src/db/mongo.ts` | MongoDB connection + default admin bootstrap |
+| `src/models/` | Mongoose schemas and indexes |
+| `src/routes/` | HTTP route handlers (`/api/*`) |
+| `src/services/realtime.ts` | WebSocket notification broadcast manager |
+| `tests/integration.test.ts` | Vitest integration tests (auth, programs, PDF flow) |
+| `Dockerfile` | Multi-stage Node build/runtime image |
+
+Legacy Python backend in `apps/api` is now deprecated and retained only as a rollback reference.
+
+### FRD feature coverage (Node API)
+
+| FRD area | Status |
+|----------|--------|
+| Granular permissions (`school.manage`, `pdf.view`, etc.) | Implemented in `apps/api-node/src/lib/permissions.ts` |
+| Account lockout + single session | `apps/api-node/src/routes/auth.ts` |
+| Category/PDF auto codes (`OLY-OBJ-001`) | `apps/api-node/src/lib/codes.ts` |
+| Category school ACL + audit on deny | `schoolCategories.ts`, `pdfs.ts`, `lib/audit.ts` |
+| PDF soft delete/restore | `POST /api/pdfs/:id/restore`, `DELETE` archives |
+| Bookmarks | `GET/POST /api/favorites`, `DELETE /api/favorites/:pdf_id` |
+| Tenant-scoped search | `GET /api/search?q=` |
+| Maintenance (public status + API gate) | `maintenanceMode` + `plugins/maintenance.ts` |
+| Print/download audit + watermark headers | PDF stream routes + viewer overlay |
+| Enhanced dashboards | `/api/dashboard`, `/api/analytics/school` |
 
 ### 5.2 Web (`apps/web`)
 

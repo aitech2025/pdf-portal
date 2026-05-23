@@ -7,13 +7,13 @@
 ```
 eduportal/
 ├── apps/
-│   ├── api/          # Python FastAPI backend
+│   ├── api-node/     # Node Fastify backend (active)
+│   ├── api/          # Python FastAPI backend (deprecated fallback)
 │   ├── web/          # React web app (Vite + Tailwind)
 │   └── mobile/       # React Native (Expo) — iOS & Android
 ├── packages/
 │   └── shared/       # Shared code: API client, types, constants
-├── docker-compose.yml
-└── package.json      # Workspace root
+└── docker-compose.yml
 ```
 
 ---
@@ -22,7 +22,7 @@ eduportal/
 
 | Layer    | Technology                          |
 |----------|-------------------------------------|
-| Backend  | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
+| Backend  | Node.js 22, Fastify 5, Mongoose 8, MongoDB 8 |
 | Web      | React 18, Vite, Tailwind CSS, shadcn/ui |
 | Mobile   | React Native, Expo SDK 51, NativeWind |
 | Shared   | Plain JS/TS — API client, constants, utils |

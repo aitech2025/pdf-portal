@@ -9,8 +9,11 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import LoadingSpinner from './LoadingSpinner.jsx';
 import { usePdfDocument } from '@/hooks/usePdfDocument.js';
+import { useAuth } from '@/contexts/AuthContext.jsx';
+import pb from '@/lib/apiClient';
 
 const PDFViewer = ({ isOpen, onClose, pdfId, title, onDownload }) => {
+  const { currentUser } = useAuth();
   const { file, blobUrl, loading, error } = usePdfDocument({
     pdfId: isOpen ? pdfId : null,
     versionId: null,
@@ -38,12 +41,23 @@ const PDFViewer = ({ isOpen, onClose, pdfId, title, onDownload }) => {
     setPageNumber((prev) => Math.min(Math.max(1, prev + offset), numPages || 1));
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (pdfId) {
+      try {
+        await pb.fetch(`/pdfs/${pdfId}/print`, 'POST');
+      } catch {
+        /* audit optional */
+      }
+    }
     const url = blobUrl;
     if (!url) return;
     const printWindow = window.open(url, '_blank');
     if (printWindow) printWindow.onload = () => printWindow.print();
   };
+
+  const watermarkText = currentUser?.email
+    ? `${currentUser.email}${currentUser.name ? ` • ${currentUser.name}` : ''}`
+    : '';
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -90,7 +104,15 @@ const PDFViewer = ({ isOpen, onClose, pdfId, title, onDownload }) => {
           )}
         </div>
 
-        <div className="flex-1 overflow-auto flex justify-center bg-zinc-800/5 dark:bg-black/40 p-4 min-h-0">
+        <div className="flex-1 overflow-auto flex justify-center bg-zinc-800/5 dark:bg-black/40 p-4 min-h-0 relative">
+          {watermarkText && !loading && !error && (
+            <div
+              className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden opacity-[0.12] select-none"
+              aria-hidden
+            >
+              <p className="text-lg font-semibold rotate-[-24deg] whitespace-nowrap">{watermarkText}</p>
+            </div>
+          )}
           {loading && <LoadingSpinner text="Loading PDF..." />}
           {error && !loading && (
             <div className="text-destructive p-4">Failed to load PDF: {error}</div>

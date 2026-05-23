@@ -335,10 +335,14 @@ const CategoriesAndSubcategoriesPage = () => {
                 </div>
 
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className={cn("h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity", isSelected && "opacity-100")}>
-                      <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                    </Button>
+                  <DropdownMenuTrigger
+                    onClick={e => e.stopPropagation()}
+                    className={cn(
+                      "inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] hover:bg-muted transition-opacity opacity-0 group-hover:opacity-100",
+                      isSelected && "opacity-100"
+                    )}
+                  >
+                    <MoreVertical className="w-4 h-4 text-muted-foreground" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingCat(cat); setCatModalOpen(true); }}>
@@ -365,8 +369,8 @@ const CategoriesAndSubcategoriesPage = () => {
           <h1 className="text-3xl font-poppins font-bold text-foreground flex items-center gap-3">
             <span className="lg:hidden">
               <Drawer>
-                <DrawerTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-9 w-9"><Menu className="w-5 h-5" /></Button>
+                <DrawerTrigger className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] border border-input bg-background shadow-soft-sm hover:bg-accent hover:text-accent-foreground hover:border-accent/50">
+                  <Menu className="w-5 h-5" />
                 </DrawerTrigger>
                 <DrawerContent className="h-[80vh]">
                   <SidebarContent />
@@ -500,10 +504,8 @@ const CategoriesAndSubcategoriesPage = () => {
                               </div>
 
                               <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="absolute right-2 top-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                                  </Button>
+                                <DropdownMenuTrigger className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem onClick={() => { setEditingSubCat(sub); setSubCatModalOpen(true); }}>
@@ -530,10 +532,15 @@ const CategoriesAndSubcategoriesPage = () => {
                                   <Skeleton className="w-12 h-4" />
                                 )}
                               </div>
-                              <Button variant="ghost" size="sm" className="text-xs group-hover:text-primary transition-colors -mr-2" asChild>
-                                <a href={`/admin/pdf-upload?category=${selectedCategoryId}&sub=${sub.id}`}>
-                                  Manage Files <ChevronRight className="w-3 h-3 ml-1" />
-                                </a>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs group-hover:text-primary transition-colors -mr-2"
+                                onClick={() => {
+                                  window.location.href = `/admin/pdf-upload?category=${selectedCategoryId}&sub=${sub.id}`;
+                                }}
+                              >
+                                Manage Files <ChevronRight className="w-3 h-3 ml-1" />
                               </Button>
                             </div>
                           </motion.div>

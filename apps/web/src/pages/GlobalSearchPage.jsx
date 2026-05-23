@@ -1,43 +1,56 @@
-
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import pb from '@/lib/apiClient';
+import { useAuth } from '@/contexts/AuthContext.jsx';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Search, FileText, School, Users, Filter, Download, ArrowRight } from 'lucide-react';
+import { Search, FileText, School, Filter } from 'lucide-react';
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
+
+const PLATFORM_ROLES = ['platform_admin', 'admin', 'moderator', 'platform_viewer'];
 
 const GlobalSearchPage = () => {
   const [searchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
+  const { currentUser } = useAuth();
+  const isPlatform = currentUser && PLATFORM_ROLES.includes(currentUser.role);
 
   const [loading, setLoading] = useState(true);
-  const [results, setResults] = useState({ pdfs: [], schools: [], users: [] });
+  const [results, setResults] = useState({ pdfs: [], categories: [], schools: [], users: [] });
 
   useEffect(() => {
     const fetchResults = async () => {
       if (!query.trim()) {
-        setResults({ pdfs: [], schools: [], users: [] });
+        setResults({ pdfs: [], categories: [], schools: [], users: [] });
         setLoading(false);
         return;
       }
 
       setLoading(true);
       try {
-        const searchFilter = query;
-        const [pdfRes, schoolRes, userRes] = await Promise.all([
-          pb.collection('pdfs').getList(1, 20, { filter: searchFilter, expand: 'categoryId', $autoCancel: false }),
-          pb.collection('schools').getList(1, 10, { filter: searchFilter, $autoCancel: false }),
-          pb.collection('users').getList(1, 10, { filter: searchFilter, $autoCancel: false })
-        ]);
-
-        setResults({
-          pdfs: pdfRes.items,
-          schools: schoolRes.items,
-          users: userRes.items
-        });
+        if (isPlatform) {
+          const searchFilter = query;
+          const [pdfRes, schoolRes, userRes] = await Promise.all([
+            pb.collection('pdfs').getList(1, 20, { q: searchFilter, $autoCancel: false }),
+            pb.collection('schools').getList(1, 10, { filter: searchFilter, $autoCancel: false }),
+            pb.collection('users').getList(1, 10, { filter: searchFilter, $autoCancel: false })
+          ]);
+          setResults({
+            pdfs: pdfRes.items,
+            categories: [],
+            schools: schoolRes.items,
+            users: userRes.items
+          });
+        } else {
+          const data = await pb.fetch('/search', 'GET', null, { q: query, per_page: 30 });
+          setResults({
+            pdfs: data.pdfs?.items || [],
+            categories: data.categories?.items || [],
+            schools: [],
+            users: []
+          });
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -46,9 +59,10 @@ const GlobalSearchPage = () => {
     };
 
     fetchResults();
-  }, [query]);
+  }, [query, isPlatform]);
 
-  const totalResults = results.pdfs.length + results.schools.length + results.users.length;
+  const totalResults =
+    results.pdfs.length + results.categories.length + results.schools.length + results.users.length;
 
   return (
     <PageTransition>
@@ -57,60 +71,71 @@ const GlobalSearchPage = () => {
         <p className="text-muted-foreground mt-1">
           {loading ? 'Searching...' : `Found ${totalResults} results for "${query}"`}
         </p>
+        {!isPlatform && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Results are limited to categories assigned to your school.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8">
-        {/* Filters Sidebar - simplified for token constraints */}
         <div className="w-full lg:w-64 shrink-0 space-y-6">
           <Card className="shadow-soft-sm border-border/50">
             <CardHeader className="pb-3 border-b border-border/50">
-              <CardTitle className="text-lg flex items-center gap-2"><Filter className="w-4 h-4" /> Filters</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Filter className="w-4 h-4" /> Filters
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-4 space-y-4">
-              <div className="text-sm text-muted-foreground">Advanced filtering available in full version.</div>
-              <Button variant="outline" className="w-full justify-start">Resources ({results.pdfs.length})</Button>
-              <Button variant="ghost" className="w-full justify-start">Schools ({results.schools.length})</Button>
-              <Button variant="ghost" className="w-full justify-start">Users ({results.users.length})</Button>
+              <Button variant="outline" className="w-full justify-start">
+                Resources ({results.pdfs.length})
+              </Button>
+              {results.categories.length > 0 && (
+                <Button variant="ghost" className="w-full justify-start">
+                  Categories ({results.categories.length})
+                </Button>
+              )}
+              {isPlatform && (
+                <>
+                  <Button variant="ghost" className="w-full justify-start">
+                    Schools ({results.schools.length})
+                  </Button>
+                  <Button variant="ghost" className="w-full justify-start">
+                    Users ({results.users.length})
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Results Area */}
         <div className="flex-1 space-y-8">
           {loading ? (
             <div className="space-y-4">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-32 w-full rounded-[var(--radius-lg)]" />)}
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-24 w-full rounded-lg" />
+              ))}
             </div>
           ) : totalResults === 0 ? (
-            <div className="py-20 text-center border border-dashed rounded-[var(--radius-lg)] bg-card shadow-soft-sm">
-              <Search className="w-16 h-16 mx-auto text-muted-foreground opacity-20 mb-4" />
-              <h3 className="text-xl font-poppins font-semibold text-foreground mb-2">No results found</h3>
-              <p className="text-muted-foreground">Try adjusting your search terms or filters.</p>
-            </div>
+            <Card className="p-12 text-center">
+              <Search className="w-12 h-12 mx-auto text-muted-foreground opacity-30 mb-4" />
+              <p className="text-lg font-medium">No results found</p>
+            </Card>
           ) : (
-            <div className="space-y-8">
-              {results.pdfs.length > 0 && (
+            <>
+              {results.categories.length > 0 && (
                 <section>
-                  <h3 className="text-xl font-poppins font-bold text-foreground mb-4 flex items-center">
-                    <FileText className="w-5 h-5 mr-2 text-primary" /> Resources
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {results.pdfs.map(pdf => (
-                      <Card key={pdf.id} className="shadow-soft-sm hover:shadow-soft-md transition-base border-border/50 overflow-hidden group">
-                        <CardContent className="p-4 flex gap-4">
-                          <div className="w-16 h-16 rounded-[var(--radius-md)] bg-rose-500/10 flex items-center justify-center shrink-0">
-                            <FileText className="w-8 h-8 text-rose-500" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">{pdf.fileName}</h4>
-                            <p className="text-xs text-muted-foreground mt-1 mb-2">
-                              {pdf.expand?.categoryId?.categoryName || 'General'} • {(pdf.fileSize / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                            <div className="flex gap-2 mt-auto">
-                              <Badge variant="outline" className="text-[10px]">PDF</Badge>
-                              <Badge variant="outline" className="text-[10px]">{new Date(pdf.created).getFullYear()}</Badge>
-                            </div>
-                          </div>
+                  <h2 className="text-xl font-semibold mb-4">Categories</h2>
+                  <div className="grid gap-3">
+                    {results.categories.map((cat) => (
+                      <Card key={cat.id}>
+                        <CardContent className="p-4 flex justify-between items-center">
+                          <span>{cat.categoryName || cat.category_name}</span>
+                          <Link to="/school/portal/browse">
+                            <Button size="sm" variant="outline">
+                              Browse
+                            </Button>
+                          </Link>
                         </CardContent>
                       </Card>
                     ))}
@@ -118,27 +143,52 @@ const GlobalSearchPage = () => {
                 </section>
               )}
 
-              {results.schools.length > 0 && (
+              {results.pdfs.length > 0 && (
                 <section>
-                  <h3 className="text-xl font-poppins font-bold text-foreground mb-4 flex items-center">
-                    <School className="w-5 h-5 mr-2 text-secondary" /> Schools
-                  </h3>
-                  <div className="space-y-3">
-                    {results.schools.map(school => (
-                      <Card key={school.id} className="shadow-soft-sm hover:shadow-soft-md transition-base border-border/50 p-4 flex items-center justify-between">
-                        <div>
-                          <h4 className="font-semibold text-foreground">{school.schoolName}</h4>
-                          <p className="text-sm text-muted-foreground">{school.email} • {school.location || 'No location'}</p>
-                        </div>
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link to="/admin/schools">View <ArrowRight className="w-4 h-4 ml-2" /></Link>
-                        </Button>
+                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5" /> Resources
+                  </h2>
+                  <div className="grid gap-3">
+                    {results.pdfs.map((pdf) => (
+                      <Card key={pdf.id} className="hover:shadow-soft-md transition-base">
+                        <CardContent className="p-4 flex justify-between items-center">
+                          <div>
+                            <p className="font-semibold">{pdf.fileName || pdf.file_name}</p>
+                            <p className="text-sm text-muted-foreground">{pdf.pdfId || pdf.pdf_id}</p>
+                          </div>
+                          {isPlatform ? (
+                            <Link to="/admin/content-dashboard">
+                              <Button size="sm">View</Button>
+                            </Link>
+                          ) : (
+                            <Link to="/school/portal/browse">
+                              <Button size="sm">Open portal</Button>
+                            </Link>
+                          )}
+                        </CardContent>
                       </Card>
                     ))}
                   </div>
                 </section>
               )}
-            </div>
+
+              {isPlatform && results.schools.length > 0 && (
+                <section>
+                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <School className="w-5 h-5" /> Schools
+                  </h2>
+                  <div className="grid gap-3">
+                    {results.schools.map((school) => (
+                      <Card key={school.id}>
+                        <CardContent className="p-4">
+                          <p className="font-semibold">{school.schoolName || school.school_name}</p>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
           )}
         </div>
       </div>

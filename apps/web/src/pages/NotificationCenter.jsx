@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import pb from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext.jsx';
@@ -6,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Bell, Check, Trash2, CheckCircle2, AlertCircle, UploadCloud, Users } from 'lucide-react';
+import { Bell, Check, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,12 +19,11 @@ const NotificationCenter = () => {
 
   const fetchNotifications = async () => {
     try {
-      const res = await pb.collection('notifications').getList(1, 50, {
-        filter: `recipientId = "${currentUser.id}"`,
+      const res = await pb.collection('notifications').getList(1, 100, {
         sort: '-created',
         $autoCancel: false
       });
-      setNotifications(res.items);
+      setNotifications(res.items || []);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load notifications');
@@ -37,33 +35,33 @@ const NotificationCenter = () => {
   useEffect(() => {
     if (currentUser) fetchNotifications();
 
-    pb.collection('notifications').subscribe('*', (e) => {
-      if (e.record.recipientId === currentUser.id) {
-        fetchNotifications();
-      }
+    const unsub = pb.subscribe('notifications', () => {
+      fetchNotifications();
     });
 
-    return () => pb.collection('notifications').unsubscribe('*');
+    return () => {
+      pb.unsubscribe('notifications');
+      if (typeof unsub?.then === 'function') unsub.then(() => {});
+    };
   }, [currentUser]);
 
   const markAsRead = async (id) => {
     try {
-      await pb.collection('notifications').update(id, { status: 'sent' }, { $autoCancel: false });
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, status: 'sent' } : n));
+      await pb.fetch(`/notifications/${id}`, 'PATCH', { read: true });
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
     } catch (err) {
       console.error(err);
     }
   };
 
   const markAllAsRead = async () => {
-    const unread = notifications.filter(n => n.status === 'pending');
+    const unread = notifications.filter((n) => !n.read);
     if (unread.length === 0) return;
-
     try {
-      await Promise.all(unread.map(n => pb.collection('notifications').update(n.id, { status: 'sent' }, { $autoCancel: false })));
-      setNotifications(prev => prev.map(n => ({ ...n, status: 'sent' })));
+      await Promise.all(unread.map((n) => pb.fetch(`/notifications/${n.id}`, 'PATCH', { read: true })));
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       toast.success('All notifications marked as read');
-    } catch (err) {
+    } catch {
       toast.error('Failed to mark all as read');
     }
   };
@@ -71,22 +69,16 @@ const NotificationCenter = () => {
   const deleteNotification = async (id) => {
     try {
       await pb.collection('notifications').delete(id, { $autoCancel: false });
-      setNotifications(prev => prev.filter(n => n.id !== id));
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
       toast.success('Notification deleted');
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete notification');
     }
   };
 
-  const getIconForType = (type) => {
-    if (type.includes('approval')) return <CheckCircle2 className="w-5 h-5 text-success" />;
-    if (type.includes('request') || type.includes('onboarding')) return <Users className="w-5 h-5 text-primary" />;
-    if (type.includes('rejection') || type.includes('deactivation')) return <AlertCircle className="w-5 h-5 text-destructive" />;
-    return <Bell className="w-5 h-5 text-secondary" />;
-  };
-
-  const filteredNotifs = notifications.filter(n => {
-    if (activeTab === 'unread') return n.status === 'pending';
+  const filtered = notifications.filter((n) => {
+    if (activeTab === 'unread') return !n.read;
+    if (activeTab === 'read') return n.read;
     return true;
   });
 
@@ -94,97 +86,68 @@ const NotificationCenter = () => {
     <PageTransition>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-poppins font-bold text-foreground">Notification Center</h1>
-          <p className="text-muted-foreground mt-1">Stay updated on important platform activity.</p>
+          <h1 className="text-3xl font-poppins font-bold">Notifications</h1>
+          <p className="text-muted-foreground mt-1">Messages and announcements from the platform</p>
         </div>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={markAllAsRead} className="shadow-soft-sm bg-card">
-            <Check className="w-4 h-4 mr-2" /> Mark All Read
-          </Button>
-          <Button variant="outline" className="shadow-soft-sm bg-card">
-            <Bell className="w-4 h-4 mr-2" /> Preferences
-          </Button>
-        </div>
+        <Button variant="outline" onClick={markAllAsRead} disabled={!notifications.some((n) => !n.read)}>
+          <Check className="w-4 h-4 mr-2" /> Mark all read
+        </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full max-w-4xl mx-auto">
-        <TabsList className="mb-6">
-          <TabsTrigger value="all">All Notifications</TabsTrigger>
-          <TabsTrigger value="unread">
-            Unread
-            {notifications.filter(n => n.status === 'pending').length > 0 && (
-              <Badge variant="destructive" className="ml-2 py-0 px-1.5 h-4 text-[10px]">
-                {notifications.filter(n => n.status === 'pending').length}
-              </Badge>
-            )}
-          </TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="all">All ({notifications.length})</TabsTrigger>
+          <TabsTrigger value="unread">Unread ({notifications.filter((n) => !n.read).length})</TabsTrigger>
+          <TabsTrigger value="read">Read</TabsTrigger>
         </TabsList>
 
-        <Card className="shadow-soft-md border-border/50 bg-card overflow-hidden">
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="p-6 space-y-4">
-                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-[var(--radius-md)]" />)}
-              </div>
-            ) : filteredNotifs.length === 0 ? (
-              <div className="py-20 text-center">
-                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
-                  <Bell className="w-8 h-8 text-muted-foreground opacity-50" />
-                </div>
-                <h3 className="text-lg font-poppins font-semibold text-foreground mb-1">No notifications</h3>
-                <p className="text-muted-foreground text-sm">You don't have any notifications right now.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border/50">
-                {filteredNotifs.map(notif => (
-                  <div 
-                    key={notif.id} 
-                    className={cn(
-                      "p-4 sm:p-6 flex items-start gap-4 transition-base hover:bg-muted/30 group",
-                      notif.status === 'pending' ? "bg-primary/5" : ""
-                    )}
-                  >
-                    <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
-                      notif.status === 'pending' ? "bg-background shadow-soft-sm" : "bg-muted"
-                    )}>
-                      {getIconForType(notif.type)}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4 mb-1">
-                        <h4 className={cn("text-base font-semibold", notif.status === 'pending' ? "text-foreground" : "text-muted-foreground")}>
-                          {notif.subject}
-                        </h4>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(notif.created).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className={cn("text-sm mb-3", notif.status === 'pending' ? "text-foreground/90" : "text-muted-foreground/80")}>
-                        {notif.message}
-                      </p>
-                      
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {notif.status === 'pending' && (
-                          <Button variant="ghost" size="sm" onClick={() => markAsRead(notif.id)} className="h-8 text-xs font-medium text-primary hover:bg-primary/10">
-                            Mark as read
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="sm" onClick={() => deleteNotification(notif.id)} className="h-8 text-xs font-medium text-destructive hover:bg-destructive/10">
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    {notif.status === 'pending' && (
-                      <div className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 mt-2"></div>
+        <TabsContent value={activeTab} className="mt-6 space-y-3">
+          {loading ? (
+            [1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)
+          ) : filtered.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Bell className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                No notifications in this tab.
+              </CardContent>
+            </Card>
+          ) : (
+            filtered.map((n) => (
+              <Card key={n.id} className={cn(!n.read && 'border-primary/30 bg-primary/5')}>
+                <CardContent className="p-4 flex gap-4">
+                  <div className="shrink-0 mt-1">
+                    {n.read ? (
+                      <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-primary" />
                     )}
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-semibold truncate">{n.subject}</p>
+                      {!n.read && <Badge className="text-[10px]">New</Badge>}
+                    </div>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{n.message}</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {n.created ? new Date(n.created).toLocaleString() : ''}
+                      {n.notificationMethod && ` · ${n.notificationMethod}`}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 shrink-0">
+                    {!n.read && (
+                      <Button variant="ghost" size="icon" onClick={() => markAsRead(n.id)} title="Mark read">
+                        <Check className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => deleteNotification(n.id)} title="Delete">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
       </Tabs>
     </PageTransition>
   );

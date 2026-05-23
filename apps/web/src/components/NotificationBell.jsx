@@ -31,7 +31,6 @@ const NotificationBell = () => {
     try {
       const res = await pb.collection('notifications').getList(1, 10, {
         sort: '-created',
-        filter: `recipientId = "${pb.authStore.model?.id}" || recipientId = ""`,
         $autoCancel: false
       });
       setRecentNotifications(res.items);

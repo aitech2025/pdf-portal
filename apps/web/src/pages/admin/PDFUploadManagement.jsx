@@ -330,7 +330,14 @@ const PDFUploadManagement = () => {
                               {pdf.fileName}
                             </p>
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-                              <span className="truncate max-w-[100px] font-medium">{pdf.expand?.categoryId?.categoryName || 'Uncategorized'}</span>
+                              <span className="truncate max-w-[100px] font-medium">
+                                {pdf.categoryName || pdf.expand?.categoryId?.categoryName || 'Uncategorized'}
+                              </span>
+                              {(pdf.subCategoryName || pdf.expand?.subCategoryId?.subCategoryName) && (
+                                <span className="truncate max-w-[80px] text-muted-foreground">
+                                  / {pdf.subCategoryName || pdf.expand?.subCategoryId?.subCategoryName}
+                                </span>
+                              )}
                               <span>•</span>
                               <span>{formatBytes(pdf.fileSize)}</span>
                             </div>

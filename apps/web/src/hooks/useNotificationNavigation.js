@@ -32,9 +32,7 @@ export const useNotificationNavigation = () => {
     try {
       // Mark as read if it isn't already
       if (!notification.read) {
-        await pb.collection('notifications').update(notification.id, {
-          read: true
-        }, { $autoCancel: false });
+        await pb.fetch(`/notifications/${notification.id}`, 'PATCH', { read: true });
       }
       
       const type = extractNotificationType(notification);

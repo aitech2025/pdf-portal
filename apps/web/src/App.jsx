@@ -45,6 +45,9 @@ import ProgramsManagementPage from '@/pages/admin/ProgramsManagementPage.jsx';
 // School Routes
 import SchoolDashboard from '@/pages/SchoolDashboard.jsx';
 import SchoolPortal from '@/pages/school/SchoolPortal.jsx';
+import SchoolPortalBrowse from '@/pages/school/SchoolPortalBrowse.jsx';
+import SchoolBookmarksPage from '@/pages/school/SchoolBookmarksPage.jsx';
+import FirstLoginChangePassword from '@/pages/school/FirstLoginChangePassword.jsx';
 import UserRequestsPage from '@/pages/school/UserRequestsPage.jsx';
 import SchoolSettings from '@/pages/school/SchoolSettings.jsx';
 import SchoolAnalyticsDashboard from '@/pages/school/SchoolAnalyticsDashboard.jsx';
@@ -58,10 +61,12 @@ function AppContent() {
   useEffect(() => {
     const checkMaintenance = async () => {
       try {
-        const res = await client.fetch('/maintenanceMode');
-        if (res.items?.length > 0) {
-          setIsMaintenance(res.items[0].isEnabled);
-          setMaintenanceMessage(res.items[0].message || '');
+        const res = await fetch('/api/maintenanceMode');
+        const data = res.ok ? await res.json() : null;
+        if (data?.items?.length > 0) {
+          const row = data.items[0];
+          setIsMaintenance(row.isEnabled ?? row.is_enabled);
+          setMaintenanceMessage(row.message || '');
         }
       } catch (e) {
         console.error('Failed to check maintenance mode:', e);
@@ -166,12 +171,20 @@ function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
         </ProtectedRoute>
       } />
 
+      <Route path="/school/change-password" element={
+        <ProtectedRoute allowedRoles={['school', 'school_admin', 'school_viewer', 'teacher']}>
+          <FirstLoginChangePassword />
+        </ProtectedRoute>
+      } />
+
       <Route path="/school/*" element={
         <ProtectedRoute allowedRoles={['school', 'school_admin', 'school_viewer', 'teacher']}>
           <AppLayout>
             <Routes>
               <Route path="dashboard" element={<SchoolDashboard />} />
               <Route path="portal" element={<SchoolPortal />} />
+              <Route path="portal/browse" element={<SchoolPortalBrowse />} />
+              <Route path="bookmarks" element={<SchoolBookmarksPage />} />
               <Route path="user-requests" element={<UserRequestsPage />} />
               <Route path="settings" element={<SchoolSettings />} />
               <Route path="analytics" element={<SchoolAnalyticsDashboard />} />

@@ -13,6 +13,13 @@ const ProtectedRoute = ({ children, allowedRoles, requireWrite }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  const mustChange =
+    currentUser?.mustChangePassword || currentUser?.must_change_password;
+  const isChangePasswordRoute = location.pathname === '/school/change-password';
+  if (mustChange && SCHOOL_ROLES.includes(currentUser?.role) && !isChangePasswordRoute) {
+    return <Navigate to="/school/change-password" replace />;
+  }
+
   if (requireWrite && !canWrite) {
     return <Navigate to="/" replace />;
   }

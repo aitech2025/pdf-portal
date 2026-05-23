@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import pb from '@/lib/apiClient';
 import { toast } from 'sonner';
-import { FileText, FolderOpen, BookOpen, Download, ChevronRight, ArrowLeft } from 'lucide-react';
+import { FileText, FolderOpen, BookOpen, Download, ChevronRight, ArrowLeft, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -131,6 +131,16 @@ const SchoolPortalContent = ({ school }) => {
       toast.success('Download complete');
     } catch (err) {
       toast.error('Download failed');
+    }
+  };
+
+  const handleBookmark = async (pdf, e) => {
+    e?.stopPropagation();
+    try {
+      await pb.fetch('/favorites', 'POST', { pdfId: pdf.id });
+      toast.success('Added to bookmarks');
+    } catch {
+      toast.error('Could not bookmark PDF');
     }
   };
 
@@ -357,9 +367,12 @@ const SchoolPortalContent = ({ school }) => {
                         </div>
                       </div>
 
-                      <div className="border-t bg-muted/30 p-2 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-0 left-0 right-0 translate-y-full group-hover:translate-y-0">
-                        <Button variant="ghost" size="sm" className="w-full text-xs h-8" onClick={(e) => handleDownloadSingle(pdf, e)}>
-                          <Download className="w-3 h-3 mr-2" /> Download
+                      <div className="border-t bg-muted/30 p-2 flex gap-1 justify-center opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-0 left-0 right-0 translate-y-full group-hover:translate-y-0">
+                        <Button variant="ghost" size="sm" className="flex-1 text-xs h-8" onClick={(e) => handleBookmark(pdf, e)}>
+                          <Bookmark className="w-3 h-3 mr-1" /> Save
+                        </Button>
+                        <Button variant="ghost" size="sm" className="flex-1 text-xs h-8" onClick={(e) => handleDownloadSingle(pdf, e)}>
+                          <Download className="w-3 h-3 mr-1" /> Get
                         </Button>
                       </div>
                     </Card>

@@ -51,7 +51,7 @@ const GuestSignupForm = () => {
       {/* Dribbble-quality Gradient Background */}
       <div className="absolute inset-0 bg-gradient-subtle pointer-events-none" />
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-40 mix-blend-soft-light">
-        <svg viewBox="0 0 100vw 100vh" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
           <filter id="noiseFilter">
             <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="3" stitchTiles="stitch" />
           </filter>

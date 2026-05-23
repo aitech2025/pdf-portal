@@ -49,23 +49,31 @@ const UserProfilePage = () => {
     e.preventDefault();
     setProfileLoading(true);
     try {
-      const body = { name, mobile_number: mobile, address };
+      let record;
       if (avatarFile) {
         const fd = new FormData();
         fd.append('name', name);
         fd.append('mobile_number', mobile);
         fd.append('address', address);
         fd.append('avatar', avatarFile);
-        await pb.collection('users').update(currentUser.id, fd);
+        const res = await fetch('/api/auth/me', {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${pb.authStore.token}` },
+          body: fd
+        });
+        if (!res.ok) throw new Error('Failed to update profile');
+        record = await res.json();
       } else {
-        await pb.collection('users').update(currentUser.id, body);
+        record = await pb.fetch('/auth/me', 'PATCH', {
+          name,
+          mobile_number: mobile,
+          address
+        });
       }
-      if (email !== currentUser.email) {
-        await pb.collection('users').update(currentUser.id, { email });
-      }
+      pb.authStore.save(pb.authStore.token, record, pb.authStore.refreshToken);
       toast.success('Profile updated');
     } catch (err) {
-      toast.error(err?.data?.message || 'Failed to update profile');
+      toast.error(err?.message || 'Failed to update profile');
     } finally {
       setProfileLoading(false);
     }
@@ -74,8 +82,8 @@ const UserProfilePage = () => {
   const handleSaveNotifications = async () => {
     setNotifLoading(true);
     try {
-      await pb.collection('users').update(currentUser.id, {
-        notification_preferences: { email: emailNotif, whatsapp: whatsappNotif },
+      await pb.fetch('/auth/me', 'PATCH', {
+        notification_preferences: { email: emailNotif, whatsapp: whatsappNotif }
       });
       toast.success('Notification preferences saved');
     } catch {
