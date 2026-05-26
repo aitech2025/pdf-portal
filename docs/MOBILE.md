@@ -2,6 +2,8 @@
 
 The mobile shell is built with **Capacitor 6** wrapping the existing React + Vite web app, so 100% of the UI is shared. This document covers Android (any OS) and iOS (macOS only).
 
+> Looking for QA scenarios, device matrix, or release smoke tests? See [`MOBILE_TESTING.md`](./MOBILE_TESTING.md).
+
 ---
 
 ## 1. Prerequisites
