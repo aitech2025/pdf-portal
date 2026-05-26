@@ -8,7 +8,7 @@ import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
 import { createAndSendNotification } from "../services/notificationChannels.js";
 
-/** Create email + whatsapp credential notification logs for a newly created school admin */
+/** Fan-out credential delivery to in-app + email + WhatsApp for a new school admin */
 const sendCredentialNotifications = async (
   userId: string,
   userName: string,
@@ -18,25 +18,39 @@ const sendCredentialNotifications = async (
   password: string,
   mobileNumber?: string | null
 ): Promise<void> => {
-  const subject = "Welcome to i-icon Academy - Your School Account Credentials";
-  const message =
+  const subject = "Welcome to i-icon Academy — your school account is ready";
+  const text =
     `Dear ${userName},\n\n` +
     `Your school "${schoolName}" (ID: ${schoolId}) has been registered on i-icon Academy.\n\n` +
     `Your login credentials:\n` +
     `  Email: ${userEmail}\n` +
     `  Password: ${password}\n\n` +
-    `Please log in and change your password immediately.\n\n` +
-    `Thank you,\ni-icon Academy Team`;
+    `Please log in and change your password immediately on first sign-in.\n\n` +
+    `— i-icon Academy team`;
+  const html =
+    `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0f172a">` +
+    `<h2 style="margin:0 0 16px;color:#4338ca">Welcome to i-icon Academy</h2>` +
+    `<p>Dear ${userName},</p>` +
+    `<p>Your school <strong>${schoolName}</strong> (ID: <code>${schoolId}</code>) has been registered on i-icon Academy.</p>` +
+    `<div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:16px 0">` +
+    `<div><strong>Email:</strong> ${userEmail}</div>` +
+    `<div><strong>Temporary password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${password}</code></div>` +
+    `</div>` +
+    `<p>Please log in and change your password on first sign-in.</p>` +
+    `<p style="font-size:12px;color:#94a3b8;margin-top:24px">— i-icon Academy team</p>` +
+    `</div>`;
 
-  for (const method of ["email", "whatsapp"] as const) {
-    await createAndSendNotification({
-      recipient: { id: userId, email: userEmail, mobile_number: mobileNumber },
-      method,
-      type: "credential_delivery",
-      subject,
-      message
-    });
-  }
+  const channels: Array<"email" | "whatsapp"> = ["email"];
+  if (mobileNumber) channels.push("whatsapp");
+
+  await createAndSendNotification({
+    recipient: { id: userId, email: userEmail, mobile_number: mobileNumber, name: userName },
+    channels,
+    type: "credential_delivery",
+    subject,
+    message: text,
+    html
+  });
 };
 
 const parseSchoolBody = (body: Record<string, unknown>) => ({

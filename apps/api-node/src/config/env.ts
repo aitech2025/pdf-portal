@@ -24,7 +24,13 @@ const EnvSchema = z.object({
     .string()
     .default("false")
     .transform((v) => ["1", "true", "yes", "on"].includes(v.toLowerCase())),
-  UPLOAD_DIR: z.string().default("/data/uploads")
+  UPLOAD_DIR: z.string().default("/data/uploads"),
+  /**
+   * Public-facing URL of the web app. Used to build absolute links inside
+   * outbound emails (password reset, onboarding credentials, etc.). Falls
+   * back to http://localhost in development.
+   */
+  APP_BASE_URL: z.string().default("http://localhost")
 });
 
 export const env = EnvSchema.parse(process.env);

@@ -50,7 +50,7 @@ Core capabilities:
 | Email / WhatsApp / in-app notifications | Implemented |
 | Admin broadcast (all / selected schools) | Implemented |
 | Web admin + school portals | Implemented |
-| Mobile (Expo) school/admin apps | Implemented |
+| Mobile (Capacitor — iOS + Android) | Implemented |
 | PDF secure download (auth-gated) | Implemented (public `/uploads` disabled by default) |
 
 ---
@@ -113,21 +113,17 @@ Schools receive access via **SchoolCategoryAccess** (many-to-many: school ↔ ca
 pdf-portal/
 ├── apps/
 │   ├── api-node/         # Node 22 + Fastify 5 backend (MongoDB)
-│   ├── web/              # React + Vite SPA (Capacitor-wrapped for mobile)
-│   │   ├── android/      # Capacitor Android shell (generated)
-│   │   └── ios/          # Capacitor iOS shell (macOS only)
-│   └── mobile/           # Legacy Expo / React Native app (optional)
-├── packages/
-│   └── shared/           # Shared API client, roles, utils
+│   └── web/              # React + Vite SPA (Capacitor-wrapped for mobile)
+│       ├── android/      # Capacitor Android shell (generated)
+│       └── ios/          # Capacitor iOS shell (macOS only)
 ├── docker-compose.yml    # mongo + api + web
-├── docs/                 # This documentation, MOBILE.md
-├── ARCHITECTURE.md       # High-level architecture notes
-└── MOBILE_DEPLOYMENT.md  # EAS / store deployment (legacy Expo path)
+├── docs/                 # This documentation, MOBILE.md, MOBILE_TESTING.md, EMAIL_AND_WHATSAPP.md
+└── ARCHITECTURE.md       # High-level architecture notes
 ```
 
 ### 3.2 Request flow (authenticated API)
 
-1. Client stores JWT in `localStorage` (web) or `expo-secure-store` (mobile).
+1. Client stores JWT in `localStorage` (web) or `@capacitor/preferences` (Capacitor app).
 2. Requests include `Authorization: Bearer <token>`.
 3. On `401`, web client attempts refresh via `POST /api/auth/refresh` using stored refresh token.
 4. School-role PDF list/get/download enforce **assigned categories** and **approved + active** PDFs only.
@@ -153,8 +149,7 @@ pdf-portal/
 | API | Node.js 22, Fastify 5, Mongoose 8, Zod, fastify-jwt, bcryptjs |
 | Database | MongoDB 8 |
 | Web | React 18, Vite, Tailwind, shadcn/ui, React Router |
-| Mobile | Expo SDK ~54, Expo Router, NativeWind, SecureStore |
-| Shared | Plain JS modules (`@eduportal/shared`) |
+| Mobile | Capacitor 6 wrapping the React web app — iOS + Android |
 | Containers | Docker Compose, Nginx (web), Node runtime (API) |
 
 ---
@@ -200,15 +195,6 @@ pdf-portal/
 | `src/pages/` | Admin, school, public pages |
 | `src/native/` | Capacitor bootstrap + cross-platform native bridge |
 | `nginx.conf` | SPA + API/WebSocket/upload proxy (production image) |
-
-### 5.3 Shared (`packages/shared`)
-
-| Module | Purpose |
-|--------|---------|
-| `api/client.js` | Base `apiFetch` with token + auto-refresh on 401 |
-| `api/auth.js` | Login, logout, forgot/reset, verify |
-| `api/notifications.js` | List, mark read, admin broadcast |
-| `constants/roles.js` | Role helpers |
 
 ---
 
@@ -436,45 +422,38 @@ Vite proxies `/api` and `/uploads` to `http://localhost:8000`.
 
 ### 10.1 Stack
 
-- **Expo Router** file-based routing
-- **NativeWind** (Tailwind-style classes)
-- **@eduportal/shared** for API calls
-- **SecureStore** for `auth_token`, `auth_refresh_token`, `auth_user`
+The mobile shell is **Capacitor 6** wrapping the production Vite bundle of the React web app. There is one codebase — `apps/web/` — that powers both the browser and the native iOS / Android binaries. No separate React Native UI is maintained.
 
-### 10.2 Route groups
+- **Capacitor 6** native shells (Android Studio project under `apps/web/android/`, Xcode project added on macOS at `apps/web/ios/`)
+- **`apps/web/src/native/`** — runtime bootstrap (StatusBar, SplashScreen, Keyboard, deep-link routing) + cross-platform bridges for file save / share / haptics / network
+- **`@capacitor/preferences`** for persisted auth tokens on device
 
-| Group | Screens |
-|-------|---------|
-| `(auth)/login` | School/Teacher login (segmented UI) |
-| `(admin)/*` | Dashboard, schools, users, PDFs, categories, profile |
-| `(school)/*` | Dashboard, portal, requests, analytics, profile, notifications |
+### 10.2 Routes
+
+Routes are identical to the web app (`react-router-dom`). The Capacitor shell loads `dist/apps/web/index.html` and the SPA takes over.
 
 ### 10.3 API URL configuration
 
-In `app.json`:
+In production the bundled web app calls the same `/api/*` endpoints it does in the browser — point the build at your production API host via the `VITE_API_URL` env var when running `npm run build`, or rely on the same-origin nginx proxy in the Docker stack.
 
-```json
-"extra": {
-  "apiUrl": "http://localhost:8000"
-}
-```
+For local development against the Vite dev server, set `CAP_SERVER_URL` before `cap run`:
 
 | Environment | Typical URL |
 |-------------|-------------|
-| Android emulator | `http://10.0.2.2:8000` |
-| iOS simulator | `http://localhost:8000` |
-| Physical device | Host machine LAN IP, e.g. `http://192.168.1.x:8000` |
-| Production | `https://api.yourdomain.com` |
+| Web (browser) | `http://localhost` (nginx proxies `/api` to the API container) |
+| Capacitor live-reload | `CAP_SERVER_URL=http://<LAN-ip>:3000` (Vite dev server on host) |
+| Production native build | Bundles point at `https://api.yourdomain.com` (same-origin if served from same host) |
 
 ### 10.4 Production builds
 
-See **[MOBILE_DEPLOYMENT.md](../MOBILE_DEPLOYMENT.md)** for EAS Build, Play Store, and App Store steps.
+See **[../docs/MOBILE.md](./MOBILE.md)** for the full Capacitor build pipeline (Android signed AAB, iOS archive + TestFlight), and **[../docs/MOBILE_TESTING.md](./MOBILE_TESTING.md)** for the QA checklist.
 
 ```bash
-cd apps/mobile
+cd apps/web
 npm install
-npx eas build --platform android --profile production
-npx eas build --platform ios --profile production
+npm run mobile:sync                  # build web bundle + copy into native shells
+npm run mobile:open:android          # open Android Studio for signed AAB
+npm run mobile:open:ios              # open Xcode for archive + upload
 ```
 
 ---
@@ -598,23 +577,15 @@ Key suites (`apps/api-node/tests/`):
 
 ### 12.5 Mobile local dev
 
-**Capacitor (current path)** — see [./MOBILE.md](./MOBILE.md):
+**Capacitor** — see [./MOBILE.md](./MOBILE.md) for the build pipeline and [./MOBILE_TESTING.md](./MOBILE_TESTING.md) for QA:
 
 ```bash
 docker compose up -d mongo api     # backend + DB only
 cd apps/web
 npm run dev                         # Vite on :3000
-# In another terminal — point Capacitor at the dev server
+# In another terminal — point Capacitor at the dev server (live-reload)
 $env:CAP_SERVER_URL="http://<LAN-ip>:3000"
 npm run mobile:run:android
-```
-
-**Legacy Expo path** (optional, kept under `apps/mobile`):
-
-```bash
-docker compose up -d mongo api
-cd apps/mobile
-npx expo start
 ```
 
 ---
@@ -901,8 +872,9 @@ When the `users` collection is empty (typically after a fresh `docker compose up
 | Document | Location |
 |----------|----------|
 | Architecture overview      | [../ARCHITECTURE.md](../ARCHITECTURE.md) |
-| Mobile (Capacitor) build   | [./MOBILE.md](./MOBILE.md) |
-| Mobile (Expo) deployment   | [../MOBILE_DEPLOYMENT.md](../MOBILE_DEPLOYMENT.md) |
+| Mobile build pipeline      | [./MOBILE.md](./MOBILE.md) |
+| Mobile QA / testing        | [./MOBILE_TESTING.md](./MOBILE_TESTING.md) |
+| Email + WhatsApp setup     | [./EMAIL_AND_WHATSAPP.md](./EMAIL_AND_WHATSAPP.md) |
 | Run / fix local Docker stack | [../START_HERE.md](../START_HERE.md), [../FIX_SITE_CANT_BE_REACHED.md](../FIX_SITE_CANT_BE_REACHED.md) |
 
 ---

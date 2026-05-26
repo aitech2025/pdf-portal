@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import pb from '@/lib/apiClient';
 
-// Thin wrappers that mirror schoolCategoryApi / categoriesApi from packages/shared,
-// but use the web app's own authenticated pb client.
+// Thin authenticated API wrappers backed by the web app's pb client.
 const schoolCategoryApi = {
     listAssignedCategories: (schoolId) =>
         pb.collection('schools').getOne(schoolId).then(() =>

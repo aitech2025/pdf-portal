@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Search, FileText, School, Filter } from 'lucide-react';
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getPdfCode } from '@/lib/utils';
 
 const PLATFORM_ROLES = ['platform_admin', 'admin', 'moderator', 'platform_viewer'];
 
@@ -154,7 +155,7 @@ const GlobalSearchPage = () => {
                         <CardContent className="p-4 flex justify-between items-center">
                           <div>
                             <p className="font-semibold">{pdf.fileName || pdf.file_name}</p>
-                            <p className="text-sm text-muted-foreground">{pdf.pdfId || pdf.pdf_id}</p>
+                            <p className="text-sm text-muted-foreground font-mono">{getPdfCode(pdf) ?? '—'}</p>
                           </div>
                           {isPlatform ? (
                             <Link to="/admin/content-dashboard">

@@ -23,23 +23,39 @@ const sendUserCredentialNotifications = async (
   password: string,
   channels: Array<"email" | "whatsapp"> = ["email", "whatsapp"]
 ): Promise<void> => {
-  const subject = "Welcome to i-icon Academy - Your Account Credentials";
-  const message =
+  const subject = "Welcome to i-icon Academy — your account is ready";
+  const text =
     `Dear ${user.name},\n\n` +
     `Your account at ${schoolName} on i-icon Academy has been created.\n\n` +
     `Login credentials:\n` +
     `  Email: ${user.email}\n` +
     `  Password: ${password}\n\n` +
-    `Please log in and change your password immediately.`;
-  for (const method of channels) {
-    await createAndSendNotification({
-      recipient: user,
-      method,
-      type: "credential_delivery",
-      subject,
-      message
-    });
-  }
+    `Please log in and change your password immediately on first sign-in.\n\n` +
+    `— i-icon Academy team`;
+  const html =
+    `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0f172a">` +
+    `<h2 style="margin:0 0 16px;color:#4338ca">Welcome to i-icon Academy</h2>` +
+    `<p>Dear ${user.name},</p>` +
+    `<p>Your account at <strong>${schoolName}</strong> has been created.</p>` +
+    `<div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:16px 0">` +
+    `<div><strong>Email:</strong> ${user.email}</div>` +
+    `<div><strong>Temporary password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${password}</code></div>` +
+    `</div>` +
+    `<p>Please log in and change your password on first sign-in.</p>` +
+    `<p style="font-size:12px;color:#94a3b8;margin-top:24px">— i-icon Academy team</p>` +
+    `</div>`;
+
+  // Filter out WhatsApp if the user has no mobile number to avoid pointless failures.
+  const effectiveChannels = channels.filter((c) => (c === "whatsapp" ? !!user.mobile_number : true));
+
+  await createAndSendNotification({
+    recipient: user,
+    channels: effectiveChannels,
+    type: "credential_delivery",
+    subject,
+    message: text,
+    html
+  });
 };
 
 export const registerUserRoutes = async (app: FastifyInstance): Promise<void> => {

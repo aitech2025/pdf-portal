@@ -3,9 +3,44 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SettingSection, InputSetting, SelectSetting, ToggleSetting, PasswordField } from '../SettingComponents.jsx';
-import { Save, Mail, Send } from 'lucide-react';
+import { Save, Send, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import pb from '@/lib/apiClient';
+
+const PROVIDER_PRESETS = {
+  hostinger: {
+    label: 'Hostinger Email',
+    smtpHost: 'smtp.hostinger.com',
+    smtpPort: 465,
+    enableSSL: true,
+    enableTLS: false,
+    hint: 'Use the full email address as the username and the mailbox password (set in Hostinger hPanel → Emails).',
+  },
+  gmail: {
+    label: 'Gmail (App Password)',
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: 587,
+    enableSSL: false,
+    enableTLS: true,
+    hint: 'Generate an App Password at myaccount.google.com → Security → 2-Step Verification → App passwords.',
+  },
+  outlook: {
+    label: 'Outlook / Microsoft 365',
+    smtpHost: 'smtp.office365.com',
+    smtpPort: 587,
+    enableSSL: false,
+    enableTLS: true,
+    hint: 'Account must have SMTP AUTH enabled by the tenant admin.',
+  },
+  ses: {
+    label: 'Amazon SES (SMTP)',
+    smtpHost: 'email-smtp.us-east-1.amazonaws.com',
+    smtpPort: 587,
+    enableSSL: false,
+    enableTLS: true,
+    hint: 'Replace region in host if not us-east-1. Use the SMTP credentials, not the IAM access key.',
+  },
+};
 
 const EmailConfigurationTab = ({ settings, onSave, saving }) => {
   const [localSettings, setLocalSettings] = useState(settings);
@@ -16,6 +51,20 @@ const EmailConfigurationTab = ({ settings, onSave, saving }) => {
 
   const handleChange = (field, value) => {
     setLocalSettings(prev => ({ ...prev, [field]: value }));
+  };
+
+  const applyPreset = (key) => {
+    const preset = PROVIDER_PRESETS[key];
+    if (!preset) return;
+    setLocalSettings(prev => ({
+      ...prev,
+      emailProvider: 'smtp',
+      smtpHost: preset.smtpHost,
+      smtpPort: preset.smtpPort,
+      enableSSL: preset.enableSSL,
+      enableTLS: preset.enableTLS,
+    }));
+    toast.info(`${preset.label} preset applied — fill in username, password, and from address, then save.`);
   };
 
   const handleSave = () => {
@@ -41,8 +90,12 @@ const EmailConfigurationTab = ({ settings, onSave, saving }) => {
     if (!to) return;
     try {
       toast.info('Sending test email...');
-      await pb.fetch(`/systemSettings/${settings.id}/test-email`, 'POST', { to });
-      toast.success('Test email sent successfully!');
+      const res = await pb.fetch(`/systemSettings/${settings.id}/test-email`, 'POST', { to });
+      if (res?.ok) {
+        toast.success(`Test email delivered to ${to}`);
+      } else {
+        toast.error(res?.message || 'Delivery failed — check SMTP credentials');
+      }
     } catch (err) {
       toast.error(err.message || 'Failed to send test email');
     }
@@ -80,6 +133,32 @@ const EmailConfigurationTab = ({ settings, onSave, saving }) => {
               />
             </div>
           </SettingSection>
+
+          {localSettings.emailProvider === 'smtp' && (
+            <SettingSection title="Quick Presets" description="Apply provider-specific SMTP defaults, then fill in your credentials below.">
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(PROVIDER_PRESETS).map(([key, preset]) => (
+                  <Button
+                    key={key}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyPreset(key)}
+                    disabled={saving}
+                    className="bg-background"
+                  >
+                    <Zap className="w-3.5 h-3.5 mr-1.5 text-amber-500" />
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+              {localSettings.smtpHost && (
+                <p className="text-xs text-muted-foreground mt-3">
+                  {Object.values(PROVIDER_PRESETS).find(p => p.smtpHost === localSettings.smtpHost)?.hint}
+                </p>
+              )}
+            </SettingSection>
+          )}
 
           {localSettings.emailProvider === 'smtp' && (
             <SettingSection title="SMTP Configuration" description="Enter your SMTP server details.">

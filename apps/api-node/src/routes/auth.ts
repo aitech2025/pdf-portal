@@ -15,10 +15,20 @@ import {
 import { writeAudit } from "../lib/audit.js";
 import { isSuperAdmin } from "../lib/permissions.js";
 import { getCurrentUser, requireAuth } from "../plugins/auth.js";
+import { env } from "../config/env.js";
+import { createAndSendNotification } from "../services/notificationChannels.js";
 
 const LoginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
+
+const escapeHtml = (s: string): string =>
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 
 export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> => {
   app.post("/api/auth/login", async (request, reply) => {
@@ -105,7 +115,10 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
   app.post("/api/auth/forgot-password", async (request) => {
     const body = z.object({ email: z.string().email() }).parse(request.body);
     const user = await User.findOne({ email: body.email });
-    if (!user) return { message: "If this account exists, reset instructions were sent." };
+    // Generic response on purpose — never leak which addresses exist.
+    const genericResponse = { message: "If this account exists, reset instructions were sent." };
+    if (!user) return genericResponse;
+
     const raw = randomToken();
     await AuthToken.updateMany(
       { user_id: user.id, token_type: "password_reset", used_at: null },
@@ -117,7 +130,49 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
       token_type: "password_reset",
       expires_at: new Date(Date.now() + 60 * 60 * 1000)
     });
-    return { message: "If this account exists, reset instructions were sent.", token: raw };
+
+    const resetUrl = `${env.APP_BASE_URL.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(raw)}`;
+    const subject = "Reset your i-icon Academy password";
+    const text =
+      `Hi ${user.name || ""},\n\n` +
+      `We received a request to reset the password for ${user.email}.\n\n` +
+      `Click the link below to choose a new password. The link expires in 60 minutes.\n\n` +
+      `${resetUrl}\n\n` +
+      `If you didn't request this, you can safely ignore this email — your password will stay the same.\n\n` +
+      `— i-icon Academy team`;
+    const html =
+      `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0f172a">` +
+      `<h2 style="margin:0 0 16px;color:#4338ca">Reset your password</h2>` +
+      `<p>Hi ${escapeHtml(user.name || "there")},</p>` +
+      `<p>We received a request to reset the password for <strong>${escapeHtml(user.email)}</strong>.</p>` +
+      `<p style="text-align:center;margin:32px 0">` +
+      `<a href="${resetUrl}" style="background:#4f46e5;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Reset password</a>` +
+      `</p>` +
+      `<p style="font-size:12px;color:#64748b">This link expires in 60 minutes. If you didn't ask for a reset, you can ignore this email.</p>` +
+      `<p style="font-size:12px;color:#94a3b8;margin-top:24px">Or paste this link into your browser:<br/>${resetUrl}</p>` +
+      `</div>`;
+
+    // Fan-out: in-app + email always, WhatsApp if the user has a mobile number on file.
+    const channels: Array<"email" | "whatsapp"> = ["email"];
+    if (user.mobile_number) channels.push("whatsapp");
+
+    await createAndSendNotification({
+      recipient: { id: user.id, email: user.email, mobile_number: user.mobile_number, name: user.name },
+      channels,
+      type: "password_reset",
+      subject,
+      message: text,
+      html
+    });
+
+    await writeAudit({
+      user_id: user.id,
+      action: "password_reset_requested",
+      action_details: `Reset link sent for ${user.email}`,
+      request
+    });
+
+    return genericResponse;
   });
 
   app.post("/api/auth/reset-password", async (request, reply) => {
@@ -142,6 +197,26 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
     token.used_at = new Date();
     await token.save();
     await revokeActiveRefreshTokens(user.id);
+
+    // Confirmation notification — email + in-app. Helps users notice
+    // unexpected resets if their account was compromised.
+    await createAndSendNotification({
+      recipient: { id: user.id, email: user.email, mobile_number: user.mobile_number, name: user.name },
+      channels: ["email"],
+      type: "password_reset_confirmed",
+      subject: "Your i-icon Academy password was changed",
+      message:
+        `Hi ${user.name || ""},\n\n` +
+        `Your i-icon Academy password was just reset. If this wasn't you, please contact your administrator immediately.\n\n` +
+        `— i-icon Academy team`
+    });
+
+    await writeAudit({
+      user_id: user.id,
+      action: "password_reset_completed",
+      request
+    });
+
     return { message: "Password reset successful" };
   });
 
@@ -275,6 +350,19 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
     user.must_change_password = false;
     await user.save();
     await revokeActiveRefreshTokens(user.id);
+
+    await createAndSendNotification({
+      recipient: { id: user.id, email: user.email, mobile_number: user.mobile_number, name: user.name },
+      channels: ["email"],
+      type: "password_changed",
+      subject: "Your i-icon Academy password was changed",
+      message:
+        `Hi ${user.name || ""},\n\n` +
+        `This is a confirmation that you successfully changed the password on your i-icon Academy account.\n\n` +
+        `If you did not perform this change, please contact your administrator immediately.\n\n` +
+        `— i-icon Academy team`
+    });
+
     return { message: "Password changed" };
   });
 };

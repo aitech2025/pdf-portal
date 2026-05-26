@@ -6,6 +6,7 @@ import { Bookmark, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import PageTransition from '@/components/PageTransition.jsx';
 import LoadingSpinner from '@/components/LoadingSpinner.jsx';
+import { getPdfCode } from '@/lib/utils';
 
 const SchoolBookmarksPage = () => {
   const [items, setItems] = useState([]);
@@ -63,7 +64,7 @@ const SchoolBookmarksPage = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">{item.pdf?.pdfId || item.pdf?.pdf_id}</span>
+                <span className="text-sm text-muted-foreground font-mono">{getPdfCode(item.pdf) ?? '—'}</span>
                 <Button variant="outline" size="sm" onClick={() => remove(item.pdfId || item.pdf?.id)}>
                   Remove
                 </Button>

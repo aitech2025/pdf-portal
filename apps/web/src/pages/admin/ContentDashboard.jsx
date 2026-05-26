@@ -10,7 +10,7 @@ import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import EnhancedPDFViewer from '@/components/EnhancedPDFViewer.jsx';
 import VersionHistoryModal from '@/components/admin/pdfs/VersionHistoryModal.jsx';
-import { formatBytes, cn } from '@/lib/utils';
+import { formatBytes, cn, getPdfCode } from '@/lib/utils';
 import { motion } from 'framer-motion';
 
 const ContentDashboard = () => {
@@ -166,7 +166,7 @@ const ContentDashboard = () => {
                         <div className="flex-1 min-w-0 pt-0.5">
                           <div className="flex items-center gap-2 mb-1">
                             <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-border text-muted-foreground font-mono">
-                              {pdf.pdf_id || 'ID PENDING'}
+                              {getPdfCode(pdf) ?? 'ID PENDING'}
                             </Badge>
                             <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-primary/10 text-primary hover:bg-primary/20">
                               v{pdf.currentVersion || 1}

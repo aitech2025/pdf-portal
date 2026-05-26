@@ -15,7 +15,7 @@ import ConfirmationModal from '@/components/ConfirmationModal.jsx';
 import EnhancedPDFViewer from '@/components/EnhancedPDFViewer.jsx';
 import VersionHistoryModal from '@/components/admin/pdfs/VersionHistoryModal.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatBytes, cn } from '@/lib/utils';
+import { formatBytes, cn, getPdfCode } from '@/lib/utils';
 import { usePDFVersioning } from '@/hooks/usePDFVersioning.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -163,7 +163,7 @@ const PDFUploadManagement = () => {
 
   const filteredPdfs = pdfs.filter(p => {
     const name = p.fileName || p.file_name || '';
-    const pdfId = p.pdfId || p.pdf_id || '';
+    const pdfId = getPdfCode(p) || '';
     const matchesSearch = name.toLowerCase().includes(search.toLowerCase()) ||
       pdfId.toLowerCase().includes(search.toLowerCase());
     const catId = p.categoryId || p.category_id;
@@ -316,7 +316,7 @@ const PDFUploadManagement = () => {
                           <div className="flex-1 min-w-0 pr-6">
                             <div className="flex items-center gap-2 mb-1">
                               <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-border text-muted-foreground font-mono">
-                                {pdf.pdf_id || 'ID PENDING'}
+                                {getPdfCode(pdf) ?? 'ID PENDING'}
                               </Badge>
                               <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-muted text-foreground">
                                 v{pdf.currentVersion || 1}

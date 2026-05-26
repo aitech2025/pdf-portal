@@ -32,15 +32,26 @@ services:
       # api container to reset the default admin password back to
       # DEFAULT_ADMIN_PASSWORD. Flip back to false in production.
       RESET_DEFAULT_ADMIN_PASSWORD: ${RESET_DEFAULT_ADMIN_PASSWORD:-false}
+      # Public URL used to build absolute links inside outbound emails
+      # (password-reset link etc). In production set this to https://yourdomain.tld
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost}
+      # SMTP env vars are a *fallback* — the runtime prefers DB SystemSettings
+      # values edited live from Admin → Settings → Email. Use these only for
+      # initial bootstrap (e.g. so the first onboarding email goes out before
+      # an admin has logged in to save the SMTP form).
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.com}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-i-icon academy}
-      BUILDER_MAILER_API_URL: ${BUILDER_MAILER_API_URL:-}
-      BUILDER_MAILER_API_KEY: ${BUILDER_MAILER_API_KEY:-}
-      BUILDER_MAILER_SENDER_ADDRESS: ${BUILDER_MAILER_SENDER_ADDRESS:-}
+      # WhatsApp env vars are also a fallback. The Cloud API config is too
+      # rich for env (phone ID, token, template, language) — configure it
+      # in Admin → Settings → WhatsApp instead. The env vars below cover
+      # only the legacy "custom HTTP gateway" path.
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
+      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-}
+      WHATSAPP_FROM_NUMBER: ${WHATSAPP_FROM_NUMBER:-}
     volumes:
       - uploads_data:/data/uploads
     ports:

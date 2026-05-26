@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { cn, getPdfCode } from '@/lib/utils';
 
 const formatBytes = (bytes) => {
   if (!bytes) return '0 B';
@@ -232,7 +232,7 @@ const SchoolDashboard = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <Badge variant="outline" className="text-[10px] h-4 font-mono">
-                          {pdf.pdfId || pdf.pdf_id || 'PDF'}
+                          {getPdfCode(pdf) ?? 'PDF'}
                         </Badge>
                         {pdf.categoryName && (
                           <Badge variant="secondary" className="text-[10px] h-4 font-normal">

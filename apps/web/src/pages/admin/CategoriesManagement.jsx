@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import LoadingSpinner from '@/components/LoadingSpinner.jsx';
+import { getPdfCode } from '@/lib/utils';
 
 const CategoriesManagement = () => {
   const [categories, setCategories] = useState([]);
@@ -342,7 +343,7 @@ const CategoriesManagement = () => {
                         <TableRow key={pdf.id} className="hover:bg-muted/30">
                           <TableCell>
                             <span className="font-mono text-xs text-muted-foreground">
-                              {pdf.pdfId || pdf.pdf_id || '—'}
+                              {getPdfCode(pdf) ?? '—'}
                             </span>
                           </TableCell>
                           <TableCell>

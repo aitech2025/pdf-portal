@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Download, Eye, CheckCircle, Trash2, History } from 'lucide-react';
-import { formatBytes } from '@/lib/utils';
+import { formatBytes, getPdfCode } from '@/lib/utils';
 import { usePDFVersioning } from '@/hooks/usePDFVersioning.js';
 import pb from '@/lib/apiClient';
 import EnhancedPDFViewer from '@/components/EnhancedPDFViewer.jsx';
@@ -99,7 +99,8 @@ const VersionHistoryModal = ({ isOpen, onClose, pdf, onVersionChanged }) => {
             <History className="w-5 h-5" /> Version History
           </DialogTitle>
           <DialogDescription>
-            Manage versions for <span className="font-semibold text-foreground">{pdf?.fileName}</span> ({pdf?.pdf_id})
+            Manage versions for <span className="font-semibold text-foreground">{pdf?.fileName}</span>
+            {getPdfCode(pdf) && <span className="font-mono text-xs"> · {getPdfCode(pdf)}</span>}
           </DialogDescription>
         </DialogHeader>
 
