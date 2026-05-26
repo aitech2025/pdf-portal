@@ -1,18 +1,21 @@
 # EduPortal — Monorepo Architecture
 
 > **Full guide:** See [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md) for implementation details, deployment steps, environment variables, API reference, notifications, and operations runbooks.
+> **Mobile:** See [docs/MOBILE.md](docs/MOBILE.md) for the Capacitor iOS + Android build pipeline.
 
 ## Project Structure
 
 ```
 eduportal/
 ├── apps/
-│   ├── api-node/     # Node Fastify backend (active)
-│   ├── api/          # Python FastAPI backend (deprecated fallback)
-│   ├── web/          # React web app (Vite + Tailwind)
-│   └── mobile/       # React Native (Expo) — iOS & Android
+│   ├── api-node/     # Node 22 + Fastify 5 backend (MongoDB)
+│   ├── web/          # React 18 web app (Vite + Tailwind + shadcn/ui)
+│   │   ├── android/  # Capacitor Android shell (generated)
+│   │   └── ios/      # Capacitor iOS shell (added on macOS)
+│   └── mobile/       # Legacy Expo / React Native app (optional)
 ├── packages/
 │   └── shared/       # Shared code: API client, types, constants
+├── docs/             # MOBILE.md, DOCUMENTATION.md, etc.
 └── docker-compose.yml
 ```
 
@@ -20,18 +23,20 @@ eduportal/
 
 ## Stack
 
-| Layer    | Technology                          |
-|----------|-------------------------------------|
-| Backend  | Node.js 22, Fastify 5, Mongoose 8, MongoDB 8 |
-| Web      | React 18, Vite, Tailwind CSS, shadcn/ui |
-| Mobile   | React Native, Expo SDK 51, NativeWind |
-| Shared   | Plain JS/TS — API client, constants, utils |
+| Layer    | Technology                                                       |
+| -------- | ---------------------------------------------------------------- |
+| Database | MongoDB 8, Mongoose 8                                            |
+| Backend  | Node.js 22, Fastify 5, JWT auth, WebSockets for notifications    |
+| Web      | React 18, Vite 7, Tailwind CSS 3, shadcn/ui, framer-motion       |
+| Mobile   | **Primary:** Capacitor 6 wrapping the React web app (iOS + Android) |
+|          | **Legacy:** Expo SDK 51 + React Native + NativeWind (apps/mobile)   |
+| Shared   | Plain JS — API client, constants, utils                          |
 
 ---
 
 ## Shared Package (`packages/shared`)
 
-Both web and mobile import from `@eduportal/shared`:
+Both web and the legacy Expo mobile app import from `@eduportal/shared`:
 
 ```
 packages/shared/
@@ -55,100 +60,79 @@ packages/shared/
 
 ---
 
-## Mobile App (`apps/mobile`)
+## Mobile App — current path (Capacitor)
 
-Built with **Expo** (managed workflow) targeting iOS and Android from a single codebase.
+The Capacitor shell wraps the production Vite bundle so the iOS / Android binaries reuse 100% of the web UI. Native niceties (StatusBar, SplashScreen, Keyboard insets, hardware back button, deep links, native file save / share / haptics / network) are wired up via `apps/web/src/native/`.
+
+Build & run:
+
+```bash
+cd apps/web
+
+# One-time: Android platform (works on Windows, macOS, Linux)
+npm run mobile:add:android
+
+# One-time: iOS platform (macOS only)
+npm run mobile:add:ios
+
+# Sync the production web bundle into the native projects
+npm run mobile:sync
+
+# Open in Android Studio / Xcode for signed builds
+npm run mobile:open:android
+npm run mobile:open:ios
+```
+
+Full walkthrough lives in [`docs/MOBILE.md`](docs/MOBILE.md).
+
+---
+
+## Mobile App — legacy Expo path (`apps/mobile`)
+
+Built with **Expo** managed workflow, used before Capacitor was introduced. Still functional but no longer the primary delivery channel.
 
 ```
 apps/mobile/
 ├── app/                    # Expo Router file-based routing
-│   ├── (auth)/
-│   │   ├── login.tsx
-│   │   └── _layout.tsx
-│   ├── (admin)/
-│   │   ├── index.tsx       # Admin dashboard
-│   │   ├── schools.tsx
-│   │   ├── users.tsx
-│   │   └── _layout.tsx
-│   ├── (school)/
-│   │   ├── index.tsx       # School dashboard
-│   │   ├── portal.tsx
-│   │   └── _layout.tsx
-│   └── _layout.tsx         # Root layout with auth context
 ├── components/
-│   ├── ui/                 # NativeWind-styled primitives
-│   ├── MetricCard.tsx
-│   ├── PDFViewer.tsx
-│   └── NotificationBell.tsx
 ├── hooks/
-│   ├── useAuth.ts
-│   └── useNotifications.ts
 ├── context/
-│   └── AuthContext.tsx
 ├── app.json                # Expo config
-├── babel.config.js
 ├── tailwind.config.js      # NativeWind config
 └── package.json
 ```
 
----
-
-## How Web → Mobile Conversion Works
-
-### 1. Shared API Layer
-Both apps import the same API functions from `@eduportal/shared`. No duplication.
-
-### 2. UI Components
-Web uses Tailwind CSS + shadcn/ui (DOM).  
-Mobile uses NativeWind (React Native StyleSheet from Tailwind classes) + custom native components.  
-Business logic (hooks, state management) is identical.
-
-### 3. Navigation
-Web: React Router v7  
-Mobile: Expo Router (file-based, same mental model)
-
-### 4. Storage
-Web: `localStorage` for JWT token  
-Mobile: `expo-secure-store` for JWT token
-
-### 5. PDF Viewing
-Web: `react-pdf`  
-Mobile: `expo-file-system` + `react-native-pdf`
-
-### 6. Push Notifications
-Mobile adds: `expo-notifications` for push notifications  
-Web uses: WebSocket (already implemented)
+EAS build instructions: [MOBILE_DEPLOYMENT.md](MOBILE_DEPLOYMENT.md).
 
 ---
 
 ## Running the Project
 
-### Backend + Database
+### Backend + Database (Docker)
 ```bash
 docker compose up -d
 ```
 
-### Web App
+### Web App (Vite dev server, HMR)
 ```bash
-npm run dev --prefix apps/web
+docker compose up -d mongo api     # backend + DB only
+cd apps/web && npm run dev         # http://localhost:3000
 ```
 
-### Mobile App
+Vite proxies `/api` and `/uploads` to `http://localhost:8000` so the dev server picks up the dockerised API automatically.
+
+### Mobile (Capacitor)
+```bash
+cd apps/web
+npm run mobile:run:android          # build + sync + launch on connected device
+npm run mobile:run:ios              # macOS only
+```
+
+### Mobile (Legacy Expo)
 ```bash
 cd apps/mobile
 npx expo start
-# Press 'a' for Android emulator
-# Press 'i' for iOS simulator
-# Scan QR with Expo Go app for physical device
-```
-
-### Build Mobile for Production
-```bash
-# Android APK/AAB
-cd apps/mobile && npx eas build --platform android
-
-# iOS IPA
-cd apps/mobile && npx eas build --platform ios
+# Press 'a' for Android emulator, 'i' for iOS simulator, or scan QR with Expo Go.
 ```
 
 ---
@@ -156,24 +140,27 @@ cd apps/mobile && npx eas build --platform ios
 ## Environment Variables
 
 ```
-# .env (root)
-API_URL=http://localhost:8000   # web dev
-API_URL=http://10.0.2.2:8000   # Android emulator
-API_URL=http://localhost:8000   # iOS simulator
+# .env (root) — read by docker-compose.yml
+SECRET_KEY=change-me-in-production
+SMTP_HOST=...
+SMTP_PORT=587
+SMTP_USERNAME=...
+SMTP_PASSWORD=...
+SMTP_FROM_EMAIL=noreply@iiconacademy.com
+SMTP_FROM_NAME=i-icon academy
 ```
+
+For mobile dev against your LAN, set `CAP_SERVER_URL=http://<your-LAN-ip>:3000` before `npm run mobile:run:android`.
 
 ---
 
-## Single Codebase Change Management
+## Change-management workflow
 
-When you update an API endpoint:
-1. Update `apps/api/app/routers/` (Python)
-2. Update `packages/shared/src/api/` (JS client)
-3. Both web and mobile automatically get the change
+Adding or updating an API endpoint:
 
-When you add a new feature:
-1. Add API endpoint in `apps/api`
-2. Add shared API function in `packages/shared`
-3. Build UI in `apps/web` (React + Tailwind)
-4. Build UI in `apps/mobile` (React Native + NativeWind)
-5. Business logic hooks can often be shared directly
+1. Add / edit the route in `apps/api-node/src/routes/`.
+2. Add an integration test in `apps/api-node/tests/`.
+3. If the request/response shape changes, update the relevant call site(s) in `apps/web/src/` (and, if affected, `apps/mobile/`).
+4. Rebuild the web bundle (`npm run build` inside `apps/web`) and run `npm run mobile:sync` so the Capacitor shells pick up the change.
+
+Single source of truth for the API is **`apps/api-node`**.

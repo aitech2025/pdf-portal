@@ -27,39 +27,17 @@ export function useUserManagement() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      let filterString = [];
-      
-      if (debouncedSearch) {
-        filterString.push(`(name ~ "${debouncedSearch}" || email ~ "${debouncedSearch}")`);
-      }
-      
-      if (roleFilter !== 'all') {
-        filterString.push(`role = "${roleFilter}"`);
-      }
-      
-      if (schoolFilter !== 'all') {
-        filterString.push(`schoolId = "${schoolFilter}"`);
-      }
-      
-      if (statusFilter !== 'all') {
-        const now = new Date().toISOString();
-        if (statusFilter === USER_STATUSES.ACTIVE) {
-          filterString.push(`isActive = true && verified = true && (lockedUntil = "" || lockedUntil < "${now}")`);
-        } else if (statusFilter === USER_STATUSES.INACTIVE) {
-          filterString.push(`isActive = false && verified = true`);
-        } else if (statusFilter === USER_STATUSES.PENDING) {
-          filterString.push(`verified = false`);
-        } else if (statusFilter === USER_STATUSES.SUSPENDED) {
-          filterString.push(`lockedUntil != "" && lockedUntil >= "${now}"`);
-        }
-      }
-      
-      const result = await pb.collection('users').getList(page, perPage, {
+      const params = {
         sort: `${sortDir}${sortField}`,
-        filter: filterString.join(' && '),
         $autoCancel: false
-      });
-      
+      };
+      if (debouncedSearch) params.q = debouncedSearch;
+      if (roleFilter !== 'all') params.role = roleFilter;
+      if (schoolFilter !== 'all') params.schoolId = schoolFilter;
+      if (statusFilter === USER_STATUSES.ACTIVE) params.isActive = true;
+      else if (statusFilter === USER_STATUSES.INACTIVE) params.isActive = false;
+
+      const result = await pb.collection('users').getList(page, perPage, params);
       setUsers(result.items.map(formatUserData));
       setTotalItems(result.totalItems);
     } catch (error) {

@@ -49,9 +49,17 @@ export const registerSchoolCategoryRoutes = async (app) => {
         const school = await School.findOne({ id: params.school_id });
         if (!school)
             return reply.status(404).send({ detail: "School not found" });
-        await SchoolCategoryAccess.deleteMany({ school_id: params.school_id });
-        if (categoryIds.length) {
-            await SchoolCategoryAccess.insertMany(categoryIds.map((category_id) => ({ school_id: params.school_id, category_id })));
+        // ADD categories (upsert) instead of overwriting existing assignments
+        const added = [];
+        const skipped = [];
+        for (const category_id of categoryIds) {
+            const result = await SchoolCategoryAccess.updateOne({ school_id: params.school_id, category_id }, { $setOnInsert: { school_id: params.school_id, category_id } }, { upsert: true });
+            if (result.upsertedCount > 0) {
+                added.push(category_id);
+            }
+            else {
+                skipped.push(category_id);
+            }
         }
         if (request.authUser?.sub) {
             await writeAudit({

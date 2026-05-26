@@ -42,6 +42,7 @@ export const DEFAULT_SETTINGS = {
     slack: { enabled: false, webhookUrl: '' },
     teams: { enabled: false, webhookUrl: '' },
     stripe: { enabled: false, apiKey: '' },
+    whatsapp: { enabled: false, provider: 'waha', apiUrl: '', apiKey: '', session: 'default', fromNumber: '' },
     customWebhook: { enabled: false, url: '', events: [] }
   },
   securitySettings: {

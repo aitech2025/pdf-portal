@@ -19,6 +19,8 @@ import GlobalSearchPage from '@/pages/GlobalSearchPage.jsx';
 import NotificationCenter from '@/pages/NotificationCenter.jsx';
 import SettingsPage from '@/pages/SettingsPage.jsx';
 import HelpCenterPage from '@/pages/HelpCenterPage.jsx';
+import ForbiddenPage from '@/pages/ForbiddenPage.jsx';
+import NotFoundPage from '@/pages/NotFoundPage.jsx';
 
 // Admin Routes
 import AdminDashboard from '@/pages/AdminDashboard.jsx';
@@ -114,14 +116,15 @@ function AppContent() {
 // Separate component so we can use useAuth inside Router context
 function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
   const { currentUser } = useAuth();
-  const PLATFORM_ROLES = ['platform_admin', 'admin', 'moderator', 'platform_viewer'];
-  const isPlatformUser = currentUser && PLATFORM_ROLES.includes(currentUser.role);
+  // Only SUPER_ADMIN (platform_admin / admin / super_admin) bypass maintenance, matching backend
+  const SUPER_ADMIN_ROLES = ['platform_admin', 'admin', 'super_admin'];
+  const isSuperAdmin = currentUser && SUPER_ADMIN_ROLES.includes(currentUser.role);
 
-  // Show maintenance page only for non-platform users (or unauthenticated)
-  if (isMaintenance && !isPlatformUser) {
+  if (isMaintenance && !isSuperAdmin) {
     return (
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/maintenance" element={<MaintenanceModePage message={maintenanceMessage} />} />
         <Route path="*" element={<MaintenanceModePage message={maintenanceMessage} />} />
       </Routes>
     );
@@ -134,6 +137,11 @@ function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/signup" element={<GuestSignupForm />} />
+      <Route path="/register" element={<Navigate to="/signup" replace />} />
+      <Route path="/maintenance" element={<MaintenanceModePage message={maintenanceMessage} />} />
+      <Route path="/403" element={<ForbiddenPage />} />
+      <Route path="/forbidden" element={<ForbiddenPage />} />
+      <Route path="/404" element={<NotFoundPage />} />
 
       {/* Shared Authenticated Routes */}
       <Route path="/profile" element={<ProtectedRoute><AppLayout><UserProfilePage /></AppLayout></ProtectedRoute>} />
@@ -193,7 +201,7 @@ function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
         </ProtectedRoute>
       } />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

@@ -13,7 +13,7 @@ import Papa from 'papaparse';
 
 // ── Template definitions ──────────────────────────────────────────────────────
 
-const SCHOOL_COLUMNS = ['schoolName', 'email', 'pointOfContactName', 'mobileNumber', 'location', 'address', 'grades'];
+const SCHOOL_COLUMNS = ['schoolName', 'email', 'pointOfContactName', 'mobileNumber', 'location', 'address', 'grades', 'category'];
 const USER_COLUMNS = ['name', 'email', 'role', 'schoolId', 'mobileNumber'];
 const USER_ROLES = ['platform_admin', 'platform_viewer', 'school_admin', 'school_viewer', 'teacher'];
 
@@ -29,7 +29,7 @@ const downloadCSV = (columns, sampleRows, filename) => {
 };
 
 const SCHOOL_SAMPLE = [
-    { schoolName: 'Lincoln High School', email: 'admin@lincoln.edu', pointOfContactName: 'Dr. Jane Smith', mobileNumber: '+1-555-0100', location: 'Seattle, WA', address: '123 Main St', grades: '6-10' },
+    { schoolName: 'Lincoln High School', email: 'admin@lincoln.edu', pointOfContactName: 'Dr. Jane Smith', mobileNumber: '+1-555-0100', location: 'Seattle, WA', address: '123 Main St', grades: '6-10', category: 'Academic' },
 ];
 
 const USER_SAMPLE = [
@@ -73,7 +73,7 @@ const ResultTable = ({ results }) => (
 // ── Main component ────────────────────────────────────────────────────────────
 
 const BulkCreationPage = () => {
-    const { isPlatformAdmin, canWrite } = useAuth();
+    const { canWrite } = useAuth();
     const [activeTab, setActiveTab] = useState('schools');
 
     const [schoolFile, setSchoolFile] = useState(null);
@@ -207,6 +207,7 @@ const BulkCreationPage = () => {
                                 </div>
                                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300">
                                     School ID is auto-generated — do not include it in the file.
+                                    The <strong>category</strong> column accepts comma-separated category IDs or names (optional).
                                 </div>
                                 <Button variant="outline" className="w-full" onClick={() => downloadCSV(SCHOOL_COLUMNS, SCHOOL_SAMPLE, 'schools_template.csv')}>
                                     <Download className="w-4 h-4 mr-2" /> Download Schools Template

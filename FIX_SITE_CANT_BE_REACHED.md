@@ -1,415 +1,150 @@
-# 🔧 Fix "Site Can't Be Reached" Error
+# Fix "Site can't be reached" — Docker stack troubleshooting
 
-## Problem
-Containers are starting but website is not accessible.
+For day-to-day commands see [START_HERE.md](./START_HERE.md). This document covers what to do when something is broken.
 
----
-
-## Solution Steps
-
-### Step 1: Start Docker Desktop
-
-**The main issue is Docker Desktop is not running.**
-
-1. Open **Docker Desktop** application
-2. Wait for it to fully start (Docker icon in system tray should be steady, not animated)
-3. You should see "Docker Desktop is running" in the system tray
-
-**If Docker Desktop is not installed:**
-- Download from: https://www.docker.com/products/docker-desktop/
-- Install and restart your computer
-- Start Docker Desktop
+> **Stack today:** MongoDB 8 (internal `mongo:27017`) + Fastify API (`apps/api-node`, port 8000) + nginx-served React build (`apps/web`, port 80).
 
 ---
 
-### Step 2: Verify Docker is Running
+## 1. Decision tree
 
-Open PowerShell or Command Prompt and run:
-
-```bash
-docker ps
-```
-
-**Expected output:**
-```
-CONTAINER ID   IMAGE          COMMAND       CREATED       STATUS       PORTS
-```
-
-**If you see an error:**
-```
-error during connect: This error may indicate that the docker daemon is not running
-```
-
-**Solution:** Start Docker Desktop and wait 30 seconds, then try again.
+1. `docker ps` errors out → **Docker Desktop is not running.** Start it and wait for the system-tray icon to stop animating.
+2. `docker compose ps` shows fewer than three services → run `docker compose up -d`.
+3. `docker compose ps` shows `Restarting` → check the logs (`docker compose logs api --tail 200`).
+4. Browser still says "site can't be reached" → confirm `docker compose logs web` shows nginx listening on `:80` and port 80 isn't held by IIS or another local server.
 
 ---
 
-### Step 3: Start the Containers
+## 2. Healthy baseline
 
 ```bash
-cd "c:\Users\navee\OneDrive\Desktop\Pet-Projects\hostinger\pdf-portal - Copy\pdf-portal"
-docker-compose up -d
+docker compose ps
 ```
 
-**Expected output:**
 ```
-[+] Running 3/3
- ✔ Container pdf-portal-db   Started
- ✔ Container pdf-portal-api  Started
- ✔ Container pdf-portal-web  Started
+NAME                                 STATUS         PORTS
+pdf-portal-mongo-1                   Up (healthy)   27017/tcp
+pdf-portal-api-1                     Up             0.0.0.0:8000->8000/tcp
+pdf-portal-web-1                     Up             0.0.0.0:80->80/tcp
 ```
+
+```bash
+curl http://localhost:8000/api/health
+curl http://localhost:8000/api/ready
+curl -I http://localhost/
+```
+
+All three should return `200`.
 
 ---
 
-### Step 4: Check Container Status
+## 3. Common errors
 
-```bash
-docker-compose ps
-```
+### 3.1 `cannot connect to docker daemon`
 
-**Expected output:**
-```
-NAME                STATUS              PORTS
-pdf-portal-db       Up (healthy)        5432/tcp
-pdf-portal-api      Up                  0.0.0.0:8000->8000/tcp
-pdf-portal-web      Up                  0.0.0.0:80->80/tcp
-```
+Docker Desktop isn't running. Start it from the Start menu, wait until the whale icon is steady, then retry.
 
-**All containers should show "Up" status.**
+### 3.2 `port is already allocated` on 80 or 8000
 
----
+Something else owns the port (often IIS on Windows).
 
-### Step 5: Check Container Logs
-
-If containers are running but site still not accessible:
-
-```bash
-# Check web container logs
-docker-compose logs web --tail=50
-
-# Check API container logs
-docker-compose logs api --tail=50
-
-# Check database logs
-docker-compose logs db --tail=50
-```
-
-**Look for errors in the logs.**
-
----
-
-### Step 6: Test Each Service
-
-#### Test Database:
-```bash
-docker-compose exec db psql -U postgres -d iiconacademy -c "SELECT 1;"
-```
-
-**Expected:** Should return `1`
-
-#### Test API:
-```bash
-curl http://localhost:8000/
-```
-
-**Or open in browser:** http://localhost:8000
-
-**Expected:** Should return API response (not error)
-
-#### Test Web:
-```bash
-curl http://localhost/
-```
-
-**Or open in browser:** http://localhost
-
-**Expected:** Should return HTML or redirect to login
-
----
-
-## Common Issues & Solutions
-
-### Issue 1: Docker Desktop Not Running
-
-**Symptoms:**
-- Error: "cannot connect to docker daemon"
-- Error: "pipe/dockerDesktopLinuxEngine: The system cannot find the file"
-
-**Solution:**
-1. Start Docker Desktop
-2. Wait for it to fully start (30-60 seconds)
-3. Try again
-
----
-
-### Issue 2: Port 80 Already in Use
-
-**Symptoms:**
-- Error: "port is already allocated"
-- Error: "bind: address already in use"
-
-**Solution:**
-
-**Option A: Stop the service using port 80**
-```bash
-# Find what's using port 80
+```powershell
+# find the owner
 netstat -ano | findstr :80
-
-# Stop IIS if running
+# stop IIS
 net stop w3svc
-
-# Or stop other web servers
 ```
 
-**Option B: Use a different port**
+Or remap the host port in `docker-compose.yml`:
 
-Edit `docker-compose.yml`:
 ```yaml
 web:
   ports:
-    - "8080:80"  # Change from 80:80 to 8080:80
+    - "8080:80"   # then open http://localhost:8080
+
+api:
+  ports:
+    - "8001:8000" # then open http://localhost:8001
 ```
 
-Then access: http://localhost:8080
+### 3.3 API container restarting
 
----
-
-### Issue 3: Containers Keep Restarting
-
-**Check logs:**
 ```bash
-docker-compose logs web --tail=100
-docker-compose logs api --tail=100
+docker compose logs api --tail 200
 ```
 
-**Common causes:**
-- API can't connect to database
-- Missing environment variables
-- Build errors
+Most common causes:
 
-**Solution:**
+| Log signal                                  | Likely cause                                                                |
+| ------------------------------------------- | ---------------------------------------------------------------------------- |
+| `MongoServerSelectionError` / `ECONNREFUSED` | Mongo isn't healthy yet; the API will retry. Give it 10–20s after first boot. |
+| `Cannot find module …`                       | The image is stale; rebuild with `docker compose build --no-cache api`.       |
+| `EADDRINUSE :::8000`                         | The host port mapping is already taken — remap as above.                      |
+| `error: JWT_SECRET … missing`                | Set `SECRET_KEY` in your `.env` (see `docker-compose.yml`).                   |
+
+### 3.4 Mongo healthcheck never becomes healthy
+
 ```bash
-# Rebuild containers
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
+docker compose logs mongo --tail 200
 ```
 
----
+If you see permissions errors on the volume, recreate it:
 
-### Issue 4: Web Container Exits Immediately
-
-**Check logs:**
 ```bash
-docker-compose logs web
+docker compose down
+docker volume rm pdf-portal_mongo_data    # name may differ; check `docker volume ls`
+docker compose up -d
 ```
 
-**If you see nginx errors:**
+(Note: this **destroys the database**.)
+
+### 3.5 Web container starts but pages are 404 / blank
+
+The nginx image was built from a stale Vite bundle. Rebuild:
+
 ```bash
-# Rebuild web container
-docker-compose build web
-docker-compose up -d web
-```
-
----
-
-### Issue 5: API Container Not Starting
-
-**Check logs:**
-```bash
-docker-compose logs api
-```
-
-**Common issues:**
-- Database not ready
-- Python dependencies missing
-- Entrypoint script errors
-
-**Solution:**
-```bash
-# Rebuild API container
-docker-compose build api
-docker-compose up -d api
+docker compose build --no-cache web
+docker compose up -d web
 ```
 
 ---
 
-## Step-by-Step Troubleshooting
-
-### 1. Start Fresh
+## 4. Verify connectivity end-to-end
 
 ```bash
-# Stop everything
-docker-compose down
-
-# Remove old containers and volumes (WARNING: This deletes data!)
-docker-compose down -v
-
-# Rebuild everything
-docker-compose build --no-cache
-
-# Start everything
-docker-compose up -d
-
-# Watch logs
-docker-compose logs -f
+# API healthy
+curl http://localhost:8000/api/health
+# API can reach Mongo
+curl http://localhost:8000/api/ready
+# Web is reachable
+curl -I http://localhost/
 ```
 
-### 2. Check Each Container
+All three should return `HTTP 200`. If `/api/ready` returns 503 the API can't talk to Mongo — check `docker compose logs mongo`.
+
+---
+
+## 5. Nuclear reset
 
 ```bash
-# Check if containers are running
-docker-compose ps
-
-# Check web container
-docker-compose logs web --tail=50
-
-# Check API container
-docker-compose logs api --tail=50
-
-# Check database container
-docker-compose logs db --tail=50
+docker compose down -v          # WARNING: deletes the Mongo volume
+docker compose build --no-cache
+docker compose up -d
+docker compose logs -f
 ```
 
-### 3. Test Connectivity
-
-```bash
-# Test database from API container
-docker-compose exec api python -c "
-import asyncio
-from app.database import engine
-
-async def test():
-    async with engine.begin() as conn:
-        result = await conn.execute('SELECT 1')
-        print('Database connected!')
-
-asyncio.run(test())
-"
-
-# Test API endpoint
-curl http://localhost:8000/
-
-# Test web frontend
-curl http://localhost/
-```
+Wait for the API log to show `Server listening on http://0.0.0.0:8000` and the seed line `[seed] ensured default admin user`, then open http://localhost.
 
 ---
 
-## Quick Diagnostic Script
+## 6. URLs cheat-sheet
 
-Save this as `diagnose_docker.ps1`:
+| Service     | URL                                  |
+| ----------- | ------------------------------------ |
+| Web         | http://localhost                     |
+| API root    | http://localhost:8000                |
+| Health      | http://localhost:8000/api/health     |
+| Readiness   | http://localhost:8000/api/ready      |
+| Mongo       | `mongo:27017` (only inside the compose network) |
 
-```powershell
-Write-Host "=== Docker Diagnostics ===" -ForegroundColor Cyan
-
-Write-Host "`n1. Checking Docker status..." -ForegroundColor Yellow
-docker --version
-
-Write-Host "`n2. Checking running containers..." -ForegroundColor Yellow
-docker ps
-
-Write-Host "`n3. Checking container status..." -ForegroundColor Yellow
-docker-compose ps
-
-Write-Host "`n4. Checking web logs..." -ForegroundColor Yellow
-docker-compose logs web --tail=20
-
-Write-Host "`n5. Checking API logs..." -ForegroundColor Yellow
-docker-compose logs api --tail=20
-
-Write-Host "`n6. Testing API endpoint..." -ForegroundColor Yellow
-curl http://localhost:8000/ -UseBasicParsing
-
-Write-Host "`n7. Testing web endpoint..." -ForegroundColor Yellow
-curl http://localhost/ -UseBasicParsing
-
-Write-Host "`n=== Diagnostics Complete ===" -ForegroundColor Cyan
-```
-
-Run it:
-```bash
-powershell -ExecutionPolicy Bypass -File diagnose_docker.ps1
-```
-
----
-
-## Expected URLs
-
-Once everything is running:
-
-| Service | URL | Purpose |
-|---------|-----|---------|
-| **Frontend** | http://localhost | Main application |
-| **API** | http://localhost:8000 | Backend API |
-| **API Docs** | http://localhost:8000/docs | API documentation |
-| **Database** | localhost:5432 | PostgreSQL (internal) |
-
----
-
-## Verification Checklist
-
-- [ ] Docker Desktop is running
-- [ ] All 3 containers are "Up" (db, api, web)
-- [ ] No errors in logs
-- [ ] http://localhost:8000 returns API response
-- [ ] http://localhost returns website
-- [ ] Can login with admin@iiconacademy.com / Admin@1234
-
----
-
-## Still Not Working?
-
-### Collect Information:
-
-```bash
-# 1. Container status
-docker-compose ps > docker_status.txt
-
-# 2. All logs
-docker-compose logs > docker_logs.txt
-
-# 3. System info
-docker info > docker_info.txt
-
-# 4. Network info
-docker network ls > docker_networks.txt
-```
-
-Then check these files for errors.
-
----
-
-## Most Common Solution
-
-**90% of the time, the issue is:**
-
-1. **Docker Desktop not running** → Start Docker Desktop
-2. **Port 80 in use** → Stop IIS or use different port
-3. **Containers not built** → Run `docker-compose build`
-
-**Try this:**
-```bash
-# 1. Make sure Docker Desktop is running
-# 2. Then run:
-docker-compose down
-docker-compose build
-docker-compose up -d
-docker-compose logs -f
-```
-
-Wait for all containers to start, then open: http://localhost
-
----
-
-## Need More Help?
-
-1. Check `docker-compose logs web` for web errors
-2. Check `docker-compose logs api` for API errors
-3. Check `docker-compose logs db` for database errors
-4. Make sure Docker Desktop is running
-5. Make sure no other service is using port 80
-
----
-
-**Most likely issue:** Docker Desktop is not running. Start it and try again! 🚀
+Default login: `admin@iiconacademy.com` / `Admin@1234`.

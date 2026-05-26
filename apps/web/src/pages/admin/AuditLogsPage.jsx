@@ -6,9 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, ShieldAlert, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ShieldAlert, Filter, X, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
 
 const ACTION_OPTIONS = [
   { value: 'all', label: 'All Actions' },
@@ -47,8 +48,8 @@ const AuditLogsPage = () => {
       const token = pb.authStore.token;
       const params = new URLSearchParams({ page, per_page: perPage });
       if (actionFilter !== 'all') params.set('action', actionFilter);
-      if (dateFrom) params.set('date_from', dateFrom);
-      if (dateTo) params.set('date_to', dateTo);
+      if (dateFrom) params.set('from', dateFrom);
+      if (dateTo) params.set('to', dateTo);
 
       const resp = await fetch(`/api/auditLogs?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -62,6 +63,31 @@ const AuditLogsPage = () => {
       setLoading(false);
     }
   }, [page, actionFilter, dateFrom, dateTo]);
+
+  const handleExport = async () => {
+    try {
+      const token = pb.authStore.token;
+      const params = new URLSearchParams();
+      if (actionFilter !== 'all') params.set('action', actionFilter);
+      if (dateFrom) params.set('from', dateFrom);
+      if (dateTo) params.set('to', dateTo);
+      const resp = await fetch(`/api/auditLogs/export?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error('Export failed');
+      const blob = await resp.blob();
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(link.href);
+      toast.success('Audit logs exported');
+    } catch (err) {
+      toast.error(err?.message || 'Failed to export audit logs');
+    }
+  };
 
   useEffect(() => {
     fetchLogs();
@@ -91,9 +117,14 @@ const AuditLogsPage = () => {
 
   return (
     <PageTransition>
-      <div className="mb-6">
-        <h1 className="text-3xl font-poppins font-bold text-foreground">Audit Logs</h1>
-        <p className="text-muted-foreground mt-1">Comprehensive security and activity tracking.</p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-poppins font-bold text-foreground">Audit Logs</h1>
+          <p className="text-muted-foreground mt-1">Comprehensive security and activity tracking.</p>
+        </div>
+        <Button variant="outline" onClick={handleExport}>
+          <Download className="w-4 h-4 mr-2" /> Export CSV
+        </Button>
       </div>
 
       {/* Filters */}

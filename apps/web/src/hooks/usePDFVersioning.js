@@ -15,15 +15,16 @@ export const usePDFVersioning = () => {
       const pdf = await client.fetch(`/pdfs/${pdfId}`);
       const nextVersion = (pdf.currentVersion || 0) + 1;
 
-      // Create new version record
+      // All text fields MUST come before the file field so @fastify/multipart
+      // can read them before hitting the file boundary in the stream.
       const formData = new FormData();
       formData.append('pdfId', pdfId);
-      formData.append('versionNumber', nextVersion);
+      formData.append('versionNumber', String(nextVersion));
       formData.append('uploadedBy', uploadedBy);
-      formData.append('fileSize', file.size);
+      formData.append('fileSize', String(file.size));
       formData.append('versionNotes', notes || '');
-      formData.append('pdfFile', file);
-      formData.append('isCurrent', true);
+      formData.append('isCurrent', 'true');
+      formData.append('pdfFile', file);  // file LAST
 
       const versionRecord = await client.fetch('/pdfVersions', 'POST', formData);
 

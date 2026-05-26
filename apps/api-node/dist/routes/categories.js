@@ -18,17 +18,56 @@ const parseBody = (body) => ({
 export const registerCategoryRoutes = async (app) => {
     app.get("/api/categories", { preHandler: requireAuth }, async () => {
         const rows = await Category.find({ is_archived: { $ne: true } }).sort({ display_order: 1, created: -1 }).lean();
-        const { Pdf } = await import("../models/index.js");
-        const counts = await Pdf.aggregate([
-            { $match: { deleted_at: null } },
-            { $group: { _id: "$category_id", count: { $sum: 1 } } }
+        const { Pdf, SubCategory: SubCat } = await import("../models/index.js");
+        const [counts, subCats] = await Promise.all([
+            Pdf.aggregate([
+                { $match: { deleted_at: null } },
+                { $group: { _id: "$category_id", count: { $sum: 1 } } }
+            ]),
+            SubCat.find({}).sort({ display_order: 1 }).lean()
         ]);
         const countMap = new Map(counts.map((c) => [c._id, c.count]));
+        const subCatMap = new Map();
+        for (const s of subCats) {
+            const arr = subCatMap.get(s.category_id) ?? [];
+            arr.push(s);
+            subCatMap.set(s.category_id, arr);
+        }
         const items = rows.map((r) => ({
             ...serializeDoc(r),
-            pdfCount: countMap.get(r.id) ?? 0
+            pdfCount: countMap.get(r.id) ?? 0,
+            subCategories: (subCatMap.get(r.id) ?? []).map((s) => serializeDoc(s))
         }));
         return listResponse(items);
+    });
+    // Get all PDFs mapped to a specific category
+    app.get("/api/categories/:cat_id/pdfs", { preHandler: requireAuth }, async (request, reply) => {
+        const params = z.object({ cat_id: z.string() }).parse(request.params);
+        const query = z
+            .object({
+            page: z.coerce.number().default(1),
+            per_page: z.coerce.number().default(50),
+            status: z.string().optional(),
+            is_active: z.coerce.boolean().optional()
+        })
+            .parse(request.query);
+        const cat = await Category.findOne({ id: params.cat_id });
+        if (!cat)
+            return reply.status(404).send({ detail: "Category not found" });
+        const { Pdf, SubCategory: SubCat } = await import("../models/index.js");
+        const { enrichPdfs } = await import("../lib/pdfEnrich.js");
+        const filter = { category_id: params.cat_id, deleted_at: null };
+        if (query.status)
+            filter.status = query.status;
+        if (query.is_active !== undefined)
+            filter.is_active = query.is_active;
+        const skip = (query.page - 1) * query.per_page;
+        const [rows, total] = await Promise.all([
+            Pdf.find(filter).sort({ created: -1 }).skip(skip).limit(query.per_page).lean(),
+            Pdf.countDocuments(filter)
+        ]);
+        const enriched = await enrichPdfs(rows);
+        return listResponse(enriched, total);
     });
     app.post("/api/categories", { preHandler: requirePermission(PERMISSIONS.CATEGORY_MANAGE) }, async (request, reply) => {
         const raw = parseBody(z.record(z.string(), z.unknown()).parse(request.body));

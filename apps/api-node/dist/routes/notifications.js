@@ -4,6 +4,7 @@ import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
 import { pushNotification } from "../services/realtime.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
+import { createAndSendNotification } from "../services/notificationChannels.js";
 const SCHOOL_ROLES = ["school", "school_admin", "school_viewer", "teacher"];
 export const registerNotificationRoutes = async (app) => {
     app.get("/api/notifications", { preHandler: requireAuth }, async (request) => {
@@ -100,49 +101,28 @@ export const registerNotificationRoutes = async (app) => {
             const personalizedMessage = body.message.replace(/\{SchoolName\}/g, schoolName);
             const personalizedSubject = body.subject.replace(/\{SchoolName\}/g, schoolName);
             for (const channel of channels) {
-                let status = "pending";
-                let error = null;
-                if (channel === "in_app") {
-                    status = "sent";
+                if (!["in_app", "email", "whatsapp"].includes(channel)) {
+                    created += 1;
+                    failed += 1;
+                    if (errors.length < 10)
+                        errors.push({ recipientId: user.id, channel, error: `Unsupported channel: ${channel}` });
+                    continue;
                 }
-                else if (channel === "email") {
-                    if (user.email) {
-                        status = "sent";
-                    }
-                    else {
-                        status = "failed";
-                        error = "User email not available";
-                    }
-                }
-                else if (channel === "whatsapp") {
-                    status = user.mobile_number ? "sent" : "failed";
-                    if (!user.mobile_number)
-                        error = "Mobile number not available";
-                }
-                else {
-                    status = "failed";
-                    error = `Unsupported channel: ${channel}`;
-                }
-                const notif = await Notification.create({
-                    recipient_id: user.id,
+                const notif = await createAndSendNotification({
+                    recipient: user,
+                    method: channel,
                     type: body.type,
                     subject: personalizedSubject,
-                    message: personalizedMessage,
-                    notification_method: channel,
-                    status,
-                    read: false
+                    message: personalizedMessage
                 });
                 created += 1;
-                if (status === "sent") {
+                if (notif.status === "sent") {
                     sent += 1;
-                    if (channel === "in_app") {
-                        pushNotification(user.id, serializeDoc(notif.toObject()));
-                    }
                 }
                 else {
                     failed += 1;
-                    if (error && errors.length < 10) {
-                        errors.push({ recipientId: user.id, channel, error });
+                    if (notif.error_message && errors.length < 10) {
+                        errors.push({ recipientId: user.id, channel, error: notif.error_message });
                     }
                 }
             }

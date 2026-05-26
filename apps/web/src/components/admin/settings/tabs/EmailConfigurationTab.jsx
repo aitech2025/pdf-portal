@@ -59,10 +59,7 @@ const EmailConfigurationTab = ({ settings, onSave, saving }) => {
                 value={localSettings.emailProvider} 
                 onValueChange={(v) => handleChange('emailProvider', v)}
                 options={[
-                  { value: 'smtp', label: 'Custom SMTP' },
-                  { value: 'sendgrid', label: 'SendGrid' },
-                  { value: 'mailgun', label: 'Mailgun' },
-                  { value: 'ses', label: 'AWS SES' }
+                  { value: 'smtp', label: 'Nodemailer SMTP' }
                 ]}
                 disabled={saving}
               />

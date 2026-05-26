@@ -7,7 +7,8 @@ import {
   Pdf,
   School,
   SchoolCategoryAccess,
-  User
+  User,
+  ViewLog
 } from "../models/index.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
@@ -20,7 +21,8 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
       active_school_count,
       pdf_count,
       pending_onboarding,
-      active_sessions
+      active_sessions,
+      storageAgg
     ] = await Promise.all([
       User.countDocuments(),
       School.countDocuments(),
@@ -31,13 +33,33 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
         token_type: "refresh",
         revoked_at: null,
         expires_at: { $gt: new Date() }
-      })
+      }),
+      Pdf.aggregate([
+        { $match: { deleted_at: null } },
+        { $group: { _id: null, totalBytes: { $sum: "$file_size" } } }
+      ])
     ]);
 
     const topDownloads = await DownloadLog.aggregate([
       { $group: { _id: "$pdf_id", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 5 }
+    ]);
+
+    const storageByTenant = await Pdf.aggregate([
+      { $match: { deleted_at: null } },
+      {
+        $lookup: {
+          from: "schoolcategoryaccesses",
+          localField: "category_id",
+          foreignField: "category_id",
+          as: "grants"
+        }
+      },
+      { $unwind: "$grants" },
+      { $group: { _id: "$grants.school_id", bytes: { $sum: "$file_size" }, files: { $sum: 1 } } },
+      { $sort: { bytes: -1 } },
+      { $limit: 10 }
     ]);
 
     return {
@@ -48,7 +70,13 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
       pdf_count,
       pending_onboarding,
       active_sessions,
-      top_downloads: topDownloads
+      top_downloads: topDownloads,
+      storage_bytes: storageAgg[0]?.totalBytes ?? 0,
+      storage_by_school: storageByTenant.map((s) => ({
+        school_id: s._id,
+        bytes: s.bytes,
+        files: s.files
+      }))
     };
   });
 
@@ -64,14 +92,117 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
 
   app.get("/api/analytics/school", { preHandler: requireAuth }, async (request) => {
     const schoolId = request.authUser?.school_id;
-    if (!schoolId) return { assigned_categories: 0, available_pdfs: 0, recent_downloads: 0 };
+    const userId = request.authUser?.sub;
+    if (!schoolId) {
+      return {
+        assigned_categories: 0,
+        available_pdfs: 0,
+        recent_downloads: 0,
+        my_downloads: 0,
+        downloads_last_30d: 0,
+        new_pdfs_last_7d: 0,
+        downloads_by_category: [],
+        recent_uploads: [],
+        recently_viewed: [],
+        storage_bytes: 0
+      };
+    }
     const grants = await SchoolCategoryAccess.find({ school_id: schoolId }).lean();
     const categoryIds = grants.map((g) => g.category_id);
-    const [available_pdfs, recent_downloads, assigned_categories] = await Promise.all([
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      available_pdfs,
+      recent_downloads,
+      my_downloads,
+      downloads_last_30d,
+      new_pdfs_last_7d,
+      downloadsByCategoryRaw,
+      recent_uploads_raw,
+      storageAgg,
+      recentlyViewedRaw
+    ] = await Promise.all([
       Pdf.countDocuments({ category_id: { $in: categoryIds }, deleted_at: null, status: "approved", is_active: true }),
       DownloadLog.countDocuments({ school_id: schoolId }),
-      grants.length
+      userId ? DownloadLog.countDocuments({ school_id: schoolId, user_id: userId }) : Promise.resolve(0),
+      DownloadLog.countDocuments({ school_id: schoolId, downloaded_at: { $gte: thirtyDaysAgo } }),
+      Pdf.countDocuments({
+        category_id: { $in: categoryIds },
+        deleted_at: null,
+        status: "approved",
+        is_active: true,
+        created: { $gte: sevenDaysAgo }
+      }),
+      DownloadLog.aggregate([
+        { $match: { school_id: schoolId, category_id: { $in: categoryIds } } },
+        { $group: { _id: "$category_id", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ]),
+      Pdf.find({
+        category_id: { $in: categoryIds },
+        deleted_at: null,
+        status: "approved",
+        is_active: true
+      })
+        .sort({ created: -1 })
+        .limit(6)
+        .lean(),
+      Pdf.aggregate([
+        { $match: { category_id: { $in: categoryIds }, deleted_at: null } },
+        { $group: { _id: null, totalBytes: { $sum: "$file_size" } } }
+      ]),
+      userId
+        ? ViewLog.aggregate([
+            { $match: { user_id: userId } },
+            { $sort: { viewed_at: -1 } },
+            { $group: { _id: "$pdf_id", last_viewed: { $first: "$viewed_at" } } },
+            { $sort: { last_viewed: -1 } },
+            { $limit: 6 }
+          ])
+        : Promise.resolve([])
     ]);
-    return { assigned_categories, available_pdfs, recent_downloads };
+
+    // Resolve category names for downloads_by_category
+    const downloadCatIds = downloadsByCategoryRaw.map((d) => d._id).filter(Boolean);
+    const catLookup = downloadCatIds.length
+      ? await (await import("../models/index.js")).Category.find({ id: { $in: downloadCatIds } }).lean()
+      : [];
+    const catNameMap = new Map(catLookup.map((c) => [c.id, c.category_name]));
+    const downloads_by_category = downloadsByCategoryRaw.map((d) => ({
+      category_id: d._id,
+      category_name: catNameMap.get(d._id) ?? "Unknown",
+      count: d.count
+    }));
+
+    const { enrichPdfs } = await import("../lib/pdfEnrich.js");
+    const recent_uploads = await enrichPdfs(recent_uploads_raw as Record<string, unknown>[]);
+
+    // Hydrate recently viewed list (preserve aggregation order)
+    const viewedIds = (recentlyViewedRaw as Array<{ _id: string; last_viewed: Date }>).map((r) => r._id);
+    const recentlyViewedPdfs = viewedIds.length
+      ? await Pdf.find({ id: { $in: viewedIds }, deleted_at: null }).lean()
+      : [];
+    const viewedMap = new Map<string, Record<string, unknown>>(recentlyViewedPdfs.map((p) => [p.id, p]));
+    const orderedViewed = viewedIds.map((id) => viewedMap.get(id)).filter(Boolean) as Record<string, unknown>[];
+    const recently_viewed_enriched = await enrichPdfs(orderedViewed);
+    const recently_viewed = recently_viewed_enriched.map((p, idx) => ({
+      ...p,
+      last_viewed: (recentlyViewedRaw as Array<{ _id: string; last_viewed: Date }>)[idx]?.last_viewed
+    }));
+
+    return {
+      assigned_categories: grants.length,
+      available_pdfs,
+      recent_downloads,
+      my_downloads,
+      downloads_last_30d,
+      new_pdfs_last_7d,
+      downloads_by_category,
+      recent_uploads,
+      recently_viewed,
+      storage_bytes: storageAgg[0]?.totalBytes ?? 0
+    };
   });
 };

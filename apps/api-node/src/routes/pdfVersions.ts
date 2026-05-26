@@ -6,8 +6,15 @@ import { requireCurrentUser } from "../lib/access.js";
 
 export const registerPdfVersionRoutes = async (app: FastifyInstance): Promise<void> => {
   app.get("/api/pdfVersions", { preHandler: requireAuth }, async (request) => {
-    const query = z.object({ pdf_id: z.string().optional() }).parse(request.query);
-    return PdfVersion.find(query.pdf_id ? { pdf_id: query.pdf_id } : {}).sort({ version_number: -1 });
+    const query = z
+      .object({
+        pdf_id: z.string().optional(),
+        pdfId: z.string().optional(),
+        filter: z.string().optional()
+      })
+      .parse(request.query);
+    const filterPdfId = query.pdf_id ?? query.pdfId ?? query.filter?.match(/pdfId\s*=\s*"([^"]+)"/)?.[1];
+    return PdfVersion.find(filterPdfId ? { pdf_id: filterPdfId } : {}).sort({ version_number: -1 });
   });
 
   app.get("/api/pdfVersions/:version_id/download", { preHandler: requireAuth }, async (request, reply) => {
@@ -28,7 +35,7 @@ export const registerPdfVersionRoutes = async (app: FastifyInstance): Promise<vo
       const file = await request.file();
       if (!file) return reply.status(400).send({ detail: "File is required" });
       const fields = file.fields as Record<string, Array<{ value: string }>>;
-      const pdfId = fields.pdf_id?.[0]?.value;
+      const pdfId = fields.pdf_id?.[0]?.value ?? fields.pdfId?.[0]?.value;
       if (!pdfId) return reply.status(400).send({ detail: "pdf_id is required" });
       const pdf = await Pdf.findOne({ id: pdfId });
       if (!pdf) return reply.status(404).send({ detail: "PDF not found" });
@@ -43,14 +50,14 @@ export const registerPdfVersionRoutes = async (app: FastifyInstance): Promise<vo
         file_data: data,
         file_size: data.length,
         uploaded_by: user.id,
-        version_notes: fields.version_notes?.[0]?.value ?? "",
+        version_notes: fields.version_notes?.[0]?.value ?? fields.versionNotes?.[0]?.value ?? "",
         is_current: true
       });
       pdf.file_data = data;
       pdf.file_size = data.length;
       pdf.current_version = nextVersion;
       pdf.version_count = nextVersion;
-      pdf.version_notes = fields.version_notes?.[0]?.value ?? pdf.version_notes;
+      pdf.version_notes = fields.version_notes?.[0]?.value ?? fields.versionNotes?.[0]?.value ?? pdf.version_notes;
       await pdf.save();
       return version;
     }

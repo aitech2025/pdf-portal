@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, Eye, Filter, Plus, Building2, CheckCircle2, XCircle, RotateCcw } from 'lucide-react';
+import { Search, Eye, Filter, Plus, Building2, CheckCircle2, XCircle, RotateCcw, FolderTree } from 'lucide-react';
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import RequestDetailPanel from '@/components/RequestDetailPanel.jsx';
@@ -332,6 +332,17 @@ const SchoolsAndUsersPage = () => {
                               <CheckCircle2 className="w-3 h-3 mr-1" /> Activate
                             </Button>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs hover:bg-primary/10 hover:text-primary"
+                            onClick={() => {
+                              setCategoryAssignmentSchool({ id: school.id, name: school.schoolName });
+                              setIsCategoryAssignmentOpen(true);
+                            }}
+                          >
+                            <FolderTree className="w-3 h-3 mr-1" /> Categories
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"

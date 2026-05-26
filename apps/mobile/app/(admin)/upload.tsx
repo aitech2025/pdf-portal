@@ -54,8 +54,18 @@ export default function UploadScreen() {
                 categoriesApi.listCategories(),
                 categoriesApi.listSubCategories(null),
             ]);
-            setCategories(cats.items ?? cats ?? []);
-            setSubCategories(subs.items ?? subs ?? []);
+            // Backend returns categoryName / subCategoryName (camelCase via serializeDoc)
+            const catItems = (cats.items ?? cats ?? []).map((c: any) => ({
+                id: c.id,
+                name: c.categoryName ?? c.name ?? '',
+            }));
+            const subItems = (subs.items ?? subs ?? []).map((s: any) => ({
+                id: s.id,
+                name: s.subCategoryName ?? s.name ?? '',
+                categoryId: s.categoryId ?? s.category_id ?? '',
+            }));
+            setCategories(catItems);
+            setSubCategories(subItems);
         } catch (e) {
             console.error('Failed to load categories', e);
         }
@@ -104,17 +114,20 @@ export default function UploadScreen() {
             const apiUrl = Constants.expoConfig?.extra?.apiUrl ?? 'http://localhost:8000';
 
             const formData = new FormData();
-            formData.append('file', {
-                uri: pickedFile.uri,
-                name: pickedFile.name,
-                type: pickedFile.mimeType ?? 'application/pdf',
-            } as any);
+            // All text fields MUST come before the file field so @fastify/multipart
+            // can read them before it hits the file boundary in the stream.
             formData.append('fileName', form.fileName.trim());
             formData.append('categoryId', form.categoryId);
             if (form.subCategoryId) formData.append('subCategoryId', form.subCategoryId);
             if (form.description.trim()) formData.append('description', form.description.trim());
             if (form.tags.trim()) formData.append('tags', form.tags.trim());
             if (form.email.trim()) formData.append('email', form.email.trim());
+            // File field LAST
+            formData.append('file', {
+                uri: pickedFile.uri,
+                name: pickedFile.name,
+                type: pickedFile.mimeType ?? 'application/pdf',
+            } as any);
 
             // Simulate progress since fetch doesn't support progress natively
             const progressInterval = setInterval(() => {

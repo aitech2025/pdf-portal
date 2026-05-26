@@ -19,11 +19,11 @@ export const REJECTION_REASONS = [
 
 export function formatPDFData(pdf) {
   if (!pdf) return null;
-  
+
   // Since the base schema only has isActive, we infer status
   // If the backend added a status field, we use it, otherwise fallback
   let status = MODERATION_STATUSES.PENDING;
-  
+
   if (pdf.status) {
     // If backend hook uses a dedicated status field
     status = pdf.status.charAt(0).toUpperCase() + pdf.status.slice(1);
@@ -40,7 +40,7 @@ export function formatPDFData(pdf) {
     computedStatus: status,
     uploaderName: pdf.expand?.userId?.name || pdf.expand?.userId?.email || 'System Upload',
     schoolName: pdf.expand?.schoolId?.schoolName || 'Global',
-    categoryName: pdf.expand?.categoryId?.categoryName || 'Uncategorized'
+    categoryName: pdf.categoryName || pdf.expand?.categoryId?.categoryName || 'Uncategorized'
   };
 }
 
@@ -84,7 +84,7 @@ export function exportPDFsToCSV(pdfs, filename = 'moderation_export.csv') {
   const csv = Papa.unparse(data);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  
+
   if (navigator.msSaveBlob) {
     navigator.msSaveBlob(blob, filename);
   } else {

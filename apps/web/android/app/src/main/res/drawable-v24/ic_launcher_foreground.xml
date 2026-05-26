@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Brand mark: rounded square with white "i" -->
+    <path
+        android:pathData="M30 30h48a8 8 0 0 1 8 8v32a8 8 0 0 1 -8 8h-48a8 8 0 0 1 -8 -8v-32a8 8 0 0 1 8 -8z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="30"
+                android:startY="30"
+                android:endX="86"
+                android:endY="78">
+                <item android:offset="0.0" android:color="#5B5FF1" />
+                <item android:offset="0.55" android:color="#7C5BF1" />
+                <item android:offset="1.0" android:color="#06B6D4" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Stem of "i" -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M51 48h6v22h-6z" />
+    <!-- Dot of "i" -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54 38m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+</vector>

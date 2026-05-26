@@ -13,8 +13,17 @@ const EnvSchema = z.object({
   ACCESS_TOKEN_EXPIRE_MINUTES: z.coerce.number().default(60),
   REFRESH_TOKEN_EXPIRE_DAYS: z.coerce.number().default(7),
   DEFAULT_ADMIN_EMAIL: z.string().default("admin@iiconacademy.com"),
-  DEFAULT_ADMIN_PASSWORD: z.string().default("admin123"),
+  DEFAULT_ADMIN_PASSWORD: z.string().default("Admin@1234"),
   DEFAULT_ADMIN_NAME: z.string().default("Platform Admin"),
+  /**
+   * When `"true"`, the default admin password is force-reset to
+   * DEFAULT_ADMIN_PASSWORD on every boot (and the account is unlocked).
+   * Intended as a one-time rescue switch — flip back to `false` in production.
+   */
+  RESET_DEFAULT_ADMIN_PASSWORD: z
+    .string()
+    .default("false")
+    .transform((v) => ["1", "true", "yes", "on"].includes(v.toLowerCase())),
   UPLOAD_DIR: z.string().default("/data/uploads")
 });
 

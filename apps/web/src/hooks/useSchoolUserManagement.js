@@ -77,8 +77,9 @@ export const useSchoolUserManagement = () => {
     setLoading(true);
     try {
       const response = await client.fetch('/users', 'GET', null, {
-        filter: `schoolId = "${schoolId}"`,
-        sort: '-created'
+        schoolId,
+        sort: '-created',
+        per_page: 100
       });
       return response.items || response;
     } catch (err) {

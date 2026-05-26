@@ -2,6 +2,8 @@ import { MaintenanceMode } from "../models/index.js";
 import { isSuperAdmin } from "../lib/permissions.js";
 const PUBLIC_PATHS = [
     "/health",
+    "/api/health",
+    "/api/ready",
     "/api/auth/login",
     "/api/auth/refresh",
     "/api/auth/forgot-password",

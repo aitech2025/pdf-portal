@@ -30,9 +30,10 @@ export function useSystemSettings() {
     setLoading(true);
     try {
       const data = await apiFetch('/api/systemSettings');
-      if (data && data.id) {
-        setRecordId(data.id);
-        setSettings(formatSettingsForDisplay(data));
+      const record = data?.items?.[0] || data;
+      if (record && record.id) {
+        setRecordId(record.id);
+        setSettings(formatSettingsForDisplay(record));
       } else {
         setSettings(DEFAULT_SETTINGS);
       }
@@ -56,8 +57,8 @@ export function useSystemSettings() {
     setSaving(true);
     try {
       const dataToSave = formatSettingsForSave(newSettings);
-      await apiFetch(`/api/systemSettings/${recordId}`, 'PATCH', dataToSave);
-      setSettings(formatSettingsForDisplay(dataToSave));
+      const saved = await apiFetch(`/api/systemSettings/${recordId}`, 'PATCH', dataToSave);
+      setSettings(formatSettingsForDisplay(saved || dataToSave));
       toast.success('Settings saved successfully');
       return true;
     } catch (error) {

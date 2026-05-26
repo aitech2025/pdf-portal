@@ -1,14 +1,19 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { z } from "zod";
 import { canAccessCategory, isPlatformRole, requireCurrentUser } from "../lib/access.js";
 import { auditUnauthorized, writeAudit } from "../lib/audit.js";
-import { generatePdfCode } from "../lib/codes.js";
-import { Category, DownloadLog, Pdf, PdfVersion, School, SchoolCategoryAccess } from "../models/index.js";
+import { generateMappedPdfCode } from "../lib/codes.js";
+import { Category, DownloadLog, Pdf, PdfVersion, School, SchoolCategoryAccess, SubCategory, ViewLog } from "../models/index.js";
 import { enrichPdfs } from "../lib/pdfEnrich.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
+
+// archiver is a CJS module; load via createRequire so it works under both Node ESM and Vite SSR (vitest)
+const nodeRequire = createRequire(import.meta.url);
+const archiver = nodeRequire("archiver") as typeof import("archiver");
 
 const watermarkHeaders = async (userId: string, schoolId: string | null | undefined) => {
   const { User } = await import("../models/index.js");
@@ -110,6 +115,13 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
     if (action === "preview") {
       pdf.view_count = (pdf.view_count ?? 0) + 1;
       await pdf.save();
+      await ViewLog.create({
+        school_id: user.school_id ?? null,
+        user_id: user.id,
+        pdf_id: pdf.id,
+        category_id: pdf.category_id ?? null,
+        sub_category_id: pdf.sub_category_id ?? null
+      });
     } else {
       pdf.download_count = (pdf.download_count ?? 0) + 1;
       await pdf.save();
@@ -145,30 +157,144 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
   app.get("/api/pdfs/:pdf_id/download", { preHandler: requireAuth }, (req, rep) => streamPdf(req, rep, "attachment", "download"));
   app.post("/api/pdfs/:pdf_id/print", { preHandler: requireAuth }, (req, rep) => streamPdf(req, rep, "inline", "print"));
 
+  app.post("/api/pdfs/bulk-download", { preHandler: requireAuth }, async (request, reply) => {
+    const user = await requireCurrentUser(request, reply);
+    if (!user) return;
+
+    const body = z
+      .object({
+        ids: z.array(z.string()).min(1).max(200),
+        archiveName: z.string().optional()
+      })
+      .parse(request.body);
+
+    const pdfs = await Pdf.find({ id: { $in: body.ids }, deleted_at: null }).lean();
+    if (pdfs.length === 0) return reply.status(404).send({ detail: "No PDFs found" });
+
+    // Authorisation: every PDF must be accessible to the user. Reject the whole archive otherwise.
+    const denied: string[] = [];
+    for (const pdf of pdfs) {
+      const ok = await canAccessCategory(user.id, user.role, user.school_id, pdf.category_id ?? null);
+      if (!ok) denied.push(pdf.id);
+    }
+    if (denied.length) {
+      for (const id of denied) await auditUnauthorized(user.id, "pdf_bulk_download", id, request);
+      return reply.status(403).send({ detail: "One or more PDFs are not accessible", denied });
+    }
+
+    const archiveName = (body.archiveName ?? `pdfs-${new Date().toISOString().slice(0, 10)}.zip`).replace(/[^\w.\-]+/g, "_");
+    const wm = await watermarkHeaders(user.id, user.school_id);
+
+    reply.header("Content-Type", "application/zip");
+    reply.header("Content-Disposition", `attachment; filename="${archiveName}"`);
+    reply.header("Cache-Control", "private, no-store");
+    for (const [k, v] of Object.entries(wm)) reply.header(k, v);
+
+    const archive = archiver("zip", { zlib: { level: 0 } });
+    archive.on("error", (err) => {
+      request.log.error({ err }, "archiver error");
+    });
+
+    // Track download events + audit + counters
+    for (const pdf of pdfs) {
+      if (!pdf.file_data) continue;
+      const entryName = (pdf.file_name ?? `${pdf.pdf_id ?? pdf.id}.pdf`).replace(/[\\/]/g, "_");
+      // pdf.file_data is stored as Mongo Binary; coerce to Node Buffer for archiver
+      const raw = pdf.file_data as unknown;
+      const buf: Buffer = Buffer.isBuffer(raw)
+        ? (raw as Buffer)
+        : Buffer.from((raw as { buffer: ArrayBufferLike }).buffer ?? (raw as ArrayBufferLike));
+      archive.append(buf, { name: entryName });
+
+      await Pdf.updateOne({ id: pdf.id }, { $inc: { download_count: 1 } });
+      if (user.school_id) {
+        await DownloadLog.create({
+          school_id: user.school_id,
+          user_id: user.id,
+          pdf_id: pdf.id,
+          category_id: pdf.category_id ?? null,
+          sub_category_id: pdf.sub_category_id ?? null,
+          download_type: "bulk"
+        });
+      }
+      await writeAudit({
+        user_id: user.id,
+        action: "download",
+        action_details: `bulk download PDF ${pdf.file_name}`,
+        resource_type: "pdf",
+        resource_id: pdf.id,
+        request
+      });
+    }
+
+    archive.finalize().catch((err) => request.log.error({ err }, "finalize failed"));
+    return reply.send(archive);
+  });
+
   app.post(
     "/api/pdfs",
     { preHandler: requirePermission(PERMISSIONS.PDF_UPLOAD) },
     async (request, reply) => {
       const user = await requireCurrentUser(request, reply);
       if (!user) return;
-      const file = await request.file();
-      if (!file) return reply.status(400).send({ detail: "File is required" });
-      const data = await file.toBuffer();
-      const fields = file.fields as Record<string, Array<{ value: string }>>;
-      const categoryId = fields.category_id?.[0]?.value ?? fields.categoryId?.[0]?.value ?? null;
-      const subCategoryId = fields.sub_category_id?.[0]?.value ?? fields.subCategoryId?.[0]?.value ?? null;
-      const description = fields.description?.[0]?.value ?? "";
 
-      let pdfCode: string | undefined;
-      if (categoryId) {
-        const cat = await Category.findOne({ id: categoryId });
-        if (cat?.category_code) pdfCode = await generatePdfCode(cat.category_code);
+      const fieldValues = new Map<string, string>();
+      let fileBuffer: Buffer | null = null;
+      let originalFilename = "upload.pdf";
+
+      for await (const part of request.parts()) {
+        if (part.type === "file") {
+          fileBuffer = await part.toBuffer();
+          originalFilename = part.filename ?? originalFilename;
+        } else if (part.type === "field" && typeof part.value === "string") {
+          fieldValues.set(part.fieldname, part.value);
+        }
       }
+
+      if (!fileBuffer) return reply.status(400).send({ detail: "File is required" });
+      const data = fileBuffer;
+
+      const fieldValue = (...names: string[]): string | null => {
+        for (const n of names) {
+          const v = fieldValues.get(n);
+          if (v !== undefined) return v;
+        }
+        return null;
+      };
+
+      const categoryId = fieldValue("category_id", "categoryId");
+      const subCategoryId = fieldValue("sub_category_id", "subCategoryId");
+      const description = fieldValue("description") ?? "";
+      const requestedFileName = fieldValue("fileName", "file_name") ?? originalFilename;
+      const requestedStatus = fieldValue("status") ?? undefined;
+      const requestedIsActive = fieldValue("isActive", "is_active") ?? undefined;
+      const versionNotes = fieldValue("versionNotes", "version_notes") ?? "Initial version";
+
+      if (!categoryId || !subCategoryId) {
+        return reply.status(400).send({ detail: "categoryId and subCategoryId are required for every PDF upload" });
+      }
+
+      const [cat, subCat] = await Promise.all([
+        Category.findOne({ id: categoryId }),
+        SubCategory.findOne({ id: subCategoryId })
+      ]);
+      if (!cat) return reply.status(404).send({ detail: "Category not found" });
+      if (!subCat) return reply.status(404).send({ detail: "Sub-category not found" });
+      if (subCat.category_id !== categoryId) {
+        return reply.status(400).send({ detail: "Sub-category does not belong to the selected category" });
+      }
+
+      const pdfCode = await generateMappedPdfCode(cat.category_name, subCat.sub_category_name);
+      const isActive =
+        requestedIsActive === undefined
+          ? isPlatformRole(user.role)
+          : requestedIsActive === "true" || requestedIsActive === "1";
+      const status = requestedStatus ?? (isPlatformRole(user.role) ? "approved" : "pending");
 
       const checksum = createHash("sha256").update(data).digest("hex");
       const doc = await Pdf.create({
-        file_name: file.filename,
-        original_file_name: file.filename,
+        file_name: requestedFileName,
+        original_file_name: originalFilename,
         file_path: "",
         file_data: data,
         file_size: data.length,
@@ -178,8 +304,9 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
         uploaded_by: user.id,
         pdf_id: pdfCode,
         description,
-        status: isPlatformRole(user.role) ? "approved" : "pending",
-        is_active: isPlatformRole(user.role)
+        status,
+        is_active: isActive,
+        version_notes: versionNotes
       });
       await PdfVersion.create({
         pdf_id: doc.id,
@@ -188,7 +315,7 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
         file_data: data,
         file_size: data.length,
         uploaded_by: user.id,
-        version_notes: "Initial version",
+        version_notes: versionNotes,
         is_current: true
       });
       await writeAudit({
@@ -199,6 +326,58 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
         request
       });
       return serializeDoc(doc.toObject() as Record<string, unknown>);
+    }
+  );
+
+  app.post(
+    "/api/pdfs/bulk-reassign",
+    { preHandler: requirePermission(PERMISSIONS.PDF_UPLOAD) },
+    async (request, reply) => {
+      const body = z
+        .object({
+          ids: z.array(z.string()).min(1).max(500),
+          categoryId: z.string().optional(),
+          subCategoryId: z.string().optional(),
+          status: z.enum(["pending", "approved", "rejected"]).optional(),
+          isActive: z.boolean().optional()
+        })
+        .parse(request.body);
+
+      if (!body.categoryId && !body.subCategoryId && !body.status && body.isActive === undefined) {
+        return reply.status(400).send({ detail: "Provide at least one field to update" });
+      }
+
+      // Validate category / sub-category consistency when changing either one
+      if (body.subCategoryId) {
+        const sub = await SubCategory.findOne({ id: body.subCategoryId });
+        if (!sub) return reply.status(404).send({ detail: "Sub-category not found" });
+        if (body.categoryId && sub.category_id !== body.categoryId) {
+          return reply.status(400).send({ detail: "Sub-category does not belong to the selected category" });
+        }
+        if (!body.categoryId) body.categoryId = sub.category_id ?? undefined;
+      } else if (body.categoryId) {
+        const cat = await Category.findOne({ id: body.categoryId });
+        if (!cat) return reply.status(404).send({ detail: "Category not found" });
+      }
+
+      const update: Record<string, unknown> = {};
+      if (body.categoryId) update.category_id = body.categoryId;
+      if (body.subCategoryId) update.sub_category_id = body.subCategoryId;
+      if (body.status) update.status = body.status;
+      if (body.isActive !== undefined) update.is_active = body.isActive;
+
+      const result = await Pdf.updateMany({ id: { $in: body.ids }, deleted_at: null }, { $set: update });
+      const user = await requireCurrentUser(request, reply);
+      if (user) {
+        await writeAudit({
+          user_id: user.id,
+          action: "pdf_bulk_update",
+          action_details: `bulk-updated ${result.modifiedCount}/${body.ids.length} PDFs`,
+          resource_type: "pdf",
+          request
+        });
+      }
+      return { matched: result.matchedCount, modified: result.modifiedCount };
     }
   );
 

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { SettingSection, InputSetting, ToggleSetting, PasswordField, SelectSetting } from '../SettingComponents.jsx';
 import { Save, Send, MessageCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -11,35 +10,32 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
     const wa = settings?.integrations?.whatsapp || {};
 
     const [enabled, setEnabled] = useState(wa.enabled ?? false);
-    const [provider, setProvider] = useState(wa.provider || 'twilio');
-    const [accountSid, setAccountSid] = useState(wa.accountSid || '');
-    const [authToken, setAuthToken] = useState(wa.authToken || '');
+    const [provider, setProvider] = useState(wa.provider || 'waha');
     const [fromNumber, setFromNumber] = useState(wa.fromNumber || '');
     const [apiKey, setApiKey] = useState(wa.apiKey || '');
     const [apiUrl, setApiUrl] = useState(wa.apiUrl || '');
+    const [session, setSession] = useState(wa.session || 'default');
     const [testNumber, setTestNumber] = useState('');
     const [testing, setTesting] = useState(false);
 
     useEffect(() => {
         const w = settings?.integrations?.whatsapp || {};
         setEnabled(w.enabled ?? false);
-        setProvider(w.provider || 'twilio');
-        setAccountSid(w.accountSid || '');
-        setAuthToken(w.authToken || '');
+        setProvider(w.provider || 'waha');
         setFromNumber(w.fromNumber || '');
         setApiKey(w.apiKey || '');
         setApiUrl(w.apiUrl || '');
+        setSession(w.session || 'default');
     }, [settings]);
 
     const handleSave = () => {
         const whatsappConfig = {
             enabled,
             provider,
-            accountSid,
-            authToken,
             fromNumber,
             apiKey,
             apiUrl,
+            session,
         };
         onSave('integrations', {
             ...(settings?.integrations || {}),
@@ -103,55 +99,34 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
                             value={provider}
                             onValueChange={setProvider}
                             options={[
-                                { value: 'twilio', label: 'Twilio WhatsApp' },
-                                { value: 'meta', label: 'Meta (WhatsApp Business API)' },
-                                { value: 'wati', label: 'WATI' },
-                                { value: 'custom', label: 'Custom API' },
+                                { value: 'waha', label: 'WAHA self-hosted API' },
+                                { value: 'custom', label: 'Custom HTTP gateway' },
                             ]}
                             disabled={saving}
                         />
 
-                        {(provider === 'twilio') && (
+                        {provider === 'waha' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                 <InputSetting
-                                    label="Account SID"
-                                    value={accountSid}
-                                    onChange={(e) => setAccountSid(e.target.value)}
-                                    placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                                    disabled={saving}
-                                />
-                                <PasswordField
-                                    label="Auth Token"
-                                    value={authToken}
-                                    onChange={(e) => setAuthToken(e.target.value)}
-                                    placeholder="Your Twilio auth token"
+                                    label="WAHA Base URL"
+                                    value={apiUrl}
+                                    onChange={(e) => setApiUrl(e.target.value)}
+                                    placeholder="http://localhost:3000"
+                                    description="Self-hosted WAHA gateway URL"
                                     disabled={saving}
                                 />
                                 <InputSetting
-                                    label="From Number (WhatsApp)"
-                                    value={fromNumber}
-                                    onChange={(e) => setFromNumber(e.target.value)}
-                                    placeholder="whatsapp:+14155238886"
-                                    description="Must be a Twilio WhatsApp-enabled number"
+                                    label="Session"
+                                    value={session}
+                                    onChange={(e) => setSession(e.target.value)}
+                                    placeholder="default"
                                     disabled={saving}
                                 />
-                            </div>
-                        )}
-
-                        {(provider === 'meta' || provider === 'wati') && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                 <PasswordField
-                                    label="API Key / Access Token"
+                                    label="API Key (Optional)"
                                     value={apiKey}
                                     onChange={(e) => setApiKey(e.target.value)}
-                                    placeholder="Your API access token"
-                                    disabled={saving}
-                                />
-                                <InputSetting
-                                    label="From Number"
-                                    value={fromNumber}
-                                    onChange={(e) => setFromNumber(e.target.value)}
-                                    placeholder="+1234567890"
+                                    placeholder="Bearer token if your gateway requires one"
                                     disabled={saving}
                                 />
                             </div>

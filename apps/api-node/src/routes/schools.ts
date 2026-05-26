@@ -1,11 +1,43 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { School, User } from "../models/index.js";
+import { Category, School, SchoolCategoryAccess, User } from "../models/index.js";
 import { writeAudit } from "../lib/audit.js";
 import { createSchoolAdminUser, genSchoolId } from "../lib/schools.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
+import { createAndSendNotification } from "../services/notificationChannels.js";
+
+/** Create email + whatsapp credential notification logs for a newly created school admin */
+const sendCredentialNotifications = async (
+  userId: string,
+  userName: string,
+  userEmail: string,
+  schoolName: string,
+  schoolId: string,
+  password: string,
+  mobileNumber?: string | null
+): Promise<void> => {
+  const subject = "Welcome to i-icon Academy - Your School Account Credentials";
+  const message =
+    `Dear ${userName},\n\n` +
+    `Your school "${schoolName}" (ID: ${schoolId}) has been registered on i-icon Academy.\n\n` +
+    `Your login credentials:\n` +
+    `  Email: ${userEmail}\n` +
+    `  Password: ${password}\n\n` +
+    `Please log in and change your password immediately.\n\n` +
+    `Thank you,\ni-icon Academy Team`;
+
+  for (const method of ["email", "whatsapp"] as const) {
+    await createAndSendNotification({
+      recipient: { id: userId, email: userEmail, mobile_number: mobileNumber },
+      method,
+      type: "credential_delivery",
+      subject,
+      message
+    });
+  }
+};
 
 const parseSchoolBody = (body: Record<string, unknown>) => ({
   school_name: (body.schoolName ?? body.school_name) as string,
@@ -93,7 +125,7 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
     let generatedPassword: string | undefined;
     if (body.email) {
       try {
-        const { generatedPassword: pwd } = await createSchoolAdminUser({
+        const { user: adminUser, generatedPassword: pwd } = await createSchoolAdminUser({
           email: body.email,
           name: body.point_of_contact_name || body.school_name,
           schoolId: school.id,
@@ -101,6 +133,17 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
           password: body.password
         });
         generatedPassword = pwd;
+
+        // Send credential notifications (email + whatsapp logs)
+        await sendCredentialNotifications(
+          adminUser.id,
+          adminUser.name,
+          adminUser.email,
+          school.school_name,
+          school_id,
+          generatedPassword,
+          adminUser.mobile_number
+        );
       } catch (err) {
         await School.findOneAndDelete({ id: school.id });
         return reply.status(409).send({ detail: (err as Error).message });
@@ -130,6 +173,12 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
     const created = [];
     for (const row of body.schools) {
       const parsed = parseSchoolBody(row);
+      // Support category/categories columns: comma-separated category IDs or names.
+      const categoriesRaw = (row.categories ?? row.category ?? row.category_ids ?? row.categoryIds ?? "") as string;
+      const categoryIds = categoriesRaw
+        ? String(categoriesRaw).split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+
       const school_id = await genSchoolId();
       const school = await School.create({
         school_name: parsed.school_name,
@@ -138,23 +187,60 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
         address: parsed.address,
         email: parsed.email,
         mobile_number: parsed.mobile_number,
+        point_of_contact_name: parsed.point_of_contact_name,
+        point_of_contact_mobile: parsed.point_of_contact_mobile,
+        principal_name: parsed.principal_name,
+        grades: parsed.grades,
         is_active: parsed.is_active ?? true
       });
+
+      let generatedPassword: string | undefined;
       if (parsed.email) {
         try {
-          await createSchoolAdminUser({
+          const { user: adminUser, generatedPassword: pwd } = await createSchoolAdminUser({
             email: parsed.email,
             name: parsed.point_of_contact_name || parsed.school_name,
             schoolId: school.id,
             mobile_number: parsed.mobile_number
           });
+          generatedPassword = pwd;
+
+          // Send credential notifications (email + whatsapp logs)
+          await sendCredentialNotifications(
+            adminUser.id,
+            adminUser.name,
+            adminUser.email,
+            school.school_name,
+            school_id,
+            generatedPassword,
+            adminUser.mobile_number
+          );
         } catch {
           /* skip duplicate email schools in bulk */
         }
       }
-      created.push(serializeDoc(school.toObject()));
+
+      // Assign categories if provided
+      if (categoryIds.length) {
+        for (const catIdOrName of categoryIds) {
+          // Try by id first, then by name
+          const cat = await Category.findOne({
+            $or: [{ id: catIdOrName }, { category_name: new RegExp(`^${catIdOrName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }]
+          }).lean();
+          if (cat) {
+            await SchoolCategoryAccess.updateOne(
+              { school_id: school.id, category_id: cat.id },
+              { $setOnInsert: { school_id: school.id, category_id: cat.id } },
+              { upsert: true }
+            );
+          }
+        }
+      }
+
+      const result = serializeDoc(school.toObject());
+      created.push({ ...result, generatedPassword, status: "created" });
     }
-    return listResponse(created);
+    return { results: created, total: created.length, created: created.length };
   });
 
   app.patch("/api/schools/:school_id", { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) }, async (request, reply) => {

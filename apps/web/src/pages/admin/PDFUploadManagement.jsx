@@ -17,7 +17,6 @@ import VersionHistoryModal from '@/components/admin/pdfs/VersionHistoryModal.jsx
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatBytes, cn } from '@/lib/utils';
 import { usePDFVersioning } from '@/hooks/usePDFVersioning.js';
-import { generatePdfId } from '@/lib/pdfIdGenerator.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -51,7 +50,7 @@ const PDFUploadManagement = () => {
     setLoading(true);
     try {
       const [pdfRes, catRes, subCatRes] = await Promise.all([
-        pb.collection('pdfs').getList(1, 100, { sort: '-created', expand: 'categoryId,subCategoryId', $autoCancel: false }),
+        pb.collection('pdfs').getList(1, 100, { sort: '-created', $autoCancel: false }),
         pb.collection('categories').getList(1, 100, { sort: 'categoryName', $autoCancel: false }),
         pb.collection('subCategories').getList(1, 200, { sort: 'subCategoryName', $autoCancel: false })
       ]);
@@ -78,9 +77,6 @@ const PDFUploadManagement = () => {
     setUploading(true);
     setUploadProgress(0);
 
-    const category = categories.find(c => c.id === uploadCat);
-    const subCategory = subCategories.find(s => s.id === uploadSubCat);
-
     let successCount = 0;
     const totalFiles = files.length;
 
@@ -90,50 +86,50 @@ const PDFUploadManagement = () => {
       try {
         setUploadProgress(Math.floor((i / totalFiles) * 100) + 10);
 
+        // Check if a PDF with the same name already exists in this category/subcategory
         const existingRes = await pb.collection('pdfs').getList(1, 200, {
           subCategoryId: uploadSubCat,
           $autoCancel: false
         });
         const existingPdf = existingRes.items.find(
-          (p) => p.fileName === file.name && p.categoryId === uploadCat
+          (p) => (p.fileName || p.file_name) === file.name && (p.categoryId || p.category_id) === uploadCat
         );
 
         if (existingPdf) {
+          // Upload as a new version of the existing PDF
           await uploadNewVersion(existingPdf.id, file, versionNotes, currentUser.id);
           successCount++;
 
           if (i === files.length - 1) {
-            const fullRecord = await pb.collection('pdfs').getOne(existingPdf.id, { expand: 'categoryId', $autoCancel: false });
+            const fullRecord = await pb.collection('pdfs').getOne(existingPdf.id, { $autoCancel: false });
             setSelectedPdf(fullRecord);
             setIsUploadMode(false);
           }
         } else {
-          // Create new PDF
-          const newPdfId = await generatePdfId(category, subCategory);
-
+          // Create new PDF — backend auto-generates the pdf_id
           const formData = new FormData();
-          formData.append('pdf_id', newPdfId);
-          formData.append('file', file);
+          // All text fields MUST come before the file field
           formData.append('fileName', file.name);
           formData.append('categoryId', uploadCat);
           formData.append('subCategoryId', uploadSubCat);
           formData.append('isActive', 'true');
           formData.append('status', 'approved');
           formData.append('versionNotes', versionNotes || 'Initial upload');
+          formData.append('file', file);
 
           const newRecord = await pb.uploadPdf(formData);
 
           successCount++;
 
           if (i === files.length - 1) {
-            const fullRecord = await pb.collection('pdfs').getOne(newRecord.id, { expand: 'categoryId', $autoCancel: false });
+            const fullRecord = await pb.collection('pdfs').getOne(newRecord.id, { $autoCancel: false });
             setSelectedPdf(fullRecord);
             setIsUploadMode(false);
           }
         }
       } catch (err) {
         console.error(err);
-        toast.error(`Failed to process ${file.name}`);
+        toast.error(`Failed to process ${file.name}: ${err.message || 'Unknown error'}`);
       }
     }
 
@@ -166,9 +162,12 @@ const PDFUploadManagement = () => {
   };
 
   const filteredPdfs = pdfs.filter(p => {
-    const matchesSearch = p.fileName.toLowerCase().includes(search.toLowerCase()) ||
-      (p.pdf_id && p.pdf_id.toLowerCase().includes(search.toLowerCase()));
-    const matchesCat = selectedCat === 'all' || p.categoryId === selectedCat;
+    const name = p.fileName || p.file_name || '';
+    const pdfId = p.pdfId || p.pdf_id || '';
+    const matchesSearch = name.toLowerCase().includes(search.toLowerCase()) ||
+      pdfId.toLowerCase().includes(search.toLowerCase());
+    const catId = p.categoryId || p.category_id;
+    const matchesCat = selectedCat === 'all' || catId === selectedCat;
     return matchesSearch && matchesCat;
   });
 

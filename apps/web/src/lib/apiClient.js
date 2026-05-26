@@ -1,6 +1,6 @@
 /**
  * REST API client for the i-icon academy backend.
- * All requests go to the FastAPI backend at /api/*
+ * All requests go to the Fastify backend (apps/api-node) at /api/*.
  */
 
 const API_BASE = "/api";
@@ -321,11 +321,24 @@ class ApiClient {
                 const params = {
                     page,
                     per_page: perPage,
-                    ...options
                 };
-                // Remove PocketBase-specific params
-                delete params.$autoCancel;
-                delete params.expand;
+
+                // Copy all options except PocketBase-specific ones
+                for (const [k, v] of Object.entries(options)) {
+                    if (k === '$autoCancel' || k === 'expand') continue;
+                    if (k === 'filter') {
+                        // Parse simple PocketBase filter strings into real query params
+                        // e.g. 'categoryId="abc"' → { categoryId: 'abc' }
+                        // e.g. 'subCategoryId="abc"' → { subCategoryId: 'abc' }
+                        const filterStr = String(v);
+                        const matches = filterStr.matchAll(/(\w+)\s*=\s*["']([^"']+)["']/g);
+                        for (const m of matches) {
+                            params[m[1]] = m[2];
+                        }
+                        continue;
+                    }
+                    params[k] = v;
+                }
 
                 const result = await self.fetch(`/${name}`, 'GET', null, params);
                 return {

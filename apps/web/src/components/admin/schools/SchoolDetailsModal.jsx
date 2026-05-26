@@ -1,12 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
-import { School, MapPin, Mail, Phone, User, Calendar, FileText, Edit2, Trash2, Plus, Save, X } from 'lucide-react';
+import { School, MapPin, Mail, Phone, User, Calendar, FileText, Edit2, Trash2, Plus, Save, X, KeyRound, Copy, CheckCheck } from 'lucide-react';
 import { useSchoolUserManagement } from '@/hooks/useSchoolUserManagement.js';
 import UserSearchAndFilter from './UserSearchAndFilter.jsx';
 import UserListTable from './UserListTable.jsx';
@@ -43,6 +46,50 @@ const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingItem, setDeletingItem] = useState(null); // { type: 'School'|'User', item: obj }
+
+  // Reset password
+  const [resetUser, setResetUser] = useState(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetSendVia, setResetSendVia] = useState('both');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetResult, setResetResult] = useState(null);
+  const [copiedPwd, setCopiedPwd] = useState(false);
+
+  const openReset = (user) => {
+    setResetUser(user);
+    setResetResult(null);
+    setResetSendVia('both');
+    setResetOpen(true);
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetUser) return;
+    setResetLoading(true);
+    try {
+      const token = pb.authStore.token;
+      const resp = await fetch(`/api/users/${resetUser.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sendVia: resetSendVia }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || 'Failed to reset password');
+      setResetResult(data);
+      toast.success('Password reset successfully');
+    } catch (e) {
+      toast.error(e.message || 'Failed to reset password');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const copyResetPwd = () => {
+    if (resetResult?.generatedPassword) {
+      navigator.clipboard.writeText(resetResult.generatedPassword);
+      setCopiedPwd(true);
+      setTimeout(() => setCopiedPwd(false), 2000);
+    }
+  };
 
   const fetchData = async () => {
     if (!schoolId) return;
@@ -290,6 +337,7 @@ const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
                           onEdit={(u) => { setSelectedUser(u); setEditUserOpen(true); }}
                           onDelete={(u) => { setDeletingItem({ type: 'User', item: u }); setDeleteDialogOpen(true); }}
                           onToggleStatus={handleUserStatusToggle}
+                          onResetPassword={openReset}
                         />
                       </div>
                     </TabsContent>
@@ -318,6 +366,74 @@ const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
         user={selectedUser}
         onSaved={fetchData}
       />
+
+      <Dialog open={resetOpen} onOpenChange={(open) => { if (!open) { setResetOpen(false); setResetUser(null); setResetResult(null); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-primary" />
+              Reset Password
+            </DialogTitle>
+            <DialogDescription>
+              Generate a new password for <strong>{resetUser?.name || resetUser?.email}</strong>. They will be required to change it on their next login.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!resetResult ? (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Deliver new password via</Label>
+                <RadioGroup value={resetSendVia} onValueChange={setResetSendVia} className="space-y-1.5">
+                  <div className="flex items-center gap-2 p-2 rounded-md border border-border/50 bg-muted/30">
+                    <RadioGroupItem value="both" id="rv-both" />
+                    <Label htmlFor="rv-both" className="flex-1 cursor-pointer">Email + WhatsApp</Label>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-md border border-border/50 bg-muted/30">
+                    <RadioGroupItem value="email" id="rv-email" />
+                    <Label htmlFor="rv-email" className="flex-1 cursor-pointer">Email only</Label>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-md border border-border/50 bg-muted/30">
+                    <RadioGroupItem value="whatsapp" id="rv-wa" />
+                    <Label htmlFor="rv-wa" className="flex-1 cursor-pointer">WhatsApp only</Label>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 rounded-md border border-border/50 bg-muted/30">
+                    <RadioGroupItem value="manual" id="rv-manual" />
+                    <Label htmlFor="rv-manual" className="flex-1 cursor-pointer">Show me only (no email)</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setResetOpen(false)} disabled={resetLoading}>Cancel</Button>
+                <Button onClick={handleResetPassword} disabled={resetLoading}>
+                  {resetLoading ? 'Resetting...' : 'Reset Password'}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div className="p-4 rounded-md bg-emerald-500/10 border border-emerald-500/20 space-y-2">
+                <p className="text-sm">New password for <strong>{resetResult.userEmail}</strong>:</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 font-mono text-sm bg-background border border-border/50 rounded px-3 py-2 select-all">
+                    {resetResult.generatedPassword}
+                  </code>
+                  <Button variant="outline" size="icon" onClick={copyResetPwd}>
+                    {copiedPwd ? <CheckCheck className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {resetResult.sentVia === 'manual'
+                    ? 'Password was not delivered automatically. Share it with the user securely.'
+                    : `Sent via ${resetResult.sentVia} to the user.`}
+                </p>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setResetOpen(false)}>Done</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {deletingItem && (
         <DeleteConfirmationDialog

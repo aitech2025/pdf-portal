@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal, Edit2, Trash2, ShieldOff, ShieldCheck, Users } from 'lucide-react';
+import { MoreHorizontal, Edit2, Trash2, ShieldOff, ShieldCheck, Users, KeyRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const UserListTable = ({ users, loading, onEdit, onDelete, onToggleStatus }) => {
+const UserListTable = ({ users, loading, onEdit, onDelete, onToggleStatus, onResetPassword }) => {
   if (loading) {
     return (
       <div className="border border-border/50 rounded-[var(--radius-md)] overflow-hidden">
@@ -104,6 +104,11 @@ const UserListTable = ({ users, loading, onEdit, onDelete, onToggleStatus }) => 
                         <><ShieldCheck className="w-4 h-4 mr-2 text-success" /> Activate</>
                       )}
                     </DropdownMenuItem>
+                    {onResetPassword && (
+                      <DropdownMenuItem onClick={() => onResetPassword(user)}>
+                        <KeyRound className="w-4 h-4 mr-2" /> Reset Password
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => onDelete(user)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
                       <Trash2 className="w-4 h-4 mr-2" /> Delete

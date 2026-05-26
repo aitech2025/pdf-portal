@@ -14,43 +14,50 @@ export const generatePdfId = async (category, subCategory) => {
     throw new Error('Category and SubCategory are required to generate PDF ID');
   }
 
-  // Extract 2-letter codes (first 2 letters uppercase)
-  const catCode = category.categoryName.substring(0, 2).toUpperCase().padEnd(2, 'X');
-  const subCatCode = subCategory.subCategoryName.substring(0, 2).toUpperCase().padEnd(2, 'X');
+  // The backend auto-generates the canonical PDF ID via generateMappedPdfCode.
+  // This client-side helper is kept for display/preview purposes only.
+  // Format: CATEGORY-SUBCATEGORY-NNN (mirrors the backend logic)
+  const catCode = (category.categoryName || category.category_name || 'CAT')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 24) || 'GENERAL';
 
-  // Get current date (YYYY-MM format)
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const subCatCode = (subCategory.subCategoryName || subCategory.sub_category_name || 'SUB')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 24) || 'GENERAL';
 
-  const basePrefix = `${catCode}${subCatCode}${year}${month}`;
+  const basePrefix = `${catCode}-${subCatCode}`;
 
   try {
     // Query existing PDFs with the same prefix to find the next sequential number
     const response = await client.fetch('/pdfs', 'GET', null, {
       page: 1,
       per_page: 1,
-      filter: `pdf_id ~ "${basePrefix}"`,
-      sort: '-pdf_id'
+      q: basePrefix,
     });
 
-    const records = response.items || response;
+    const records = response.items || [];
     let sequence = 1;
-    if (records.length > 0 && records[0].pdf_id) {
-      const lastId = records[0].pdf_id;
-      const parts = lastId.split('-');
-      if (parts.length > 1) {
-        const lastSeq = parseInt(parts[parts.length - 1], 10);
-        if (!isNaN(lastSeq)) {
-          sequence = lastSeq + 1;
+    if (records.length > 0) {
+      // Find the highest sequence number among matching records
+      const matching = records.filter(r => {
+        const id = r.pdfId || r.pdf_id || '';
+        return id.startsWith(basePrefix);
+      });
+      for (const r of matching) {
+        const id = r.pdfId || r.pdf_id || '';
+        const parts = id.split('-');
+        const last = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(last) && last >= sequence) {
+          sequence = last + 1;
         }
-      } else {
-        // If the last ID didn't have a hyphen (e.g., it was just the prefix), start at 2
-        sequence = 2;
       }
     }
 
-    return `${basePrefix}-${sequence}`;
+    return `${basePrefix}-${String(sequence).padStart(3, '0')}`;
   } catch (error) {
     console.error('Error generating PDF ID:', error);
     // Fallback to a timestamp-based ID if query fails

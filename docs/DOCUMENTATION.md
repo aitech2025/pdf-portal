@@ -91,14 +91,14 @@ Schools receive access via **SchoolCategoryAccess** (many-to-many: school ↔ ca
                     └──────┬──────┘
                            │ /api/* proxy
                     ┌──────▼──────┐
-                    │   FastAPI   │  apps/api (port 8000)
-                    │  Uvicorn    │
+                    │   Fastify   │  apps/api-node (port 8000)
+                    │  Node 22    │
                     └──────┬──────┘
                            │
               ┌────────────┼────────────┐
               │            │            │
        ┌──────▼──────┐ ┌───▼───┐ ┌─────▼─────┐
-       │ PostgreSQL  │ │Uploads│ │ SMTP /    │
+       │  MongoDB 8  │ │Uploads│ │ SMTP /    │
        │             │ │ volume│ │ WhatsApp  │
        └─────────────┘ └───────┘ └───────────┘
 ```
@@ -112,15 +112,17 @@ Schools receive access via **SchoolCategoryAccess** (many-to-many: school ↔ ca
 ```
 pdf-portal/
 ├── apps/
-│   ├── api/              # FastAPI backend (Python 3.12)
-│   ├── web/              # React + Vite SPA
-│   └── mobile/           # Expo (React Native)
+│   ├── api-node/         # Node 22 + Fastify 5 backend (MongoDB)
+│   ├── web/              # React + Vite SPA (Capacitor-wrapped for mobile)
+│   │   ├── android/      # Capacitor Android shell (generated)
+│   │   └── ios/          # Capacitor iOS shell (macOS only)
+│   └── mobile/           # Legacy Expo / React Native app (optional)
 ├── packages/
 │   └── shared/           # Shared API client, roles, utils
-├── docker-compose.yml    # db + api + web
-├── docs/                 # This documentation
+├── docker-compose.yml    # mongo + api + web
+├── docs/                 # This documentation, MOBILE.md
 ├── ARCHITECTURE.md       # High-level architecture notes
-└── MOBILE_DEPLOYMENT.md  # EAS / store deployment
+└── MOBILE_DEPLOYMENT.md  # EAS / store deployment (legacy Expo path)
 ```
 
 ### 3.2 Request flow (authenticated API)
@@ -173,8 +175,6 @@ pdf-portal/
 | `tests/integration.test.ts` | Vitest integration tests (auth, programs, PDF flow) |
 | `Dockerfile` | Multi-stage Node build/runtime image |
 
-Legacy Python backend in `apps/api` is now deprecated and retained only as a rollback reference.
-
 ### FRD feature coverage (Node API)
 
 | FRD area | Status |
@@ -195,9 +195,10 @@ Legacy Python backend in `apps/api` is now deprecated and retained only as a rol
 | Path | Purpose |
 |------|---------|
 | `src/App.jsx` | Routes, maintenance mode gate |
-| `src/lib/apiClient.js` | Auth store, fetch wrapper, refresh, PocketBase-compat layer |
+| `src/lib/apiClient.js` | Auth store, fetch wrapper, automatic token refresh |
 | `src/contexts/AuthContext.jsx` | Session state |
 | `src/pages/` | Admin, school, public pages |
+| `src/native/` | Capacitor bootstrap + cross-platform native bridge |
 | `nginx.conf` | SPA + API/WebSocket/upload proxy (production image) |
 
 ### 5.3 Shared (`packages/shared`)
@@ -289,8 +290,9 @@ For `school`, `school_admin`, `school_viewer`, `teacher`:
 
 ## 8. API reference
 
-Base URL: `/api`  
-Health: `GET /health` → `{ "status": "ok" }`
+Base URL: `/api`
+Health: `GET /api/health` → `{ "status": "ok", "uptime": <seconds> }`
+Readiness: `GET /api/ready` → `{ "status": "ok", "mongo": "connected" }` (503 if Mongo is unreachable)
 
 ### 8.1 Auth (`/api/auth`)
 
@@ -547,7 +549,6 @@ npx eas build --platform ios --profile production
 
 - Docker Desktop (or Docker Engine + Compose)
 - Node.js 20+
-- Python 3.12+ (optional, for running API/tests outside Docker)
 - Git
 
 ### 12.2 Quick start (full stack)
@@ -569,38 +570,49 @@ npm run dev:web
 | Web (dev) | http://localhost:3000 |
 | Web (Docker) | http://localhost |
 | API | http://localhost:8000 |
-| API health | http://localhost:8000/health |
-| PostgreSQL | localhost:5432 (user/pass: postgres/postgres, db: iiconacademy) |
+| API health | http://localhost:8000/api/health |
+| API readiness | http://localhost:8000/api/ready |
+| MongoDB | `mongo:27017` (only inside the compose network) |
 
 ### 12.3 API container startup sequence
 
-`entrypoint.sh` runs:
+The Fastify entrypoint (`apps/api-node/src/server.ts`) runs:
 
-1. `python init_db.py` — schema bootstrap  
-2. `python wait_for_db.py` — wait for Postgres  
-3. `python seed.py` — default users/schools/categories  
-4. `uvicorn` with configurable workers  
+1. Load env (`src/config/env.ts`)
+2. Connect to MongoDB (`src/db/mongo.ts`)
+3. Seed the default platform admin if the `users` collection is empty
+4. Register Fastify plugins and routes (`src/app.ts`)
+5. Start listening on `HOST:PORT` (defaults `0.0.0.0:8000`)
 
 ### 12.4 Running tests
 
 ```bash
-cd pdf-portal
-py -m pytest apps/api/tests/
+cd apps/api-node
+npm test                  # vitest integration suite against an in-memory MongoDB
 ```
 
-Key suites:
+Key suites (`apps/api-node/tests/`):
 
-- `test_auth_flows.py` — refresh, reset, verify  
-- `test_school_categories_props.py` — category assignment properties  
-- `test_pdf_access_props.py` — PDF ACL properties  
-- `test_notifications_broadcast.py` — admin broadcast  
-- `test_program_category_flow.py` — programs + categories  
+- `integration.test.ts` — auth, programs, categories, PDF upload + access ACL
+- `personas.test.ts`    — admin + school persona end-to-end flows, bulk download, audit/export, dashboards
 
 ### 12.5 Mobile local dev
 
+**Capacitor (current path)** — see [./MOBILE.md](./MOBILE.md):
+
 ```bash
-npm install
-docker compose up -d api db    # API must be reachable
+docker compose up -d mongo api     # backend + DB only
+cd apps/web
+npm run dev                         # Vite on :3000
+# In another terminal — point Capacitor at the dev server
+$env:CAP_SERVER_URL="http://<LAN-ip>:3000"
+npm run mobile:run:android
+```
+
+**Legacy Expo path** (optional, kept under `apps/mobile`):
+
+```bash
+docker compose up -d mongo api
 cd apps/mobile
 npx expo start
 ```
@@ -615,9 +627,9 @@ Default `docker-compose.yml` defines three services:
 
 | Service | Image build | Ports | Volumes |
 |---------|-------------|-------|---------|
-| `db` | `postgres:16-alpine` | 5432 (internal) | `postgres_data` |
-| `api` | `apps/api/Dockerfile` | 8000 | `uploads_data` → `/data/uploads` |
-| `web` | `apps/web/Dockerfile` (Nginx) | 80 | — |
+| `mongo` | `mongo:8` | 27017 (internal, healthchecked) | `mongo_data` |
+| `api`   | `apps/api-node/Dockerfile` | 8000 | `uploads_data` → `/data/uploads` |
+| `web`   | `apps/web/Dockerfile` (Nginx) | 80 | — |
 
 **Deploy steps:**
 
@@ -630,8 +642,9 @@ cp .env.example .env   # if you add one; otherwise export vars
 
 docker compose up -d --build
 docker compose ps
-curl http://localhost/health
-curl http://localhost:8000/health
+curl http://localhost/                       # web
+curl http://localhost:8000/api/health        # api liveness
+curl http://localhost:8000/api/ready         # api readiness (also checks Mongo)
 ```
 
 ### 13.2 Production web image behavior
@@ -648,26 +661,26 @@ Place **Caddy**, **Traefik**, or **host Nginx** in front of the Compose stack:
 - Terminate HTTPS on 443
 - Proxy to `web:80`
 - Set `ALLOWED_ORIGINS` on API to your web origin(s)
-- Do not expose Postgres port publicly
+- Do not expose MongoDB port publicly
 
 ### 13.4 Horizontal scaling notes
 
 | Component | Scale strategy |
 |-----------|----------------|
-| API | Increase `UVICORN_WORKERS`; run multiple API containers behind load balancer (sticky sessions for WS) |
-| PostgreSQL | Managed RDS / connection pool tuning (`DB_POOL_*`) |
-| Uploads | Shared volume (NFS/S3 migration recommended at scale) |
-| Web | Stateless; CDN for static assets |
+| API | Run multiple Fastify containers behind a load balancer; use `node --cluster` or a process manager (PM2) for vertical scaling. Sticky sessions required for WebSocket. |
+| MongoDB | Managed Atlas / replica set; tune connection pool via `MONGODB_URI` options (e.g. `maxPoolSize=50`). |
+| Uploads | Shared volume (NFS/S3 migration recommended at scale). |
+| Web | Stateless; CDN for static assets. |
 
-**WebSocket:** Use sticky sessions or a shared pub/sub layer if running multiple API instances (not included in default compose).
+**WebSocket:** Use sticky sessions or a shared pub/sub layer (Redis) if running multiple API instances (not included in default compose).
 
 ### 13.5 Database migrations
 
-Current deployment uses `Base.metadata.create_all` on startup plus `seed.py`. For production evolution:
+Mongoose models are validated on read/write; schema "migrations" are change scripts rather than DDL. For production evolution:
 
-1. Introduce **Alembic** migrations (dependency already in `requirements.txt`).
-2. Disable auto-seed in production or gate `seed.py` behind `RUN_SEED=true`.
-3. Backup before schema changes.
+1. Add a `migrations/` folder under `apps/api-node/` and run scripts manually or via a tool like `migrate-mongo`.
+2. Disable auto-seed in production by setting `SEED_DEFAULT_ADMIN=false`.
+3. Always back up MongoDB before structural changes (`mongodump`).
 
 ---
 
@@ -677,31 +690,31 @@ Current deployment uses `Base.metadata.create_all` on startup plus `seed.py`. Fo
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://...` | Async Postgres URL |
+| `MONGODB_URI` | `mongodb://mongo:27017/iiconacademy` | MongoDB connection string |
+| `DB_NAME` | `iiconacademy` | Mongo database name |
 | `SECRET_KEY` | *(must change)* | JWT signing secret — use 32+ random bytes |
 | `UPLOAD_DIR` | `/data/uploads` | PDF storage path |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Access token TTL (24h) |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh token TTL |
 | `ALLOWED_ORIGINS` | `*` | Comma-separated origins or `*` |
 | `ENABLE_PUBLIC_UPLOADS` | unset/false | **Keep false in production** |
-| `UVICORN_WORKERS` | `4` | Worker processes |
-| `UVICORN_LIMIT_CONCURRENCY` | `1000` | Per-worker concurrency cap |
-| `DB_POOL_SIZE` | `20` | SQLAlchemy pool size |
-| `DB_MAX_OVERFLOW` | `40` | Pool overflow |
+| `HOST` | `0.0.0.0` | Fastify bind host |
+| `PORT` | `8000` | Fastify bind port |
+| `SEED_DEFAULT_ADMIN` | `true` | Disable in production after first boot |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | — | Email delivery |
 | `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | — | From address |
-| `BUILDER_MAILER_*` | — | Optional email API alternative |
+| `BUILDER_MAILER_*` | — | Optional transactional-email API alternative |
 
 ### 14.2 Example production `.env` (API service)
 
 ```env
 SECRET_KEY=<generate-with-openssl-rand-hex-32>
-DATABASE_URL=postgresql+asyncpg://pdfuser:STRONG_PASSWORD@db:5432/iiconacademy
+MONGODB_URI=mongodb://pdfuser:STRONG_PASSWORD@mongo:27017/iiconacademy?authSource=admin
+DB_NAME=iiconacademy
 ALLOWED_ORIGINS=https://edu.yourdomain.com,https://www.edu.yourdomain.com
-UVICORN_WORKERS=4
-UVICORN_LIMIT_CONCURRENCY=1000
-DB_POOL_SIZE=20
-DB_MAX_OVERFLOW=40
+HOST=0.0.0.0
+PORT=8000
+SEED_DEFAULT_ADMIN=false
 SMTP_HOST=smtp.yourprovider.com
 SMTP_PORT=587
 SMTP_USERNAME=...
@@ -714,7 +727,8 @@ SMTP_FROM_NAME=I-ICON EduShare
 
 ```bash
 # Health
-curl -sf https://api.yourdomain.com/health
+curl -sf https://api.yourdomain.com/api/health
+curl -sf https://api.yourdomain.com/api/ready
 
 # Login
 curl -s -X POST https://api.yourdomain.com/api/auth/login \
@@ -732,19 +746,27 @@ curl -s -X POST https://api.yourdomain.com/api/auth/login \
 
 | Task | Frequency | Action |
 |------|-----------|--------|
-| DB backup | Daily | `pg_dump` of `iiconacademy` |
+| DB backup | Daily | `mongodump` of the `iiconacademy` database |
 | Upload backup | Daily | Snapshot `uploads_data` volume or sync to object storage |
 | Log review | Daily | API container logs, failed notification rows |
 | Secret rotation | Quarterly | `SECRET_KEY`, SMTP, WhatsApp credentials |
 | Dependency updates | Monthly | Rebuild images, run tests |
-| Disk usage | Weekly | Monitor `/data/uploads` growth |
+| Disk usage | Weekly | Monitor `/data/uploads` and Mongo volume growth |
 
 ### 15.2 Backups
 
-**PostgreSQL:**
+**MongoDB:**
 
 ```bash
-docker compose exec db pg_dump -U postgres iiconacademy > backup_$(date +%Y%m%d).sql
+docker compose exec mongo sh -c 'mongodump --db iiconacademy --archive' \
+  > backup_$(date +%Y%m%d).archive
+```
+
+Restore:
+
+```bash
+cat backup_YYYYMMDD.archive \
+  | docker compose exec -T mongo mongorestore --drop --archive
 ```
 
 **Uploads:**
@@ -758,9 +780,10 @@ docker run --rm -v pdf-portal_uploads_data:/data -v $(pwd):/backup alpine \
 
 | Signal | Endpoint / source |
 |--------|---------------------|
-| API up | `GET /health` |
+| API liveness | `GET /api/health` |
+| API readiness (includes Mongo) | `GET /api/ready` |
 | Container health | `docker compose ps` |
-| DB connections | Postgres metrics / `pg_stat_activity` |
+| DB connections | `db.serverStatus().connections` in `mongosh` |
 | Failed notifications | Query `notifications` where `status='failed'` |
 | Auth lockouts | `users.locked_until`, audit logs |
 
@@ -775,31 +798,31 @@ docker run --rm -v pdf-portal_uploads_data:/data -v $(pwd):/backup alpine \
 ```bash
 docker compose logs -f api
 docker compose logs -f web
-docker compose logs -f db
+docker compose logs -f mongo
 ```
 
 ### 15.6 Upgrades (zero-downtime goal)
 
 1. `git pull`
 2. `docker compose build api web`
-3. Run DB backup
+3. Run a Mongo backup (see §15.2)
 4. `docker compose up -d`
-5. Verify `/health` and smoke-test login + PDF download + broadcast test to one school
+5. Verify `/api/health` + `/api/ready` and smoke-test login + PDF download + broadcast to one school
 
 ### 15.7 Capacity planning (1,000 concurrent users)
 
-Baseline Compose settings target ~1,000 concurrent connections:
+For ~1,000 concurrent connections in a single-host deploy:
 
-- `UVICORN_WORKERS=4`, `UVICORN_LIMIT_CONCURRENCY=1000`
-- Postgres pool 20 + overflow 40 per process
+- Run Fastify behind a process manager (PM2 / `node --cluster` / multiple Docker replicas) — one process per CPU core.
+- Increase MongoDB connection pool via the URI: `mongodb://…/iiconacademy?maxPoolSize=50&minPoolSize=10`.
 
 **Recommendations before claiming production SLA:**
 
-1. Load-test with k6/Locust (login, list PDFs, download, notifications).
+1. Load-test with k6 or Artillery (login, list PDFs, download, notifications).
 2. Move uploads to object storage (S3-compatible) for I/O offload.
-3. Use managed PostgreSQL with read replicas if read-heavy.
+3. Use managed MongoDB Atlas (replica set) for HA and read replicas.
 4. Put CDN + WAF in front of web/API.
-5. Monitor p95 latency and DB connection saturation.
+5. Monitor p95 latency and Mongo connection saturation.
 
 ---
 
@@ -812,12 +835,12 @@ Production go-live minimum:
 - [ ] `ENABLE_PUBLIC_UPLOADS` **not** enabled
 - [ ] `ALLOWED_ORIGINS` restricted to real domains
 - [ ] HTTPS everywhere
-- [ ] Postgres not exposed to internet
+- [ ] MongoDB not exposed to internet (use auth + IP allowlist or private network)
 - [ ] SMTP/WhatsApp credentials in secrets manager, not git
 - [ ] Regular backups tested (restore drill)
 - [ ] Admin accounts use strong passwords + MFA on email provider
 - [ ] Review `audit_logs` and `download_logs` retention policy
-- [ ] Disable or protect API docs (`/docs`) behind VPN if exposed
+- [ ] `SEED_DEFAULT_ADMIN=false` set after first boot
 
 ---
 
@@ -827,7 +850,7 @@ Production go-live minimum:
 
 ```bash
 docker compose logs api
-# Common: DB not ready — wait for healthcheck; verify DATABASE_URL
+# Common: Mongo not ready — wait for the healthcheck; verify MONGODB_URI
 ```
 
 ### Web shows login but API 401
@@ -863,19 +886,13 @@ docker compose logs api
 
 ## Appendix: default seed data
 
-After first `docker compose up`, `seed.py` creates:
+When the `users` collection is empty (typically after a fresh `docker compose up`), the Fastify boot routine ensures a default platform admin exists. Additional sample schools / users can be seeded from the admin UI or scripted via the API.
 
 | Email | Password | Role |
 |-------|----------|------|
 | admin@iiconacademy.com | Admin@1234 | platform_admin |
-| school1@iiconacademy.com | School1@1234 | school_admin |
-| school2@iiconacademy.com | School2@1234 | school_admin |
-| teacher@school1.com | Teacher@1234 | teacher |
 
-**Schools:** School One (SCH001), School Two (SCH002)  
-**Categories:** Mathematics, Science, Languages, Arts, Sports  
-
-**Change these credentials immediately in any shared or production environment.**
+**Change this credential immediately in any shared or production environment.**
 
 ---
 
@@ -883,10 +900,10 @@ After first `docker compose up`, `seed.py` creates:
 
 | Document | Location |
 |----------|----------|
-| Architecture overview | [../ARCHITECTURE.md](../ARCHITECTURE.md) |
-| Mobile store deployment | [../MOBILE_DEPLOYMENT.md](../MOBILE_DEPLOYMENT.md) |
-| API troubleshooting | [../apps/api/TROUBLESHOOTING.md](../apps/api/TROUBLESHOOTING.md) |
-| School category access spec | [../.kiro/specs/school-category-access/](../.kiro/specs/school-category-access/) |
+| Architecture overview      | [../ARCHITECTURE.md](../ARCHITECTURE.md) |
+| Mobile (Capacitor) build   | [./MOBILE.md](./MOBILE.md) |
+| Mobile (Expo) deployment   | [../MOBILE_DEPLOYMENT.md](../MOBILE_DEPLOYMENT.md) |
+| Run / fix local Docker stack | [../START_HERE.md](../START_HERE.md), [../FIX_SITE_CANT_BE_REACHED.md](../FIX_SITE_CANT_BE_REACHED.md) |
 
 ---
 

@@ -44,3 +44,26 @@ export const generatePdfCode = async (categoryCode) => {
     }
     return `${prefix}-${String(maxSeq + 1).padStart(3, "0")}`;
 };
+const codeSegment = (value) => value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 24) || "GENERAL";
+/** PDF code from category + subcategory names: CATEGORY-SUBCATEGORY-001 */
+export const generateMappedPdfCode = async (categoryName, subCategoryName) => {
+    const prefix = `${codeSegment(categoryName)}-${codeSegment(subCategoryName)}`;
+    const existing = await Pdf.find({
+        pdf_id: { $regex: `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-` },
+        deleted_at: null
+    })
+        .select("pdf_id")
+        .lean();
+    let maxSeq = 0;
+    for (const row of existing) {
+        const code = row.pdf_id ?? "";
+        const last = code.split("-").at(-1) ?? "";
+        if (/^\d+$/.test(last))
+            maxSeq = Math.max(maxSeq, parseInt(last, 10));
+    }
+    return `${prefix}-${String(maxSeq + 1).padStart(3, "0")}`;
+};

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AuthToken, User } from "../models/index.js";
-import { authReply, hashPassword, hashToken, issueRefreshToken, randomToken, revokeActiveRefreshTokens, signAccessToken, verifyPassword } from "../lib/auth.js";
+import { authReply, hashPassword, hashToken, issueRefreshToken, randomToken, resolveSchoolName, revokeActiveRefreshTokens, signAccessToken, verifyPassword } from "../lib/auth.js";
 import { writeAudit } from "../lib/audit.js";
 import { isSuperAdmin } from "../lib/permissions.js";
 import { getCurrentUser, requireAuth } from "../plugins/auth.js";
@@ -50,7 +50,8 @@ export const registerAuthRoutes = async (app) => {
         await user.save();
         await writeAudit({ user_id: user.id, action: "login", request });
         const access = signAccessToken(request, user);
-        return authReply(user, access, refresh);
+        const schoolName = await resolveSchoolName(user.school_id);
+        return authReply(user, access, refresh, schoolName);
     });
     app.post("/api/auth/refresh", async (request, reply) => {
         const body = z.object({ refreshToken: z.string().min(1) }).parse(request.body);
@@ -71,7 +72,8 @@ export const registerAuthRoutes = async (app) => {
         await token.save();
         const refresh = await issueRefreshToken(user.id, request);
         const access = signAccessToken(request, user);
-        return { ...authReply(user, access, refresh) };
+        const schoolName = await resolveSchoolName(user.school_id);
+        return { ...authReply(user, access, refresh, schoolName) };
     });
     app.post("/api/auth/forgot-password", async (request) => {
         const body = z.object({ email: z.string().email() }).parse(request.body);
@@ -161,7 +163,8 @@ export const registerAuthRoutes = async (app) => {
         const user = await getCurrentUser(request, reply);
         if (!user)
             return;
-        return authReply(user, "", "").record;
+        const schoolName = await resolveSchoolName(user.school_id);
+        return authReply(user, "", "", schoolName).record;
     });
     app.patch("/api/auth/me", { preHandler: requireAuth }, async (request, reply) => {
         const user = await getCurrentUser(request, reply);
@@ -187,7 +190,8 @@ export const registerAuthRoutes = async (app) => {
                 }
             }
             await user.save();
-            return authReply(user, "", "").record;
+            const schoolName = await resolveSchoolName(user.school_id);
+            return authReply(user, "", "", schoolName).record;
         }
         const body = z
             .object({
@@ -222,7 +226,8 @@ export const registerAuthRoutes = async (app) => {
             };
         }
         await user.save();
-        return authReply(user, "", "").record;
+        const schoolName = await resolveSchoolName(user.school_id);
+        return authReply(user, "", "", schoolName).record;
     });
     app.post("/api/auth/change-password", { preHandler: requireAuth }, async (request, reply) => {
         const user = await getCurrentUser(request, reply);

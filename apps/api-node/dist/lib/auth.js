@@ -11,7 +11,7 @@ export const signAccessToken = (request, user) => request.server.jwt.sign({
 }, {
     expiresIn: "60m"
 });
-export const authReply = (user, token, refreshToken) => ({
+export const authReply = (user, token, refreshToken, schoolName = null) => ({
     token,
     refreshToken,
     record: {
@@ -21,6 +21,8 @@ export const authReply = (user, token, refreshToken) => ({
         role: user.role,
         schoolId: user.school_id ?? null,
         school_id: user.school_id ?? null,
+        schoolName: schoolName,
+        school_name: schoolName,
         isActive: user.is_active,
         is_active: user.is_active,
         verified: user.verified,
@@ -32,6 +34,13 @@ export const authReply = (user, token, refreshToken) => ({
         address: user.address ?? null
     }
 });
+export const resolveSchoolName = async (schoolId) => {
+    if (!schoolId)
+        return null;
+    const { School } = await import("../models/index.js");
+    const school = await School.findOne({ id: schoolId }).lean();
+    return school?.school_name ?? null;
+};
 export const revokeActiveRefreshTokens = async (userId) => {
     const { AuthToken } = await import("../models/index.js");
     await AuthToken.updateMany({

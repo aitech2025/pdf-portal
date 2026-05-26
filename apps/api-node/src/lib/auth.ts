@@ -31,7 +31,7 @@ export const signAccessToken = (request: FastifyRequest, user: UserDoc): string 
     }
   );
 
-export const authReply = (user: UserDoc, token: string, refreshToken: string) => ({
+export const authReply = (user: UserDoc, token: string, refreshToken: string, schoolName: string | null = null) => ({
   token,
   refreshToken,
   record: {
@@ -41,6 +41,8 @@ export const authReply = (user: UserDoc, token: string, refreshToken: string) =>
     role: user.role,
     schoolId: user.school_id ?? null,
     school_id: user.school_id ?? null,
+    schoolName: schoolName,
+    school_name: schoolName,
     isActive: user.is_active,
     is_active: user.is_active,
     verified: user.verified,
@@ -52,6 +54,13 @@ export const authReply = (user: UserDoc, token: string, refreshToken: string) =>
     address: user.address ?? null
   }
 });
+
+export const resolveSchoolName = async (schoolId: string | null | undefined): Promise<string | null> => {
+  if (!schoolId) return null;
+  const { School } = await import("../models/index.js");
+  const school = await School.findOne({ id: schoolId }).lean();
+  return school?.school_name ?? null;
+};
 
 export const revokeActiveRefreshTokens = async (userId: string): Promise<void> => {
   const { AuthToken } = await import("../models/index.js");

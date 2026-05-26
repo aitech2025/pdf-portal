@@ -29,8 +29,20 @@ export default function CategoriesScreen() {
                 categoriesApi.listCategories(),
                 categoriesApi.listSubCategories(null as any),
             ]);
-            setCategories(cats ?? []);
-            setSubCategories(subs ?? []);
+            // Backend returns categoryName / subCategoryName (camelCase via serializeDoc)
+            const catItems = (cats.items ?? cats ?? []).map((c: any) => ({
+                id: c.id,
+                name: c.categoryName ?? c.name ?? '',
+                description: c.description ?? '',
+            }));
+            const subItems = (subs.items ?? subs ?? []).map((s: any) => ({
+                id: s.id,
+                name: s.subCategoryName ?? s.name ?? '',
+                categoryId: s.categoryId ?? s.category_id ?? '',
+                description: s.description ?? '',
+            }));
+            setCategories(catItems);
+            setSubCategories(subItems);
         } catch (e) { console.error(e); }
         finally { setLoading(false); setRefreshing(false); }
     }, []);

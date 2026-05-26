@@ -7,6 +7,7 @@ import {
   hashToken,
   issueRefreshToken,
   randomToken,
+  resolveSchoolName,
   revokeActiveRefreshTokens,
   signAccessToken,
   verifyPassword
@@ -70,7 +71,8 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
     await writeAudit({ user_id: user.id, action: "login", request });
 
     const access = signAccessToken(request, user);
-    return authReply(user, access, refresh);
+    const schoolName = await resolveSchoolName(user.school_id);
+    return authReply(user, access, refresh, schoolName);
   });
 
   app.post("/api/auth/refresh", async (request, reply) => {
@@ -96,7 +98,8 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
 
     const refresh = await issueRefreshToken(user.id, request);
     const access = signAccessToken(request, user);
-    return { ...authReply(user, access, refresh) };
+    const schoolName = await resolveSchoolName(user.school_id);
+    return { ...authReply(user, access, refresh, schoolName) };
   });
 
   app.post("/api/auth/forgot-password", async (request) => {
@@ -193,7 +196,8 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
   app.get("/api/auth/me", { preHandler: requireAuth }, async (request, reply) => {
     const user = await getCurrentUser(request, reply);
     if (!user) return;
-    return authReply(user, "", "").record;
+    const schoolName = await resolveSchoolName(user.school_id);
+    return authReply(user, "", "", schoolName).record;
   });
 
   app.patch("/api/auth/me", { preHandler: requireAuth }, async (request, reply) => {
@@ -216,7 +220,8 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
         }
       }
       await user.save();
-      return authReply(user, "", "").record;
+      const schoolName = await resolveSchoolName(user.school_id);
+      return authReply(user, "", "", schoolName).record;
     }
 
     const body = z
@@ -247,7 +252,8 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
       };
     }
     await user.save();
-    return authReply(user, "", "").record;
+    const schoolName = await resolveSchoolName(user.school_id);
+    return authReply(user, "", "", schoolName).record;
   });
 
   app.post("/api/auth/change-password", { preHandler: requireAuth }, async (request, reply) => {

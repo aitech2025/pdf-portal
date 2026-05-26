@@ -11,3 +11,43 @@ credentials.json
 *.key
 .credentials
 node_modules
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
+vite-dev.log
+
+# --- Capacitor / mobile build artifacts ---
+# Keep the platform folders themselves (apps/web/android, apps/web/ios) so
+# native code changes are tracked, but ignore generated build output, caches,
+# keystores and IDE files.
+
+# Android
+apps/web/android/.gradle/
+apps/web/android/.idea/
+apps/web/android/build/
+apps/web/android/app/build/
+apps/web/android/local.properties
+apps/web/android/captures/
+apps/web/android/.cxx/
+apps/web/android/app/src/main/assets/public/
+apps/web/android/app/src/main/assets/capacitor.config.json
+apps/web/android/app/src/main/assets/capacitor.plugins.json
+apps/web/android/app/release/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# iOS
+apps/web/ios/App/Pods/
+apps/web/ios/App/App/public/
+apps/web/ios/App/Podfile.lock
+apps/web/ios/App/build/
+apps/web/ios/DerivedData/
+apps/web/ios/.gradle/
+xcuserdata/
+*.xcuserstate

@@ -1,5 +1,6 @@
 import mongoose, { Schema, type InferSchemaType } from "mongoose";
 import { genId } from "../lib/id.js";
+import { PLATFORM_ROLES } from "../lib/permissions.js";
 
 const commonOptions = { timestamps: { createdAt: "created", updatedAt: "updated" }, versionKey: false } as const;
 
@@ -26,6 +27,39 @@ const UserSchema = new Schema(
   },
   commonOptions
 );
+
+const platformRoleSet = new Set<string>(PLATFORM_ROLES);
+
+UserSchema.pre("save", function coercePlatformRoleSchool(next) {
+  if (platformRoleSet.has(this.role)) {
+    this.school_id = null;
+  }
+  next();
+});
+
+UserSchema.pre("findOneAndUpdate", function coercePlatformRoleUpdate(next) {
+  const update = (this.getUpdate() ?? {}) as Record<string, unknown> & {
+    $set?: Record<string, unknown>;
+  };
+  const role = (update.$set?.role ?? update.role) as string | undefined;
+
+  if (role && platformRoleSet.has(role)) {
+    update.school_id = null;
+    update.$set = { ...(update.$set ?? {}), school_id: null };
+    this.setUpdate(update);
+  }
+
+  next();
+});
+
+UserSchema.pre("insertMany", function coercePlatformRoleInsert(next, docs: Array<Record<string, unknown>>) {
+  for (const doc of docs) {
+    if (platformRoleSet.has(String(doc.role ?? ""))) {
+      doc.school_id = null;
+    }
+  }
+  next();
+});
 
 const SchoolSchema = new Schema(
   {
@@ -160,6 +194,7 @@ const NotificationSchema = new Schema(
     message: { type: String, required: true },
     notification_method: { type: String, default: "email" },
     status: { type: String, default: "pending", index: true },
+    error_message: String,
     read: { type: Boolean, default: false, index: true }
   },
   commonOptions
@@ -197,8 +232,14 @@ const SystemSettingsSchema = new Schema(
     app_description: String,
     support_email: String,
     support_phone: String,
+    support_website: String,
+    timezone: String,
+    language: String,
+    date_format: String,
+    time_format: String,
     maintenance_mode: { type: Boolean, default: false },
     maintenance_message: String,
+    email_provider: { type: String, default: "smtp" },
     smtp_host: String,
     smtp_port: Number,
     smtp_username: String,
@@ -240,6 +281,20 @@ const DownloadLogSchema = new Schema(
   },
   commonOptions
 );
+
+const ViewLogSchema = new Schema(
+  {
+    id: { type: String, default: genId, unique: true, index: true },
+    school_id: { type: String, default: null, index: true },
+    user_id: { type: String, required: true, index: true },
+    pdf_id: { type: String, required: true, index: true },
+    category_id: { type: String, default: null, index: true },
+    sub_category_id: { type: String, default: null },
+    viewed_at: { type: Date, default: Date.now, index: true }
+  },
+  commonOptions
+);
+ViewLogSchema.index({ user_id: 1, viewed_at: -1 });
 
 const AuditLogSchema = new Schema(
   {
@@ -327,6 +382,7 @@ export const MaintenanceMode = mongoose.model("MaintenanceMode", MaintenanceMode
 export const SystemSettings = mongoose.model("SystemSettings", SystemSettingsSchema);
 export const UserPreferences = mongoose.model("UserPreferences", UserPreferencesSchema);
 export const DownloadLog = mongoose.model("DownloadLog", DownloadLogSchema);
+export const ViewLog = mongoose.model("ViewLog", ViewLogSchema);
 export const AuditLog = mongoose.model("AuditLog", AuditLogSchema);
 export const AnalyticsEvent = mongoose.model("AnalyticsEvent", AnalyticsEventSchema);
 export const Favorite = mongoose.model("Favorite", FavoriteSchema);

@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
 import websocket from "@fastify/websocket";
+import mongoose from "mongoose";
 import { env } from "./config/env.js";
 import { registerRoutes } from "./routes/index.js";
 import { registerRealtimeRoutes } from "./services/realtime.js";
@@ -22,7 +23,21 @@ export const buildApp = () => {
   });
   app.register(websocket);
 
-  app.get("/health", async () => ({ status: "ok" }));
+  app.get("/health", async () => ({ status: "ok", uptime: process.uptime() }));
+  app.get("/api/health", async () => ({ status: "ok", uptime: process.uptime() }));
+  app.get("/api/ready", async (_req, reply) => {
+    // Mongo connection states: 0 disconnected, 1 connected, 2 connecting, 3 disconnecting
+    const state = mongoose.connection.readyState;
+    if (state !== 1) {
+      return reply.status(503).send({ status: "not_ready", db: state });
+    }
+    try {
+      await mongoose.connection.db?.admin().ping();
+      return { status: "ready", db: "connected", uptime: process.uptime() };
+    } catch (err) {
+      return reply.status(503).send({ status: "not_ready", error: (err as Error).message });
+    }
+  });
   registerRealtimeRoutes(app);
 
   app.register(async (instance) => {

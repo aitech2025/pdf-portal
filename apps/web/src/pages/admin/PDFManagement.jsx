@@ -17,14 +17,14 @@ const PDFManagement = () => {
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const [pdfs, setPdfs] = useState([]);
-  
+
   const [selectedCat, setSelectedCat] = useState('');
   const [selectedSubCat, setSelectedSubCat] = useState('');
-  
+
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
-  
+
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -49,7 +49,12 @@ const PDFManagement = () => {
     }
     const fetchSubs = async () => {
       try {
-        const subs = await pb.collection('subCategories').getList(1, 100, { filter: `categoryId="${selectedCat}"`, sort: 'subCategoryName', $autoCancel: false });
+        // Pass categoryId as a direct query param (not a filter string)
+        const subs = await pb.collection('subCategories').getList(1, 100, {
+          category_id: selectedCat,
+          sort: 'subCategoryName',
+          $autoCancel: false
+        });
         setSubCategories(subs.items);
         setSelectedSubCat('');
       } catch (err) {
@@ -67,7 +72,12 @@ const PDFManagement = () => {
     const fetchPdfs = async () => {
       setLoading(true);
       try {
-        const records = await pb.collection('pdfs').getList(1, 200, { filter: `subCategoryId="${selectedSubCat}"`, sort: '-created', $autoCancel: false });
+        // Pass subCategoryId as a direct query param
+        const records = await pb.collection('pdfs').getList(1, 200, {
+          subCategoryId: selectedSubCat,
+          sort: '-created',
+          $autoCancel: false
+        });
         setPdfs(records.items);
       } catch (err) {
         toast.error('Failed to load PDFs');
@@ -94,14 +104,14 @@ const PDFManagement = () => {
         toast.error(`${file.name} is not a PDF`);
         continue;
       }
-      
+
       const formData = new FormData();
-      formData.append('file', file);
       formData.append('fileName', file.name);
       formData.append('categoryId', selectedCat);
       formData.append('subCategoryId', selectedSubCat);
       formData.append('isActive', 'true');
       formData.append('status', 'approved');
+      formData.append('file', file);
 
       try {
         await pb.uploadPdf(formData);
@@ -117,7 +127,7 @@ const PDFManagement = () => {
       const records = await pb.collection('pdfs').getList(1, 200, { filter: `subCategoryId="${selectedSubCat}"`, sort: '-created', $autoCancel: false });
       setPdfs(records.items);
     }
-    
+
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -142,12 +152,15 @@ const PDFManagement = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const filteredPdfs = pdfs.filter(p => p.fileName.toLowerCase().includes(search.toLowerCase()));
+  const filteredPdfs = pdfs.filter(p => {
+    const name = p.fileName || p.file_name || '';
+    return name.toLowerCase().includes(search.toLowerCase());
+  });
 
   return (
     <PageTransition>
-      <PageHeader 
-        title="PDF Management" 
+      <PageHeader
+        title="PDF Management"
         description="Upload and organize educational PDF resources."
         breadcrumbs={[{ label: 'Content Management' }, { label: 'PDFs' }]}
       />
@@ -166,7 +179,7 @@ const PDFManagement = () => {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">2. Select Sub-Category</Label>
                 <Select value={selectedSubCat} onValueChange={setSelectedSubCat} disabled={!selectedCat}>
@@ -179,19 +192,19 @@ const PDFManagement = () => {
 
               <div className="pt-4 border-t border-border/50">
                 <Label className="text-sm font-semibold mb-2 block">3. Upload Files</Label>
-                <div 
+                <div
                   className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${(!selectedCat || !selectedSubCat) ? 'opacity-50 bg-muted/30 border-border cursor-not-allowed' : 'bg-primary/5 border-primary/30 hover:bg-primary/10 cursor-pointer'}`}
                   onClick={() => selectedCat && selectedSubCat && fileInputRef.current?.click()}
                 >
                   <Upload className={`w-10 h-10 mx-auto mb-3 ${(!selectedCat || !selectedSubCat) ? 'text-muted-foreground' : 'text-primary'}`} />
                   <p className="text-sm font-medium mb-1">Click to browse or drag files here</p>
                   <p className="text-xs text-muted-foreground">Supports multiple .pdf files up to 50MB</p>
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept=".pdf" 
-                    multiple 
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept=".pdf"
+                    multiple
                     onChange={handleFileSelect}
                     disabled={!selectedCat || !selectedSubCat || uploading}
                   />
@@ -244,10 +257,10 @@ const PDFManagement = () => {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <FileText className="w-4 h-4 text-rose-500 shrink-0" />
-                            <span className="line-clamp-1" title={pdf.fileName}>{pdf.fileName}</span>
+                            <span className="line-clamp-1" title={pdf.fileName || pdf.file_name}>{pdf.fileName || pdf.file_name}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{formatSize(pdf.fileSize)}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{formatSize(pdf.fileSize || pdf.file_size)}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">{new Date(pdf.created).toLocaleDateString()}</TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="icon" onClick={() => handleDelete(pdf.id)} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10">

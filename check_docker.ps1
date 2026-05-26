@@ -134,9 +134,10 @@ if ($allGood) {
     Write-Host "  ✓ Everything looks good!" -ForegroundColor Green
     Write-Host ""
     Write-Host "Access your application at:" -ForegroundColor Cyan
-    Write-Host "  Frontend: http://localhost" -ForegroundColor White
-    Write-Host "  API: http://localhost:8000" -ForegroundColor White
-    Write-Host "  API Docs: http://localhost:8000/docs" -ForegroundColor White
+    Write-Host "  Frontend:    http://localhost" -ForegroundColor White
+    Write-Host "  API:         http://localhost:8000" -ForegroundColor White
+    Write-Host "  API health:  http://localhost:8000/api/health" -ForegroundColor White
+    Write-Host "  API ready:   http://localhost:8000/api/ready" -ForegroundColor White
 } else {
     Write-Host ""
     Write-Host "Run these commands to fix:" -ForegroundColor Cyan

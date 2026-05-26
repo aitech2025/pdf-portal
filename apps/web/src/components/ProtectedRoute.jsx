@@ -21,22 +21,17 @@ const ProtectedRoute = ({ children, allowedRoles, requireWrite }) => {
   }
 
   if (requireWrite && !canWrite) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/403" replace />;
   }
 
   if (allowedRoles) {
-    // Expand role groups
-    const expanded = allowedRoles.flatMap(r => {
+    const expanded = allowedRoles.flatMap((r) => {
       if (r === 'admin') return PLATFORM_ROLES;
       if (r === 'school') return SCHOOL_ROLES;
       return [r];
     });
     if (!expanded.includes(currentUser?.role)) {
-      // Redirect to appropriate home
-      const role = currentUser?.role;
-      if (PLATFORM_ROLES.includes(role)) return <Navigate to="/admin" replace />;
-      if (SCHOOL_ROLES.includes(role)) return <Navigate to="/school/dashboard" replace />;
-      return <Navigate to="/" replace />;
+      return <Navigate to="/403" replace />;
     }
   }
 

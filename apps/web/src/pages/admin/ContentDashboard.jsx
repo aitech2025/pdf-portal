@@ -25,7 +25,7 @@ const ContentDashboard = () => {
   const fetchData = async () => {
     try {
       const [pdfs, cats, subCats] = await Promise.all([
-        pb.collection('pdfs').getList(1, 8, { sort: '-created', expand: 'categoryId', $autoCancel: false }),
+        pb.collection('pdfs').getList(1, 8, { sort: '-created', $autoCancel: false }),
         pb.collection('categories').getList(1, 4, { sort: '-created', $autoCancel: false }),
         pb.collection('subCategories').getList(1, 1, { $autoCancel: false }),
       ]);
@@ -76,9 +76,9 @@ const ContentDashboard = () => {
   if (selectedPdf && window.innerWidth < 1024) {
     return (
       <div className="fixed inset-0 z-50 bg-background flex flex-col h-screen">
-        <EnhancedPDFViewer 
-          pdfRecord={selectedPdf} 
-          onClose={() => setSelectedPdf(null)} 
+        <EnhancedPDFViewer
+          pdfRecord={selectedPdf}
+          onClose={() => setSelectedPdf(null)}
           className="flex-1 rounded-none border-none shadow-none"
         />
       </div>
@@ -131,7 +131,7 @@ const ContentDashboard = () => {
             <CardContent className="p-0 overflow-y-auto flex-1">
               {loading ? (
                 <div className="p-4 space-y-3">
-                  {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+                  {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24 w-full" />)}
                 </div>
               ) : recentUploads.length === 0 ? (
                 <div className="text-center py-12 px-4">
@@ -141,16 +141,16 @@ const ContentDashboard = () => {
               ) : (
                 <div className={cn("grid gap-0", selectedPdf ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 p-4 gap-4")}>
                   {recentUploads.map(pdf => (
-                    <motion.div 
+                    <motion.div
                       key={pdf.id}
                       whileHover={{ scale: selectedPdf ? 1 : 1.01 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setSelectedPdf(pdf)}
                       className={cn(
                         "flex flex-col p-4 transition-all duration-200 cursor-pointer group relative overflow-hidden",
-                        selectedPdf?.id === pdf.id 
-                          ? "bg-primary/5 border-l-4 border-l-primary" 
-                          : selectedPdf 
+                        selectedPdf?.id === pdf.id
+                          ? "bg-primary/5 border-l-4 border-l-primary"
+                          : selectedPdf
                             ? "border-b border-border/50 hover:bg-muted/30"
                             : "rounded-[var(--radius-md)] bg-card border border-border/50 hover:shadow-soft-md hover:border-primary/30"
                       )}
@@ -162,7 +162,7 @@ const ContentDashboard = () => {
                         )}>
                           <FileText className="w-6 h-6" />
                         </div>
-                        
+
                         <div className="flex-1 min-w-0 pt-0.5">
                           <div className="flex items-center gap-2 mb-1">
                             <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-border text-muted-foreground font-mono">
@@ -178,7 +178,7 @@ const ContentDashboard = () => {
                           )}>
                             {pdf.fileName}
                           </p>
-                          
+
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
                             <Badge variant="outline" className="text-[10px] h-5 font-normal">
                               {pdf.categoryName || pdf.expand?.categoryId?.categoryName || 'No category'}
@@ -206,9 +206,9 @@ const ContentDashboard = () => {
                             <span className="flex items-center text-amber-500"><Star className="w-3.5 h-3.5 mr-1 fill-amber-500" /> {pdf.mockRating}</span>
                             <span className="flex items-center"><DownloadCloud className="w-3.5 h-3.5 mr-1" /> {pdf.mockDownloads}</span>
                           </div>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             className="h-7 px-2 text-xs text-muted-foreground hover:text-primary z-10"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -255,12 +255,12 @@ const ContentDashboard = () => {
         </div>
 
         <div className={cn(
-          "hidden lg:flex transition-all duration-300", 
+          "hidden lg:flex transition-all duration-300",
           selectedPdf ? "lg:w-2/3 h-auto min-h-[600px] opacity-100" : "w-0 opacity-0 overflow-hidden"
         )}>
           {selectedPdf && (
-            <EnhancedPDFViewer 
-              pdfRecord={selectedPdf} 
+            <EnhancedPDFViewer
+              pdfRecord={selectedPdf}
               onClose={() => setSelectedPdf(null)}
               className="h-full w-full"
             />
@@ -268,7 +268,7 @@ const ContentDashboard = () => {
         </div>
       </div>
 
-      <VersionHistoryModal 
+      <VersionHistoryModal
         isOpen={historyModalOpen}
         onClose={() => setHistoryModalOpen(false)}
         pdf={selectedPdf}

@@ -1,248 +1,113 @@
-# 🚀 START HERE - Fix "Site Can't Be Reached"
+# START HERE — Run the project locally
 
-## The Problem
+## Stack
 
-You're seeing "Site Can't Be Reached" when accessing http://localhost
+| Layer    | Tech                                      | Port |
+| -------- | ----------------------------------------- | ---- |
+| Database | MongoDB 8                                 | 27017 (internal) |
+| Backend  | Node 22 + Fastify 5 (`apps/api-node`)     | 8000 |
+| Frontend | React + Vite (`apps/web`) served via nginx | 80   |
 
----
-
-## The Solution (3 Steps)
-
-### Step 1: Start Docker Desktop ⚠️ MOST IMPORTANT
-
-1. **Open Docker Desktop** application on your computer
-2. **Wait** for it to fully start (30-60 seconds)
-3. Look for Docker icon in system tray - it should be **steady** (not animated)
-
-**If Docker Desktop is not installed:**
-- Download: https://www.docker.com/products/docker-desktop/
-- Install and restart computer
+All three services are wired up in `docker-compose.yml`.
 
 ---
 
-### Step 2: Run Diagnostic
+## 1. Prerequisites
 
-Double-click: **`check_docker.bat`**
-
-This will tell you exactly what's wrong.
-
-**Or run in PowerShell:**
-```powershell
-.\check_docker.ps1
-```
+- **Docker Desktop** (required) — https://www.docker.com/products/docker-desktop/
+- **Node 20+** (only if you want to run the web/api outside Docker)
 
 ---
 
-### Step 3: Start Containers
-
-Open PowerShell or Command Prompt in this folder and run:
+## 2. Start everything
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-Wait 30 seconds, then open: **http://localhost**
+Wait ~30s for the first build, then open:
 
----
+- Web app:   http://localhost
+- API root:  http://localhost:8000
+- API health: http://localhost:8000/api/health
+- API ready:  http://localhost:8000/api/ready
 
-## Quick Commands
+Default login:
 
-### Start Everything:
-```bash
-docker-compose up -d
-```
-
-### Check Status:
-```bash
-docker-compose ps
-```
-
-### View Logs:
-```bash
-docker-compose logs -f
-```
-
-### Stop Everything:
-```bash
-docker-compose down
-```
-
-### Restart Everything:
-```bash
-docker-compose restart
-```
-
----
-
-## Expected Output
-
-When you run `docker-compose ps`, you should see:
-
-```
-NAME                STATUS              PORTS
-pdf-portal-db       Up (healthy)        5432/tcp
-pdf-portal-api      Up                  0.0.0.0:8000->8000/tcp
-pdf-portal-web      Up                  0.0.0.0:80->80/tcp
-```
-
-All should show **"Up"** status.
-
----
-
-## Test Your Setup
-
-### 1. Test API:
-Open in browser: http://localhost:8000
-
-**Should see:** API response (not error)
-
-### 2. Test Frontend:
-Open in browser: http://localhost
-
-**Should see:** Login page or dashboard
-
-### 3. Login:
 - Email: `admin@iiconacademy.com`
 - Password: `Admin@1234`
 
 ---
 
-## Common Issues
-
-### Issue 1: Docker Desktop Not Running ⚠️
-
-**Error:**
-```
-cannot connect to docker daemon
-```
-
-**Solution:**
-1. Start Docker Desktop
-2. Wait 30-60 seconds
-3. Try again
-
----
-
-### Issue 2: Port 80 Already in Use
-
-**Error:**
-```
-port is already allocated
-```
-
-**Solution:**
-
-**Option A:** Stop IIS (if running)
-```bash
-net stop w3svc
-```
-
-**Option B:** Use different port
-
-Edit `docker-compose.yml`, change:
-```yaml
-web:
-  ports:
-    - "8080:80"  # Changed from 80:80
-```
-
-Then access: http://localhost:8080
-
----
-
-### Issue 3: Containers Keep Restarting
-
-**Check logs:**
-```bash
-docker-compose logs web
-docker-compose logs api
-```
-
-**Solution:**
-```bash
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
-```
-
----
-
-## Full Reset (If Nothing Works)
+## 3. Common commands
 
 ```bash
-# Stop everything
-docker-compose down
+docker compose ps             # status
+docker compose logs -f api    # follow API logs
+docker compose logs -f web    # follow web logs
+docker compose logs -f mongo  # follow DB logs
+docker compose restart        # restart all services
+docker compose down           # stop everything
+docker compose down -v        # stop + delete the database volume (destructive!)
+```
 
-# Remove volumes (WARNING: Deletes data!)
-docker-compose down -v
+`docker compose ps` should show all three services as `Up`:
 
-# Rebuild
-docker-compose build --no-cache
-
-# Start
-docker-compose up -d
-
-# Watch logs
-docker-compose logs -f
+```
+NAME                                 STATUS         PORTS
+pdf-portal-mongo-1                   Up (healthy)   27017/tcp
+pdf-portal-api-1                     Up             0.0.0.0:8000->8000/tcp
+pdf-portal-web-1                     Up             0.0.0.0:80->80/tcp
 ```
 
 ---
 
-## Verify Everything Works
+## 4. Dev workflow (run web outside Docker for HMR)
 
-Run this checklist:
+```bash
+docker compose up -d mongo api        # backend + DB only
+cd apps/web && npm install && npm run dev
+```
 
-- [ ] Docker Desktop is running
-- [ ] `docker-compose ps` shows all containers "Up"
-- [ ] http://localhost:8000 works (API)
-- [ ] http://localhost works (Frontend)
-- [ ] Can login with admin@iiconacademy.com / Admin@1234
-
----
-
-## Need More Help?
-
-1. **Run diagnostic:** `check_docker.bat` or `check_docker.ps1`
-2. **Check logs:** `docker-compose logs -f`
-3. **Read detailed guide:** `FIX_SITE_CANT_BE_REACHED.md`
+Vite proxies `/api` and `/uploads` to `http://localhost:8000` so the dev server picks up the dockerised API automatically.
 
 ---
 
-## 90% of the Time...
+## 5. Common issues
 
-The issue is simply: **Docker Desktop is not running**
-
-**Solution:**
-1. Start Docker Desktop
-2. Wait for it to fully start
-3. Run: `docker-compose up -d`
-4. Open: http://localhost
-
-**That's it!** 🎉
+| Problem                                   | Fix                                                                 |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| `cannot connect to docker daemon`         | Start Docker Desktop and wait for it to settle (icon stops animating). |
+| `port 80 is already allocated`            | Stop IIS (`net stop w3svc`) or change the host port in `docker-compose.yml` (`"8080:80"`). |
+| `port 8000 is already allocated`          | Kill the other process or change the host port in `docker-compose.yml`. |
+| Containers keep restarting                | `docker compose logs api` / `docker compose logs web` — usually a missing env var or a build error. |
+| Login fails on a fresh DB                 | The API seeds the default admin on first boot. Wait for the `api` container log to show `[seed] ensured default admin user`. |
 
 ---
 
-## Quick Reference
+## 6. Full reset (nuke and start over)
 
-| Command | Purpose |
-|---------|---------|
-| `docker-compose up -d` | Start all containers |
-| `docker-compose down` | Stop all containers |
-| `docker-compose ps` | Check container status |
-| `docker-compose logs -f` | View live logs |
-| `docker-compose restart` | Restart all containers |
-| `docker-compose build` | Rebuild containers |
+```bash
+docker compose down -v           # WARNING: deletes the MongoDB volume
+docker compose build --no-cache
+docker compose up -d
+docker compose logs -f
+```
 
 ---
 
-## URLs
+## 7. Mobile builds
 
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost |
-| API | http://localhost:8000 |
-| API Docs | http://localhost:8000/docs |
+See [docs/MOBILE.md](docs/MOBILE.md) for the Capacitor iOS + Android workflow.
 
 ---
 
-**Most Common Fix:** Start Docker Desktop, then run `docker-compose up -d` 🚀
+## Quick reference
+
+| Service   | Container          | URL / Port                  |
+| --------- | ------------------ | --------------------------- |
+| Web       | `pdf-portal-web-1` | http://localhost            |
+| API       | `pdf-portal-api-1` | http://localhost:8000       |
+| MongoDB   | `pdf-portal-mongo-1` | mongodb://mongo:27017/iiconacademy (internal) |
+| Health    | —                  | http://localhost:8000/api/health |
+| Readiness | —                  | http://localhost:8000/api/ready  |
