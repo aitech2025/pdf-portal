@@ -148,6 +148,7 @@ const ICON_MAP = {
 
 const subCategorySchema = z.object({
   subCategoryName: z.string().min(2, "Name must be at least 2 characters").max(100, "Name is too long"),
+  subCategoryCode: z.string().max(20).optional().or(z.literal('')),
   description: z.string().max(500, "Description is too long").optional().or(z.literal('')),
   icon: z.string().optional().or(z.literal('')),
   isActive: z.boolean().default(true),
@@ -163,7 +164,7 @@ const DynamicIconPreview = ({ iconName }) => {
   );
 };
 
-const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categoryName = "Category" }) => {
+const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categoryName = "Program" }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditing = !!subCategory;
 
@@ -171,6 +172,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
     resolver: zodResolver(subCategorySchema),
     defaultValues: {
       subCategoryName: '',
+      subCategoryCode: '',
       description: '',
       icon: '',
       isActive: true,
@@ -183,6 +185,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
       if (subCategory) {
         form.reset({
           subCategoryName: subCategory.subCategoryName || '',
+          subCategoryCode: subCategory.subCategoryCode || '',
           description: subCategory.description || '',
           icon: subCategory.icon || '',
           isActive: subCategory.isActive !== false,
@@ -191,6 +194,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
       } else {
         form.reset({
           subCategoryName: '',
+          subCategoryCode: '',
           description: '',
           icon: '',
           isActive: true,
@@ -216,7 +220,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
     <Dialog open={isOpen} onOpenChange={(open) => !isSubmitting && onClose()}>
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-poppins">{isEditing ? 'Edit Sub-Category' : `Add Sub-Category to ${categoryName}`}</DialogTitle>
+          <DialogTitle className="text-xl font-poppins">{isEditing ? 'Edit Class' : `Add Class to ${categoryName}`}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -226,10 +230,25 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
               name="subCategoryName"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Sub-Category Name <span className="text-destructive">*</span></FormLabel>
+                  <FormLabel>Class Name <span className="text-destructive">*</span></FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. Physics, Algebra..." {...field} />
+                    <Input placeholder="e.g. Class 1, Class 10, Grade 5..." {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="subCategoryCode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Class Code</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. CLS8, CLS10, INT1..." {...field} />
+                  </FormControl>
+                  <FormDescription className="text-[11px]">Optional unique identifier for this class.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -243,7 +262,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
                   <FormLabel>Description</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Detailed description of the sub-category..."
+                      placeholder="Detailed description of the class..."
                       className="resize-none h-20"
                       {...field}
                     />
@@ -296,7 +315,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
                   <div className="space-y-0.5">
                     <FormLabel className="text-base">Active Status</FormLabel>
                     <FormDescription>
-                      Inactive sub-categories hide their contents from standard users.
+                      Inactive classes hide their contents from standard users.
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -314,7 +333,7 @@ const SubCategoryModal = ({ isOpen, onClose, onSave, subCategory = null, categor
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting || (!form.formState.isDirty && isEditing)}>
-                {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Sub-Category'}
+                {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Class'}
               </Button>
             </DialogFooter>
           </form>

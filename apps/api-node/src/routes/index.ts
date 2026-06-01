@@ -15,6 +15,11 @@ import { registerSchoolRoutes } from "./schools.js";
 import { registerUserRoutes } from "./users.js";
 import { registerFavoriteRoutes } from "./favorites.js";
 import { registerSearchRoutes } from "./search.js";
+import { registerSubjectRoutes } from "./subjects.js";
+import { registerVideoLessonRoutes } from "./videoLessons.js";
+import { registerMasterClassRoutes } from "./masterClasses.js";
+import { registerMasterSubjectRoutes } from "./masterSubjects.js";
+import { registerProgramStructureRoutes } from "./programStructure.js";
 
 export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
   await registerAuthRoutes(app);
@@ -22,6 +27,11 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
   await registerSchoolRoutes(app);
   await registerCategoryRoutes(app);
   await registerProgramRoutes(app);
+  await registerSubjectRoutes(app);
+  await registerVideoLessonRoutes(app);
+  await registerMasterClassRoutes(app);
+  await registerMasterSubjectRoutes(app);
+  await registerProgramStructureRoutes(app);
   await registerPdfRoutes(app);
   await registerPdfVersionRoutes(app);
   await registerNotificationRoutes(app);

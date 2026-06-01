@@ -14,19 +14,39 @@ export const registerRequestRoutes = async (app: FastifyInstance): Promise<void>
   });
 
   app.post("/api/onboardingRequests", async (request) => {
-    const body = z
+    const raw = z
       .object({
-        school_name: z.string(),
+        school_name: z.string().optional(),
+        schoolName: z.string().optional(),
         address: z.string().optional(),
         location: z.string().optional(),
         email: z.string().email(),
         mobile_number: z.string().optional(),
+        mobileNumber: z.string().optional(),
         point_of_contact_name: z.string().optional(),
+        pointOfContactName: z.string().optional(),
         point_of_contact_mobile: z.string().optional(),
         grades: z.string().optional(),
-        category: z.string().optional()
+        category: z.string().optional(),
+        institution_type: z.string().optional(),
+        institutionType: z.string().optional(),
+        status: z.string().optional()
       })
       .parse(request.body);
+
+    const body = {
+      school_name: raw.school_name ?? raw.schoolName ?? "",
+      address: raw.address,
+      location: raw.location,
+      email: raw.email,
+      mobile_number: raw.mobile_number ?? raw.mobileNumber,
+      point_of_contact_name: raw.point_of_contact_name ?? raw.pointOfContactName,
+      point_of_contact_mobile: raw.point_of_contact_mobile,
+      grades: raw.grades,
+      category: raw.category,
+      institution_type: raw.institution_type ?? raw.institutionType ?? "school",
+      status: raw.status ?? "pending"
+    };
     return OnboardingRequest.create(body);
   });
 
@@ -57,6 +77,7 @@ export const registerRequestRoutes = async (app: FastifyInstance): Promise<void>
           mobile_number: req.mobile_number,
           point_of_contact_name: req.point_of_contact_name,
           grades: req.grades,
+          institution_type: (req as any).institution_type ?? "school",
           is_active: true
         });
         let generatedPassword: string | undefined;

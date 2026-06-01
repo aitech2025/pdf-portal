@@ -63,6 +63,7 @@ const parseSchoolBody = (body: Record<string, unknown>) => ({
   point_of_contact_mobile: (body.pointOfContactMobile ?? body.point_of_contact_mobile) as string | undefined,
   principal_name: (body.principalName ?? body.principal_name) as string | undefined,
   grades: body.grades as string | undefined,
+  institution_type: (body.institutionType ?? body.institution_type ?? "school") as string,
   is_active: (body.isActive ?? body.is_active ?? true) as boolean,
   send_email: (body.sendEmail ?? body.send_email ?? true) as boolean,
   password: body.password as string | undefined
@@ -125,6 +126,7 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
     const school = await School.create({
       school_name: body.school_name,
       school_id,
+      institution_type: body.institution_type,
       location: body.location,
       address: body.address,
       email: body.email,
@@ -197,6 +199,7 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
       const school = await School.create({
         school_name: parsed.school_name,
         school_id,
+        institution_type: parsed.institution_type ?? "school",
         location: parsed.location,
         address: parsed.address,
         email: parsed.email,
@@ -268,6 +271,8 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
     if (body.address !== undefined) update.address = body.address;
     if (body.mobileNumber !== undefined) update.mobile_number = body.mobileNumber;
     if (body.isActive !== undefined) update.is_active = body.isActive;
+    if (body.institutionType !== undefined) update.institution_type = body.institutionType;
+    if (body.institution_type !== undefined) update.institution_type = body.institution_type;
     if (body.deactivationMessage !== undefined) update.deactivation_message = body.deactivationMessage;
     const updated = await School.findOneAndUpdate({ id: params.school_id }, { $set: update }, { new: true });
     if (!updated) return reply.status(404).send({ detail: "School not found" });

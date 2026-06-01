@@ -5,21 +5,29 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowLeft, Zap, Building, User, Mail, Phone, CheckCircle2, ArrowRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ArrowLeft, Zap, Building, Building2, User, Mail, Phone, CheckCircle2, ArrowRight, GraduationCap } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import pb from '@/lib/apiClient';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const GuestSignupForm = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [step, setStep] = useState(1); // 1: type selection, 2: form
   const [formData, setFormData] = useState({
+    institutionType: '',
     schoolName: '',
     pointOfContactName: '',
     email: '',
     mobileNumber: ''
   });
+
+  const handleSelectType = (type) => {
+    setFormData(prev => ({ ...prev, institutionType: type }));
+    setStep(2);
+  };
 
   const handleChange = (e) => {
     const { id, value } = e.target;
@@ -31,10 +39,18 @@ const GuestSignupForm = () => {
     setLoading(true);
 
     try {
-      await pb.collection('onboardingRequests').create({
-        ...formData,
-        status: 'pending'
-      }, { $autoCancel: false });
+      await fetch('/api/onboardingRequests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schoolName: formData.schoolName,
+          institutionType: formData.institutionType,
+          pointOfContactName: formData.pointOfContactName,
+          email: formData.email,
+          mobileNumber: formData.mobileNumber,
+          status: 'pending'
+        })
+      });
 
       setIsSubmitted(true);
       toast.success('Request submitted successfully!');
@@ -80,7 +96,7 @@ const GuestSignupForm = () => {
       >
         {!isSubmitted ? (
           <>
-            <div className="flex flex-col items-center mb-10 text-center">
+            <div className="flex flex-col items-center mb-8 text-center">
               <div className="w-16 h-16 bg-gradient-primary rounded-2xl flex items-center justify-center shadow-soft-lg shadow-primary/30 mb-6">
                 <Zap className="w-8 h-8 text-white" />
               </div>
@@ -88,96 +104,160 @@ const GuestSignupForm = () => {
                 Request Access
               </h1>
               <p className="text-muted-foreground mt-3 text-lg max-w-[360px]">
-                Join i-icon academy to manage your school's digital resources seamlessly.
+                {step === 1 ? 'What type of institution are you registering?' : 'Tell us about your institution.'}
               </p>
             </div>
 
-            <Card className="border-border/50 shadow-soft-xl bg-card/80 backdrop-blur-2xl">
-              <CardContent className="p-6 sm:p-8">
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="schoolName" className="text-foreground font-medium">School / Organization Name</Label>
-                    <div className="relative">
-                      <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                      <Input
-                        id="schoolName"
-                        type="text"
-                        placeholder="e.g. Springfield High"
-                        value={formData.schoolName}
-                        onChange={handleChange}
-                        required
-                        className="pl-10 h-12 text-base text-foreground bg-background/50 border-border transition-colors focus-visible:ring-primary/20"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="pointOfContactName" className="text-foreground font-medium">Your Name</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                      <Input
-                        id="pointOfContactName"
-                        type="text"
-                        placeholder="John Doe"
-                        value={formData.pointOfContactName}
-                        onChange={handleChange}
-                        required
-                        className="pl-10 h-12 text-base text-foreground bg-background/50 border-border transition-colors focus-visible:ring-primary/20"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="email" className="text-foreground font-medium">Work Email Address</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="john@school.edu"
-                        value={formData.email}
-                        onChange={handleChange}
-                        required
-                        className="pl-10 h-12 text-base text-foreground bg-background/50 border-border transition-colors focus-visible:ring-primary/20"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="mobileNumber" className="text-foreground font-medium">Phone Number</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                      <Input
-                        id="mobileNumber"
-                        type="tel"
-                        placeholder="(555) 123-4567"
-                        value={formData.mobileNumber}
-                        onChange={handleChange}
-                        className="pl-10 h-12 text-base text-foreground bg-background/50 border-border transition-colors focus-visible:ring-primary/20"
-                      />
-                    </div>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full h-12 text-base font-semibold mt-4 bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all shadow-soft-md group"
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                        <span>Submitting...</span>
+            <AnimatePresence mode="wait">
+              {step === 1 ? (
+                <motion.div
+                  key="step1"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={() => handleSelectType('school')}
+                      className={cn(
+                        "flex flex-col items-center gap-4 p-6 rounded-2xl border-2 transition-all duration-200 cursor-pointer bg-card/80 backdrop-blur-2xl shadow-soft-md hover:shadow-soft-lg hover:border-primary/40 hover:bg-primary/5"
+                      )}
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+                        <Building className="w-8 h-8 text-blue-500" />
                       </div>
+                      <div className="text-center">
+                        <p className="font-poppins font-bold text-lg text-foreground">School</p>
+                        <p className="text-sm text-muted-foreground mt-1">K-12 / Primary & Secondary</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleSelectType('college')}
+                      className={cn(
+                        "flex flex-col items-center gap-4 p-6 rounded-2xl border-2 transition-all duration-200 cursor-pointer bg-card/80 backdrop-blur-2xl shadow-soft-md hover:shadow-soft-lg hover:border-primary/40 hover:bg-primary/5"
+                      )}
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center">
+                        <GraduationCap className="w-8 h-8 text-purple-500" />
+                      </div>
+                      <div className="text-center">
+                        <p className="font-poppins font-bold text-lg text-foreground">College</p>
+                        <p className="text-sm text-muted-foreground mt-1">Higher Education / University</p>
+                      </div>
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="step2"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="flex items-center gap-2 mb-4 p-3 rounded-xl bg-primary/5 border border-primary/20">
+                    {formData.institutionType === 'school' ? (
+                      <Building className="w-5 h-5 text-blue-500 shrink-0" />
                     ) : (
-                      <>
-                        Submit Request
-                        <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                      </>
+                      <GraduationCap className="w-5 h-5 text-purple-500 shrink-0" />
                     )}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+                    <span className="text-sm font-medium capitalize text-foreground">{formData.institutionType} Registration</span>
+                    <button onClick={() => setStep(1)} className="ml-auto text-xs text-muted-foreground hover:text-primary underline">Change</button>
+                  </div>
+
+                  <Card className="border-border/50 shadow-soft-xl bg-card/80 backdrop-blur-2xl">
+                    <CardContent className="p-6 sm:p-8">
+                      <form onSubmit={handleSubmit} className="space-y-5">
+                        <div className="space-y-2">
+                          <Label htmlFor="schoolName" className="text-foreground font-medium">
+                            {formData.institutionType === 'college' ? 'College / University Name' : 'School Name'}
+                          </Label>
+                          <div className="relative">
+                            <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <Input
+                              id="schoolName"
+                              type="text"
+                              placeholder={formData.institutionType === 'college' ? 'e.g. Springfield University' : 'e.g. Springfield High'}
+                              value={formData.schoolName}
+                              onChange={handleChange}
+                              required
+                              className="pl-10 h-12 text-base text-foreground bg-background/50 border-border transition-colors focus-visible:ring-primary/20"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="pointOfContactName" className="text-foreground font-medium">Your Name</Label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <Input
+                              id="pointOfContactName"
+                              type="text"
+                              placeholder="John Doe"
+                              value={formData.pointOfContactName}
+                              onChange={handleChange}
+                              required
+                              className="pl-10 h-12 text-base text-foreground bg-background/50 border-border transition-colors focus-visible:ring-primary/20"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="email" className="text-foreground font-medium">Work Email Address</Label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <Input
+                              id="email"
+                              type="email"
+                              placeholder="john@school.edu"
+                              value={formData.email}
+                              onChange={handleChange}
+                              required
+                              className="pl-10 h-12 text-base text-foreground bg-background/50 border-border transition-colors focus-visible:ring-primary/20"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="mobileNumber" className="text-foreground font-medium">Phone Number</Label>
+                          <div className="relative">
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <Input
+                              id="mobileNumber"
+                              type="tel"
+                              placeholder="(555) 123-4567"
+                              value={formData.mobileNumber}
+                              onChange={handleChange}
+                              className="pl-10 h-12 text-base text-foreground bg-background/50 border-border transition-colors focus-visible:ring-primary/20"
+                            />
+                          </div>
+                        </div>
+
+                        <Button
+                          type="submit"
+                          className="w-full h-12 text-base font-semibold mt-4 bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all shadow-soft-md group"
+                          disabled={loading}
+                        >
+                          {loading ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                              <span>Submitting...</span>
+                            </div>
+                          ) : (
+                            <>
+                              Submit Request
+                              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                            </>
+                          )}
+                        </Button>
+                      </form>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <p className="text-center text-muted-foreground mt-8">
               Already have an account?{' '}

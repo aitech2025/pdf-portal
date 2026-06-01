@@ -1,4 +1,4 @@
-import { Category, Pdf, Program, SubCategory } from "../models/index.js";
+import { Category, ClassMaster, SubjectMaster, Pdf, Program, SubCategory } from "../models/index.js";
 import { generateMappedPdfCode } from "./codes.js";
 import { serializeDoc } from "./serialize.js";
 
@@ -7,6 +7,8 @@ type PdfLean = Record<string, unknown> & {
   pdf_id?: string | null;
   category_id?: string | null;
   sub_category_id?: string | null;
+  class_id?: string | null;
+  subject_id?: string | null;
 };
 
 /**
@@ -40,10 +42,14 @@ export const enrichPdfs = async (pdfs: PdfLean[]): Promise<Record<string, unknow
 
   const categoryIds = [...new Set(pdfs.map((p) => p.category_id).filter(Boolean))] as string[];
   const subCategoryIds = [...new Set(pdfs.map((p) => p.sub_category_id).filter(Boolean))] as string[];
+  const classIds = [...new Set(pdfs.map((p) => p.class_id).filter(Boolean))] as string[];
+  const subjectIds = [...new Set(pdfs.map((p) => p.subject_id).filter(Boolean))] as string[];
 
-  const [categories, subCategories] = await Promise.all([
+  const [categories, subCategories, masterClasses, masterSubjects] = await Promise.all([
     Category.find({ id: { $in: categoryIds } }).lean(),
-    SubCategory.find({ id: { $in: subCategoryIds } }).lean()
+    SubCategory.find({ id: { $in: subCategoryIds } }).lean(),
+    classIds.length ? ClassMaster.find({ id: { $in: classIds } }).lean() : Promise.resolve([]),
+    subjectIds.length ? SubjectMaster.find({ id: { $in: subjectIds } }).lean() : Promise.resolve([])
   ]);
 
   const programIds = [...new Set(categories.map((c) => c.program_id).filter(Boolean))] as string[];
@@ -52,12 +58,16 @@ export const enrichPdfs = async (pdfs: PdfLean[]): Promise<Record<string, unknow
   const catMap = new Map(categories.map((c) => [c.id, c]));
   const subMap = new Map(subCategories.map((s) => [s.id, s]));
   const progMap = new Map(programs.map((p) => [p.id, p]));
+  const clsMap = new Map(masterClasses.map((c) => [c.id, c]));
+  const subjMap = new Map(masterSubjects.map((s) => [s.id, s]));
 
   return Promise.all(
     pdfs.map(async (pdf) => {
       const cat = pdf.category_id ? catMap.get(pdf.category_id) : null;
       const sub = pdf.sub_category_id ? subMap.get(pdf.sub_category_id) : null;
       const prog = cat?.program_id ? progMap.get(cat.program_id) : null;
+      const cls = pdf.class_id ? clsMap.get(pdf.class_id) : null;
+      const subj = pdf.subject_id ? subjMap.get(pdf.subject_id) : null;
 
       const code = await backfillMissingCode(pdf, cat, sub);
       const base = serializeDoc({ ...pdf, pdf_id: code ?? pdf.pdf_id ?? null } as Record<string, unknown>);
@@ -66,10 +76,16 @@ export const enrichPdfs = async (pdfs: PdfLean[]): Promise<Record<string, unknow
         ...base,
         categoryId: pdf.category_id ?? null,
         subCategoryId: pdf.sub_category_id ?? null,
+        classId: pdf.class_id ?? null,
+        subjectId: pdf.subject_id ?? null,
         categoryName: cat?.category_name ?? null,
         categoryCode: cat?.category_code ?? null,
         categoryType: cat?.category_type ?? null,
         subCategoryName: sub?.sub_category_name ?? null,
+        className: (cls as any)?.class_name ?? null,
+        classCode: (cls as any)?.class_code ?? null,
+        subjectName: (subj as any)?.subject_name ?? null,
+        subjectCode: (subj as any)?.subject_code ?? null,
         programId: cat?.program_id ?? null,
         programName: prog?.program_name ?? null,
         programCode: prog?.program_code ?? null,

@@ -185,7 +185,7 @@ const AdminDashboard = () => {
           />
 
           <MetricCard
-            title="Categories"
+            title="Programs"
             value={12}
             trend={2.1}
             icon={FileBarChart}
@@ -200,7 +200,7 @@ const AdminDashboard = () => {
       <Card className="border-none shadow-soft-sm bg-card">
         <CardContent className="p-4 flex flex-wrap gap-3">
           <Button variant="outline" onClick={() => navigate('/admin/schools-and-users')} className="flex-1 min-w-[140px] bg-background hover:bg-muted/50 border-border/60"><PlusCircle className="w-4 h-4 mr-2 text-primary" /> Create School</Button>
-          <Button variant="outline" onClick={() => navigate('/admin/categories')} className="flex-1 min-w-[140px] bg-background hover:bg-muted/50 border-border/60"><PlusCircle className="w-4 h-4 mr-2 text-accent" /> Create Category</Button>
+          <Button variant="outline" onClick={() => navigate('/admin/categories-management')} className="flex-1 min-w-[140px] bg-background hover:bg-muted/50 border-border/60"><PlusCircle className="w-4 h-4 mr-2 text-accent" /> Create Program</Button>
           <Button variant="outline" onClick={() => navigate('/admin/moderation')} className="flex-1 min-w-[140px] bg-background hover:bg-muted/50 border-border/60"><CheckCircle className="w-4 h-4 mr-2 text-success" /> Approve PDFs</Button>
           <Button variant="outline" onClick={() => navigate('/admin/schools-and-users')} className="flex-1 min-w-[140px] bg-background hover:bg-muted/50 border-border/60"><Eye className="w-4 h-4 mr-2 text-warning" /> View Requests</Button>
           <Button variant="outline" onClick={() => navigate('/admin/notifications')} className="flex-1 min-w-[140px] bg-background hover:bg-muted/50 border-border/60"><Bell className="w-4 h-4 mr-2 text-danger" /> Notifications</Button>

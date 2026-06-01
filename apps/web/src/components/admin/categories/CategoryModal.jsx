@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,380 +7,428 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, FolderTree, BookOpen, Users, Beaker, Compass, Lightbulb, Target, Award, Zap, Sparkles, Globe, Heart, Brain, Code, Palette, Music, Camera, Microscope, Atom, Dna, Rocket, Cpu, Database, Network, Shield, Lock, Key, Settings, Wrench, Hammer, Hammer as Drill, Sword as Saw, Ruler, Calculator, BarChart3, TrendingUp, PieChart, LineChart, Activity, HeartPulse as Pulse, Wind, Droplet, Flame, Leaf, Mountain, Sun, Moon, Star, Cloud, CloudRain, CloudSnow, Wind as WindIcon, Waves, Anchor, Compass as CompassIcon, Map, Navigation, MapPin, Flag, Bookmark, Tag, Tag as Label, Badge, Layers, Grid, List, Table, Columns, Rows, Square, Circle, Triangle, Hexagon, Pentagon, Octagon, Diamond, Cross, Plus, Minus, X, Check, CheckCircle, AlertCircle, Info, HelpCircle, Bug as Question, Copy, Clipboard, Trash2, Edit2, Eye, EyeOff, Search, Filter, Download, Upload, Share2, Link, Mail, MessageSquare, Phone, Video, Mic, Volume2, Volume, VolumeX, Headphones, Radio, Wifi, WifiOff, Bluetooth, Smartphone, Tablet, Monitor, Tv, Watch, Cpu as CpuIcon, HardDrive, Disc, Disc3, FlipHorizontal as Floppy, Save, Folder, FolderOpen, File, FileText, FileCode, FileImage, FileVideo, FileAudio, FileArchive, FileCheck, FileX, FileMinus, FilePlus, FileQuestion, FileSearch, FileJson, FileText as FileXml, FileJson as FileYaml, FileText as FileToml, FileOutput as FileConfig, FileSearch as FileSettings, FileOutput as FileUser, FileSearch as FileUsers, FileKey, FileKey as FileSecret, FileLock, FileLock as FileUnlock, FileHeart as FileShield, FileWarning as FileAlert, FileWarning, Files as FileInfo, FileQuestion as FileHelp, FileQuestion as FileQuestionIcon, FileSearch as FileSearchIcon, FileJson as FileJsonIcon, FileText as FileXmlIcon, FileJson as FileYamlIcon, FileText as FileTomlIcon, FileOutput as FileConfigIcon, FileSearch as FileSettingsIcon, FileOutput as FileUserIcon, FileSearch as FileUsersIcon, FileKey as FileKeyIcon, FileKey as FileSecretIcon, FileLock as FileLockIcon, FileLock as FileUnlockIcon, FileHeart as FileShieldIcon, FileWarning as FileAlertIcon, FileWarning as FileWarningIcon, Files as FileInfoIcon, FileQuestion as FileHelpIcon } from 'lucide-react';
-import client from '@/lib/apiClient';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Loader2, GraduationCap, BookOpen, Search, CheckSquare, Square, ChevronDown, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import pb from '@/lib/apiClient';
 
-// Static icon mapping object
-const ICON_MAP = {
-  'FolderTree': FolderTree,
-  'BookOpen': BookOpen,
-  'Users': Users,
-  'Beaker': Beaker,
-  'Compass': Compass,
-  'Lightbulb': Lightbulb,
-  'Target': Target,
-  'Award': Award,
-  'Zap': Zap,
-  'Sparkles': Sparkles,
-  'Globe': Globe,
-  'Heart': Heart,
-  'Brain': Brain,
-  'Code': Code,
-  'Palette': Palette,
-  'Music': Music,
-  'Camera': Camera,
-  'Microscope': Microscope,
-  'Atom': Atom,
-  'Dna': Dna,
-  'Rocket': Rocket,
-  'Cpu': Cpu,
-  'Database': Database,
-  'Network': Network,
-  'Shield': Shield,
-  'Lock': Lock,
-  'Key': Key,
-  'Settings': Settings,
-  'Wrench': Wrench,
-  'Hammer': Hammer,
-  'Drill': Drill,
-  'Saw': Saw,
-  'Ruler': Ruler,
-  'Calculator': Calculator,
-  'BarChart3': BarChart3,
-  'TrendingUp': TrendingUp,
-  'PieChart': PieChart,
-  'LineChart': LineChart,
-  'Activity': Activity,
-  'Pulse': Pulse,
-  'Wind': Wind,
-  'Droplet': Droplet,
-  'Flame': Flame,
-  'Leaf': Leaf,
-  'Mountain': Mountain,
-  'Sun': Sun,
-  'Moon': Moon,
-  'Star': Star,
-  'Cloud': Cloud,
-  'CloudRain': CloudRain,
-  'CloudSnow': CloudSnow,
-  'Waves': Waves,
-  'Anchor': Anchor,
-  'Map': Map,
-  'Navigation': Navigation,
-  'MapPin': MapPin,
-  'Flag': Flag,
-  'Bookmark': Bookmark,
-  'Tag': Tag,
-  'Label': Label,
-  'Badge': Badge,
-  'Layers': Layers,
-  'Grid': Grid,
-  'List': List,
-  'Table': Table,
-  'Columns': Columns,
-  'Rows': Rows,
-  'Square': Square,
-  'Circle': Circle,
-  'Triangle': Triangle,
-  'Hexagon': Hexagon,
-  'Pentagon': Pentagon,
-  'Octagon': Octagon,
-  'Diamond': Diamond,
-  'Cross': Cross,
-  'Plus': Plus,
-  'Minus': Minus,
-  'X': X,
-  'Check': Check,
-  'CheckCircle': CheckCircle,
-  'AlertCircle': AlertCircle,
-  'Info': Info,
-  'HelpCircle': HelpCircle,
-  'Question': Question,
-  'Copy': Copy,
-  'Clipboard': Clipboard,
-  'Trash2': Trash2,
-  'Edit2': Edit2,
-  'Eye': Eye,
-  'EyeOff': EyeOff,
-  'Search': Search,
-  'Filter': Filter,
-  'Download': Download,
-  'Upload': Upload,
-  'Share2': Share2,
-  'Link': Link,
-  'Mail': Mail,
-  'MessageSquare': MessageSquare,
-  'Phone': Phone,
-  'Video': Video,
-  'Mic': Mic,
-  'Volume2': Volume2,
-  'Volume': Volume,
-  'VolumeX': VolumeX,
-  'Headphones': Headphones,
-  'Radio': Radio,
-  'Wifi': Wifi,
-  'WifiOff': WifiOff,
-  'Bluetooth': Bluetooth,
-  'Smartphone': Smartphone,
-  'Tablet': Tablet,
-  'Monitor': Monitor,
-  'Tv': Tv,
-  'Watch': Watch,
-  'HardDrive': HardDrive,
-  'Disc': Disc,
-  'Disc3': Disc3,
-  'Floppy': Floppy,
-  'Save': Save,
-  'Folder': Folder,
-  'FolderOpen': FolderOpen,
-  'File': File,
-  'FileText': FileText,
-  'FileCode': FileCode,
-  'FileImage': FileImage,
-  'FileVideo': FileVideo,
-  'FileAudio': FileAudio,
-  'FileArchive': FileArchive,
-  'FileCheck': FileCheck,
-  'FileX': FileX,
-  'FileMinus': FileMinus,
-  'FilePlus': FilePlus,
+const getToken = () => {
+  try { return pb.authStore.token || localStorage.getItem('authToken') || ''; } catch { return ''; }
 };
 
-const categorySchema = z.object({
-  programId: z.string().optional().or(z.literal('')),
-  categoryName: z.string().min(2, "Name must be at least 2 characters").max(100, "Name is too long"),
-  categoryType: z.enum(["Grade 1-5", "Grade 6-10"], { required_error: "Please select a category type" }),
-  description: z.string().max(500, "Description is too long").optional().or(z.literal('')),
-  icon: z.string().optional().or(z.literal('')),
-  isActive: z.boolean().default(true),
-  displayOrder: z.coerce.number().int().min(0).optional().default(0)
+const apiFetch = async (url, options = {}) => {
+  const token = getToken();
+  const res = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) }
+  });
+  if (!res.ok) { const err = await res.json().catch(() => ({ detail: res.statusText })); throw new Error(err.detail || 'Request failed'); }
+  return res.status === 204 ? null : res.json();
+};
+
+const schema = z.object({
+  categoryName: z.string().min(2, 'Name must be at least 2 characters').max(100),
+  description: z.string().max(500).optional().or(z.literal('')),
+  isActive: z.boolean().default(true)
 });
 
-const DynamicIconPreview = ({ iconName }) => {
-  const IconComponent = iconName && ICON_MAP[iconName] ? ICON_MAP[iconName] : FolderTree;
-  return (
-    <div className="w-10 h-10 rounded-[var(--radius-md)] bg-muted flex items-center justify-center border border-border/50 shrink-0">
-      <IconComponent className="w-5 h-5 text-muted-foreground" />
-    </div>
-  );
-};
+const STEPS = ['Program Details', 'Assign Classes', 'Assign Subjects'];
 
 const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [programs, setPrograms] = useState([]);
   const isEditing = !!category;
+  const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Masters
+  const [masterClasses, setMasterClasses] = useState([]);
+  const [masterSubjects, setMasterSubjects] = useState([]);
+  const [mastersLoading, setMastersLoading] = useState(false);
+
+  // Selections
+  const [selectedClassIds, setSelectedClassIds] = useState(new Set());
+  const [subjectsByClass, setSubjectsByClass] = useState({}); // classId → Set<subjectId>
+  const [classSearch, setClassSearch] = useState('');
+  const [expandedClasses, setExpandedClasses] = useState({});
 
   const form = useForm({
-    resolver: zodResolver(categorySchema),
-    defaultValues: {
-      programId: '',
-      categoryName: '',
-      categoryType: '',
-      description: '',
-      icon: '',
-      isActive: true,
-      displayOrder: 0
-    }
+    resolver: zodResolver(schema),
+    defaultValues: { categoryName: '', description: '', isActive: true }
   });
 
-  useEffect(() => {
-    if (!isOpen) return;
-    client.fetch('/programs')
-      .then((res) => setPrograms(res.items || []))
-      .catch(() => setPrograms([]));
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen) {
-      if (category) {
-        form.reset({
-          programId: category.programId || '',
-          categoryName: category.categoryName || '',
-          categoryType: category.categoryType || '',
-          description: category.description || '',
-          icon: category.icon || '',
-          isActive: category.isActive !== false,
-          displayOrder: category.displayOrder || 0
-        });
-      } else {
-        form.reset({
-          programId: '',
-          categoryName: '',
-          categoryType: '',
-          description: '',
-          icon: '',
-          isActive: true,
-          displayOrder: 0
-        });
-      }
+  const fetchMasters = useCallback(async () => {
+    if (masterClasses.length > 0) return;
+    setMastersLoading(true);
+    try {
+      const [cls, subj] = await Promise.all([
+        apiFetch('/api/masterClasses'),
+        apiFetch('/api/masterSubjects')
+      ]);
+      setMasterClasses(cls?.items ?? []);
+      setMasterSubjects(subj?.items ?? []);
+    } catch {
+      // non-fatal
+    } finally {
+      setMastersLoading(false);
     }
-  }, [isOpen, category, form]);
+  }, [masterClasses.length]);
 
-  const onSubmit = async (data) => {
+  useEffect(() => {
+    if (!isOpen) {
+      setStep(1);
+      setSelectedClassIds(new Set());
+      setSubjectsByClass({});
+      setClassSearch('');
+      setExpandedClasses({});
+      return;
+    }
+    form.reset(category
+      ? { categoryName: category.categoryName || '', description: category.description || '', isActive: category.isActive !== false }
+      : { categoryName: '', description: '', isActive: true }
+    );
+    if (!isEditing) fetchMasters();
+  }, [isOpen, category, isEditing, fetchMasters, form]);
+
+  // ---------- class helpers ----------
+  const toggleClass = (classId) => {
+    setSelectedClassIds(prev => {
+      const next = new Set(prev);
+      if (next.has(classId)) {
+        next.delete(classId);
+        setSubjectsByClass(s => { const n = { ...s }; delete n[classId]; return n; });
+      } else {
+        next.add(classId);
+        setExpandedClasses(e => ({ ...e, [classId]: true }));
+      }
+      return next;
+    });
+  };
+
+  const toggleAllClasses = () => {
+    const visible = masterClasses.filter(c =>
+      !classSearch || c.className?.toLowerCase().includes(classSearch.toLowerCase())
+    );
+    const allSelected = visible.every(c => selectedClassIds.has(c.id));
+    if (allSelected) {
+      setSelectedClassIds(prev => {
+        const next = new Set(prev);
+        visible.forEach(c => next.delete(c.id));
+        return next;
+      });
+    } else {
+      setSelectedClassIds(prev => {
+        const next = new Set(prev);
+        visible.forEach(c => next.add(c.id));
+        return next;
+      });
+    }
+  };
+
+  // ---------- subject helpers ----------
+  const toggleSubject = (classId, subjectId) => {
+    setSubjectsByClass(prev => {
+      const next = { ...prev };
+      if (!next[classId]) next[classId] = new Set();
+      const set = new Set(next[classId]);
+      set.has(subjectId) ? set.delete(subjectId) : set.add(subjectId);
+      next[classId] = set;
+      return next;
+    });
+  };
+
+  const toggleAllSubjects = (classId) => {
+    const available = masterSubjects.filter(s => s.isActive !== false);
+    setSubjectsByClass(prev => {
+      const next = { ...prev };
+      const current = next[classId] || new Set();
+      const allSel = available.length > 0 && available.every(s => current.has(s.id));
+      next[classId] = allSel ? new Set() : new Set(available.map(s => s.id));
+      return next;
+    });
+  };
+
+  // ---------- navigation ----------
+  const goNext = async () => {
+    if (step === 1) {
+      const valid = await form.trigger(['categoryName']);
+      if (valid) setStep(2);
+    } else if (step === 2) {
+      setStep(3);
+    }
+  };
+
+  const goBack = () => setStep(s => s - 1);
+
+  const onFinalSubmit = async (data) => {
     setIsSubmitting(true);
     try {
-      await onSave(data);
+      const structureData = isEditing ? null : {
+        classIds: [...selectedClassIds],
+        subjectsByClass: Object.fromEntries(
+          Object.entries(subjectsByClass).map(([k, v]) => [k, [...v]])
+        )
+      };
+      await onSave(data, structureData);
       onClose();
-    } catch (error) {
-      // Error handled in the hook via toast
+    } catch {
+      // handled upstream
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const visibleClasses = masterClasses.filter(c =>
+    !classSearch || c.className?.toLowerCase().includes(classSearch.toLowerCase())
+  );
+  const allVisibleSelected = visibleClasses.length > 0 && visibleClasses.every(c => selectedClassIds.has(c.id));
+  const selectedClassList = masterClasses.filter(c => selectedClassIds.has(c.id));
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !isSubmitting && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-poppins">{isEditing ? 'Edit Category' : 'Add New Category'}</DialogTitle>
+      <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0">
+          <DialogTitle className="text-xl font-poppins">
+            {isEditing ? 'Edit Program' : 'Add New Program'}
+          </DialogTitle>
+          {!isEditing && (
+            <div className="flex items-center gap-2 mt-3">
+              {STEPS.map((label, i) => (
+                <React.Fragment key={i}>
+                  <div className="flex items-center gap-1.5">
+                    <div className={cn(
+                      "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
+                      step > i + 1 ? "bg-primary text-primary-foreground" :
+                      step === i + 1 ? "bg-primary text-primary-foreground" :
+                      "bg-muted text-muted-foreground"
+                    )}>
+                      {i + 1}
+                    </div>
+                    <span className={cn(
+                      "text-xs hidden sm:block",
+                      step === i + 1 ? "text-foreground font-medium" : "text-muted-foreground"
+                    )}>{label}</span>
+                  </div>
+                  {i < STEPS.length - 1 && (
+                    <div className={cn("flex-1 h-px", step > i + 1 ? "bg-primary" : "bg-border")} />
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          )}
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
-            <FormField
-              control={form.control}
-              name="programId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Program</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a program (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {programs.map((program) => (
-                        <SelectItem key={program.id} value={program.id}>
-                          {program.programCode} - {program.programName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>Assign this category to a program hierarchy.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <div className="flex-1 overflow-y-auto min-h-0 py-2">
+          <Form {...form}>
+            <form id="cat-wizard-form" onSubmit={form.handleSubmit(onFinalSubmit)}>
 
-            <FormField
-              control={form.control}
-              name="categoryName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Category Name <span className="text-destructive">*</span></FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Science, Mathematics..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              {/* ── Step 1: Program Details ── */}
+              {step === 1 && (
+                <div className="space-y-4 px-1">
+                  <FormField control={form.control} name="categoryName" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Program Name <span className="text-destructive">*</span></FormLabel>
+                      <FormControl><Input placeholder="e.g. eTechno, Olympiad, Foundation..." {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
 
-            <FormField
-              control={form.control}
-              name="categoryType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Category Type <span className="text-destructive">*</span></FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an educational level" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Grade 1-5">Grade 1-5</SelectItem>
-                      <SelectItem value="Grade 6-10">Grade 6-10</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Brief description of this category..."
-                      className="resize-none h-20"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="icon"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Icon Name</FormLabel>
-                    <div className="flex gap-3">
+                  <FormField control={form.control} name="description" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. Book, Beaker..." {...field} />
+                        <Textarea placeholder="Brief description of this program..." className="resize-none h-20" {...field} />
                       </FormControl>
-                      <DynamicIconPreview iconName={field.value} />
-                    </div>
-                    <FormDescription className="text-[11px]">Lucide-react icon name (PascalCase)</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormMessage />
+                    </FormItem>
+                  )} />
 
-              <FormField
-                control={form.control}
-                name="displayOrder"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Display Order</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="0" {...field} />
-                    </FormControl>
-                    <FormDescription className="text-[11px]">Lower numbers appear first</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="isActive"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-[var(--radius-md)] border border-border/50 p-4 bg-muted/20">
-                  <div className="space-y-0.5">
-                    <FormLabel className="text-base">Active Status</FormLabel>
-                    <FormDescription>
-                      Inactive categories are hidden from standard users.
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </FormItem>
+                  <FormField control={form.control} name="isActive" render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border border-border/50 p-3 bg-muted/20">
+                      <div>
+                        <FormLabel className="text-sm font-medium">Active</FormLabel>
+                        <FormDescription className="text-xs">Inactive programs are hidden from users.</FormDescription>
+                      </div>
+                      <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    </FormItem>
+                  )} />
+                </div>
               )}
-            />
 
-            <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting || (isEditing && !form.formState.isDirty) || !form.formState.isValid}>
-                {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Save Category'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+              {/* ── Step 2: Assign Classes ── */}
+              {step === 2 && !isEditing && (
+                <div className="space-y-3 px-1">
+                  <p className="text-sm text-muted-foreground">
+                    Select which classes belong to this program. You can skip this and assign later.
+                  </p>
+                  {mastersLoading ? (
+                    <div className="flex items-center gap-2 py-6 text-muted-foreground justify-center">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading classes…
+                    </div>
+                  ) : masterClasses.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-border/50 rounded-lg">
+                      <GraduationCap className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No classes yet. Create classes in the <strong>Classes</strong> section first.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <Input placeholder="Search classes..." value={classSearch} onChange={e => setClassSearch(e.target.value)} className="pl-9" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={toggleAllClasses}
+                        className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {allVisibleSelected ? <CheckSquare className="w-3.5 h-3.5 text-primary" /> : <Square className="w-3.5 h-3.5" />}
+                        {allVisibleSelected ? 'Deselect All' : 'Select All'}
+                      </button>
+                      <div className="max-h-56 overflow-y-auto space-y-1 border border-border/50 rounded-lg p-2">
+                        {visibleClasses.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-4">No classes match.</p>
+                        ) : (
+                          visibleClasses.map(cls => {
+                            const checked = selectedClassIds.has(cls.id);
+                            return (
+                              <label
+                                key={cls.id}
+                                className={cn(
+                                  "flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors",
+                                  checked ? "bg-primary/10" : "hover:bg-muted/60"
+                                )}
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={() => toggleClass(cls.id)}
+                                />
+                                <GraduationCap className="w-4 h-4 text-muted-foreground shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-sm font-medium">{cls.className}</span>
+                                  {cls.classCode && <span className="ml-2 text-xs text-muted-foreground font-mono">({cls.classCode})</span>}
+                                </div>
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                      {selectedClassIds.size > 0 && (
+                        <p className="text-xs text-primary font-medium">{selectedClassIds.size} class(es) selected</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── Step 3: Assign Subjects per Class ── */}
+              {step === 3 && !isEditing && (
+                <div className="space-y-3 px-1">
+                  <p className="text-sm text-muted-foreground">
+                    Choose which subjects are available per class in this program.
+                  </p>
+                  {selectedClassList.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-border/50 rounded-lg">
+                      <p className="text-sm text-muted-foreground">No classes selected. Go back to select classes first.</p>
+                    </div>
+                  ) : masterSubjects.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-border/50 rounded-lg">
+                      <BookOpen className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No subjects yet. Create subjects in the <strong>Subjects</strong> section first.</p>
+                    </div>
+                  ) : (
+                    <div className="max-h-64 overflow-y-auto space-y-2 border border-border/50 rounded-lg p-2">
+                      {selectedClassList.map(cls => {
+                        const isExpanded = expandedClasses[cls.id] !== false;
+                        const classSubjIds = subjectsByClass[cls.id] || new Set();
+                        const activeSubjects = masterSubjects.filter(s => s.isActive !== false);
+                        const allSelected = activeSubjects.length > 0 && activeSubjects.every(s => classSubjIds.has(s.id));
+
+                        return (
+                          <div key={cls.id} className="border border-border/40 rounded-lg overflow-hidden">
+                            <div className="flex items-center gap-2 p-2.5 bg-muted/30">
+                              <GraduationCap className="w-4 h-4 text-primary shrink-0" />
+                              <span className="text-sm font-semibold flex-1">{cls.className}</span>
+                              {classSubjIds.size > 0 && (
+                                <span className="text-xs text-primary font-medium bg-primary/10 px-1.5 py-0.5 rounded-full">
+                                  {classSubjIds.size} selected
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setExpandedClasses(e => ({ ...e, [cls.id]: !isExpanded }))}
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              </button>
+                            </div>
+                            {isExpanded && (
+                              <div className="p-2 space-y-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleAllSubjects(cls.id)}
+                                  className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground px-1"
+                                >
+                                  {allSelected ? <CheckSquare className="w-3 h-3 text-primary" /> : <Square className="w-3 h-3" />}
+                                  {allSelected ? 'Deselect All' : 'Select All Subjects'}
+                                </button>
+                                <div className="flex flex-wrap gap-1.5 px-1">
+                                  {activeSubjects.map(subj => {
+                                    const checked = classSubjIds.has(subj.id);
+                                    return (
+                                      <button
+                                        key={subj.id}
+                                        type="button"
+                                        onClick={() => toggleSubject(cls.id, subj.id)}
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border transition-colors",
+                                          checked
+                                            ? "bg-primary/10 border-primary/40 text-primary"
+                                            : "bg-background border-border/50 text-muted-foreground hover:border-primary/30"
+                                        )}
+                                      >
+                                        <BookOpen className="w-2.5 h-2.5" />
+                                        {subj.subjectName}
+                                        {subj.subjectCode && <span className="opacity-60">({subj.subjectCode})</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </form>
+          </Form>
+        </div>
+
+        <DialogFooter className="shrink-0 pt-3 border-t border-border/30 gap-2">
+          {step > 1 && !isEditing && (
+            <Button type="button" variant="outline" onClick={goBack} disabled={isSubmitting}>
+              Back
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+
+          {isEditing || step === STEPS.length ? (
+            <Button
+              type="button"
+              disabled={isSubmitting}
+              onClick={form.handleSubmit(onFinalSubmit)}
+            >
+              {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : isEditing ? 'Save Changes' : 'Create Program'}
+            </Button>
+          ) : (
+            <Button type="button" onClick={goNext} disabled={isSubmitting}>
+              Next →
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 export const useCategoriesManagement = () => {
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
+  const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pdfCounts, setPdfCounts] = useState({});
@@ -13,17 +14,19 @@ export const useCategoriesManagement = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [catsRes, subCatsRes] = await Promise.all([
+      const [catsRes, subCatsRes, subjectsRes] = await Promise.all([
         client.fetch('/categories', 'GET', null, { sort: 'displayOrder,categoryName' }),
-        client.fetch('/subCategories', 'GET', null, { sort: 'displayOrder,subCategoryName' })
+        client.fetch('/subCategories', 'GET', null, { sort: 'displayOrder,subCategoryName' }),
+        client.fetch('/subjects', 'GET', null, { sort: 'displayOrder,subjectName' })
       ]);
       setCategories(catsRes.items || catsRes);
       setSubCategories(subCatsRes.items || subCatsRes);
+      setSubjects(subjectsRes.items || subjectsRes || []);
       setError(null);
     } catch (err) {
       console.error('Error fetching categories data:', err);
       setError(err);
-      toast.error('Failed to load categories');
+      toast.error('Failed to load programs');
     } finally {
       setLoading(false);
     }
@@ -137,9 +140,81 @@ export const useCategoriesManagement = () => {
     }
   };
 
+  const createSubject = async (data) => {
+    try {
+      const record = await client.fetch('/subjects', 'POST', data);
+      setSubjects(prev => [...prev, record].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || (a.subjectName || '').localeCompare(b.subjectName || '')));
+      toast.success('Subject created successfully');
+      return record;
+    } catch (err) {
+      toast.error(err.message || 'Failed to create subject');
+      throw err;
+    }
+  };
+
+  const updateSubject = async (id, data) => {
+    try {
+      const record = await client.fetch(`/subjects/${id}`, 'PATCH', data);
+      setSubjects(prev => prev.map(s => s.id === id ? record : s));
+      toast.success('Subject updated successfully');
+      return record;
+    } catch (err) {
+      toast.error(err.message || 'Failed to update subject');
+      throw err;
+    }
+  };
+
+  const deleteSubject = async (id) => {
+    try {
+      await client.fetch(`/subjects/${id}`, 'DELETE');
+      setSubjects(prev => prev.filter(s => s.id !== id));
+      toast.success('Subject deleted successfully');
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete subject');
+      throw err;
+    }
+  };
+
+  const toggleCategoryActive = async (id, isActive) => {
+    try {
+      const record = await client.fetch(`/categories/${id}`, 'PATCH', { isActive });
+      setCategories(prev => prev.map(c => c.id === id ? { ...c, isActive } : c));
+      toast.success(`Program ${isActive ? 'activated' : 'deactivated'}`);
+      return record;
+    } catch (err) {
+      toast.error(err.message || 'Failed to update status');
+      throw err;
+    }
+  };
+
+  const toggleSubCategoryActive = async (id, isActive) => {
+    try {
+      const record = await client.fetch(`/subCategories/${id}`, 'PATCH', { isActive });
+      setSubCategories(prev => prev.map(s => s.id === id ? { ...s, isActive } : s));
+      toast.success(`Class ${isActive ? 'activated' : 'deactivated'}`);
+      return record;
+    } catch (err) {
+      toast.error(err.message || 'Failed to update status');
+      throw err;
+    }
+  };
+
+  const toggleSubjectActive = async (id, isActive) => {
+    try {
+      const record = await client.fetch(`/subjects/${id}`, 'PATCH', { isActive });
+      setSubjects(prev => prev.map(s => s.id === id ? { ...s, isActive } : s));
+      toast.success(`Subject ${isActive ? 'activated' : 'deactivated'}`);
+      return record;
+    } catch (err) {
+      toast.error(err.message || 'Failed to update status');
+      throw err;
+    }
+  };
+
   return {
     categories,
     subCategories,
+    subjects,
     loading,
     error,
     pdfCounts,
@@ -150,6 +225,12 @@ export const useCategoriesManagement = () => {
     createSubCategory,
     updateSubCategory,
     deleteSubCategory,
+    createSubject,
+    updateSubject,
+    deleteSubject,
+    toggleCategoryActive,
+    toggleSubCategoryActive,
+    toggleSubjectActive,
     refresh: fetchData
   };
 };

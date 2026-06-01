@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { Category, Program, SubCategory } from "../models/index.js";
+import { Category, Program, SubCategory, Subject } from "../models/index.js";
 import { writeAudit } from "../lib/audit.js";
 import { generateCategoryCode, slugify } from "../lib/codes.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
@@ -81,9 +81,10 @@ export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void
     { preHandler: requirePermission(PERMISSIONS.CATEGORY_MANAGE) },
     async (request, reply) => {
       const raw = parseBody(z.record(z.string(), z.unknown()).parse(request.body));
-      if (!raw.category_name || !raw.category_type) {
-        return reply.status(400).send({ detail: "categoryName and categoryType are required" });
+      if (!raw.category_name) {
+        return reply.status(400).send({ detail: "categoryName is required" });
       }
+      raw.category_type = raw.category_type ?? "general";
       let category_code = raw.category_code;
       const slug = raw.slug ?? slugify(raw.category_name);
       if (raw.program_id) {
@@ -141,7 +142,10 @@ export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void
     { preHandler: requirePermission(PERMISSIONS.CATEGORY_MANAGE) },
     async (request, reply) => {
       const params = z.object({ cat_id: z.string() }).parse(request.params);
-      await SubCategory.deleteMany({ category_id: params.cat_id });
+      const childCount = await SubCategory.countDocuments({ category_id: params.cat_id });
+      if (childCount > 0) {
+        return reply.status(409).send({ detail: `Cannot delete: ${childCount} class(es) exist under this program. Delete or move them first.` });
+      }
       const deleted = await Category.findOneAndDelete({ id: params.cat_id });
       if (!deleted) return reply.status(404).send({ detail: "Category not found" });
       return { message: "Category deleted" };
@@ -152,11 +156,13 @@ export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void
     const query = z
       .object({
         category_id: z.string().optional(),
-        categoryId: z.string().optional()
+        categoryId: z.string().optional(),
+        is_active: z.coerce.boolean().optional()
       })
       .parse(request.query);
     const categoryId = query.category_id ?? query.categoryId;
-    const filter = categoryId ? { category_id: categoryId } : {};
+    const filter: Record<string, unknown> = categoryId ? { category_id: categoryId } : {};
+    if (query.is_active !== undefined) filter.is_active = query.is_active;
     const rows = await SubCategory.find(filter).sort({ display_order: 1 }).lean();
     return listResponse(rows.map((r) => serializeDoc(r as Record<string, unknown>)));
   });
@@ -169,7 +175,10 @@ export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void
       const sub = await SubCategory.create({
         sub_category_name: (body.subCategoryName ?? body.sub_category_name) as string,
         category_id: (body.categoryId ?? body.category_id) as string,
-        description: body.description as string | undefined
+        sub_category_code: (body.subCategoryCode ?? body.sub_category_code) as string | undefined,
+        description: body.description as string | undefined,
+        is_active: (body.isActive ?? body.is_active ?? true) as boolean,
+        display_order: (body.displayOrder ?? body.display_order ?? 0) as number
       });
       return serializeDoc(sub.toObject() as Record<string, unknown>);
     }
@@ -185,6 +194,9 @@ export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void
       if (body.subCategoryName !== undefined) update.sub_category_name = body.subCategoryName;
       if (body.categoryId !== undefined) update.category_id = body.categoryId;
       if (body.isActive !== undefined) update.is_active = body.isActive;
+      if (body.subCategoryCode !== undefined) update.sub_category_code = body.subCategoryCode;
+      if (body.description !== undefined) update.description = body.description;
+      if (body.displayOrder !== undefined) update.display_order = body.displayOrder;
       const updated = await SubCategory.findOneAndUpdate({ id: params.sub_id }, { $set: update }, { new: true });
       if (!updated) return reply.status(404).send({ detail: "Sub-category not found" });
       return serializeDoc(updated.toObject() as Record<string, unknown>);
@@ -196,6 +208,10 @@ export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void
     { preHandler: requirePermission(PERMISSIONS.CATEGORY_MANAGE) },
     async (request, reply) => {
       const params = z.object({ sub_id: z.string() }).parse(request.params);
+      const childCount = await Subject.countDocuments({ class_id: params.sub_id });
+      if (childCount > 0) {
+        return reply.status(409).send({ detail: `Cannot delete: ${childCount} subject(s) exist under this class. Delete them first.` });
+      }
       const deleted = await SubCategory.findOneAndDelete({ id: params.sub_id });
       if (!deleted) return reply.status(404).send({ detail: "Sub-category not found" });
       return { message: "Sub-category deleted" };

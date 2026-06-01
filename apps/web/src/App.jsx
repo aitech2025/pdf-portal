@@ -43,6 +43,9 @@ import SystemSettings from '@/pages/admin/SystemSettings.jsx';
 import NotificationsPage from '@/pages/admin/NotificationsPage.jsx';
 import BulkNotificationPage from '@/pages/admin/BulkNotificationPage.jsx';
 import ProgramsManagementPage from '@/pages/admin/ProgramsManagementPage.jsx';
+import VideoLessonsPage from '@/pages/admin/VideoLessonsPage.jsx';
+import ClassManagementPage from '@/pages/admin/ClassManagementPage.jsx';
+import SubjectManagementPage from '@/pages/admin/SubjectManagementPage.jsx';
 
 // School Routes
 import SchoolDashboard from '@/pages/SchoolDashboard.jsx';
@@ -53,6 +56,7 @@ import FirstLoginChangePassword from '@/pages/school/FirstLoginChangePassword.js
 import UserRequestsPage from '@/pages/school/UserRequestsPage.jsx';
 import SchoolSettings from '@/pages/school/SchoolSettings.jsx';
 import SchoolAnalyticsDashboard from '@/pages/school/SchoolAnalyticsDashboard.jsx';
+import SchoolVideoLessons from '@/pages/school/SchoolVideoLessons.jsx';
 
 function AppContent() {
   const [isMaintenance, setIsMaintenance] = useState(false);
@@ -167,7 +171,10 @@ function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
               <Route path="bulk-create" element={<BulkCreationPage />} />
               <Route path="export" element={<ExportDataPage />} />
               <Route path="categories-management" element={<CategoriesAndSubcategoriesPage />} />
-              <Route path="programs" element={<ProgramsManagementPage />} />
+              <Route path="programs" element={<Navigate to="/admin/categories-management" replace />} />
+              <Route path="video-lessons" element={<VideoLessonsPage />} />
+              <Route path="classes" element={<ClassManagementPage />} />
+              <Route path="subjects" element={<SubjectManagementPage />} />
               <Route path="categories-test" element={<CategoriesManagementTest />} />
               <Route path="simple-test" element={<SimpleTest />} />
               <Route path="audit-logs" element={<AuditLogsPage />} />
@@ -196,6 +203,7 @@ function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
               <Route path="user-requests" element={<UserRequestsPage />} />
               <Route path="settings" element={<SchoolSettings />} />
               <Route path="analytics" element={<SchoolAnalyticsDashboard />} />
+              <Route path="video-lessons" element={<SchoolVideoLessons />} />
             </Routes>
           </AppLayout>
         </ProtectedRoute>

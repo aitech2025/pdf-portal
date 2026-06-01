@@ -19,6 +19,8 @@ import {
   BookOpen,
   Bookmark,
   Bell,
+  Video,
+  GraduationCap,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useSidebar } from './AppLayout.jsx';
@@ -39,8 +41,10 @@ const Sidebar = ({ isMobile = false }) => {
     { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
     { name: 'Schools', path: '/admin/schools-and-users', icon: Building2 },
     { name: 'Users', path: '/admin/users', icon: Users },
-    { name: 'Programs', path: '/admin/programs', icon: Layers },
-    { name: 'Categories', path: '/admin/categories-management', icon: FolderTree },
+    { name: 'Programs', path: '/admin/categories-management', icon: Layers },
+    { name: 'Classes', path: '/admin/classes', icon: GraduationCap },
+    { name: 'Subjects', path: '/admin/subjects', icon: BookOpen },
+    { name: 'Video Lessons', path: '/admin/video-lessons', icon: Video },
     { name: 'Content Library', path: '/admin/content-dashboard', icon: FileText },
     ...(canWrite
       ? [
@@ -56,6 +60,7 @@ const Sidebar = ({ isMobile = false }) => {
   const schoolLinks = [
     { name: 'Dashboard', path: '/school/dashboard', icon: LayoutDashboard },
     { name: 'Content Library', path: '/school/portal/browse', icon: BookOpen },
+    { name: 'Video Lessons', path: '/school/video-lessons', icon: Video },
     { name: 'Bookmarks', path: '/school/bookmarks', icon: Bookmark },
     { name: 'Messages', path: '/notifications', icon: Bell },
     ...(canWrite ? [{ name: 'User Requests', path: '/school/user-requests', icon: Users }] : []),

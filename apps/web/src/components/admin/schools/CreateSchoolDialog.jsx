@@ -10,11 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Building, Info, ChevronRight, ChevronLeft } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Building, GraduationCap, Info, ChevronRight, ChevronLeft } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import CategoryAccessPanel from './CategoryAccessPanel.jsx';
 
 const formSchema = z.object({
+  institutionType: z.enum(['school', 'college']).default('school'),
   schoolName: z.string().min(2, 'Name is required'),
   email: z.string().email('Invalid email address'),
   pointOfContactName: z.string().min(2, 'Principal name is required'),
@@ -34,6 +35,7 @@ const CreateSchoolDialog = ({ isOpen, onClose, onSuccess }) => {
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      institutionType: 'school',
       schoolName: '', email: '', pointOfContactName: '',
       mobileNumber: '', address: '', location: '',
       isActive: true, sendEmail: true,
@@ -44,6 +46,7 @@ const CreateSchoolDialog = ({ isOpen, onClose, onSuccess }) => {
     setIsSubmitting(true);
     try {
       const record = await pb.collection('schools').create({
+        institutionType: values.institutionType,
         schoolName: values.schoolName,
         email: values.email,
         pointOfContactName: values.pointOfContactName,
@@ -79,7 +82,6 @@ const CreateSchoolDialog = ({ isOpen, onClose, onSuccess }) => {
 
   const handleClose = () => {
     if (step === 2) {
-      // If on category assignment step, just finish
       handleFinish();
     } else {
       form.reset();
@@ -97,12 +99,12 @@ const CreateSchoolDialog = ({ isOpen, onClose, onSuccess }) => {
             <Building className="w-5 h-5 text-primary" />
           </div>
           <DialogTitle className="text-xl font-poppins">
-            {step === 1 ? 'Register New School' : 'Assign Category Access'}
+            {step === 1 ? 'Register New Institution' : 'Assign Programs & Classes'}
           </DialogTitle>
           <DialogDescription>
             {step === 1
-              ? 'Add a new institution. School ID is auto-generated.'
-              : 'Select which categories this school can access. You can modify this later.'}
+              ? 'Add a new school or college. Institution ID is auto-generated.'
+              : 'Select which programs and classes this institution can access.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -116,11 +118,55 @@ const CreateSchoolDialog = ({ isOpen, onClose, onSuccess }) => {
 
               <Form {...form}>
                 <form id="create-school-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  {/* Institution Type Selection */}
+                  <FormField control={form.control} name="institutionType" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Institution Type</FormLabel>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => field.onChange('school')}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg border-2 transition-all duration-200 text-left",
+                            field.value === 'school'
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border/50 bg-background hover:border-border"
+                          )}
+                          disabled={isSubmitting}
+                        >
+                          <Building className="w-5 h-5 shrink-0" />
+                          <div>
+                            <p className="font-medium text-sm">School</p>
+                            <p className="text-xs text-muted-foreground">K-12 / Primary</p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => field.onChange('college')}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg border-2 transition-all duration-200 text-left",
+                            field.value === 'college'
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border/50 bg-background hover:border-border"
+                          )}
+                          disabled={isSubmitting}
+                        >
+                          <GraduationCap className="w-5 h-5 shrink-0" />
+                          <div>
+                            <p className="font-medium text-sm">College</p>
+                            <p className="text-xs text-muted-foreground">Higher Education</p>
+                          </div>
+                        </button>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
                   <div className="grid grid-cols-2 gap-4">
                     <FormField control={form.control} name="schoolName" render={({ field }) => (
                       <FormItem className="col-span-2">
-                        <FormLabel>School Name</FormLabel>
-                        <FormControl><Input placeholder="e.g. Lincoln High School" className="bg-background" {...field} disabled={isSubmitting} /></FormControl>
+                        <FormLabel>{form.watch('institutionType') === 'college' ? 'College / University Name' : 'School Name'}</FormLabel>
+                        <FormControl><Input placeholder={form.watch('institutionType') === 'college' ? 'e.g. Springfield University' : 'e.g. Lincoln High School'} className="bg-background" {...field} disabled={isSubmitting} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -207,7 +253,7 @@ const CreateSchoolDialog = ({ isOpen, onClose, onSuccess }) => {
             <ScrollArea className="max-h-[60vh] p-6">
               <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 mb-5 text-sm text-amber-700 dark:text-amber-300">
                 <Info className="w-4 h-4 shrink-0" />
-                Assign categories now or skip and configure later from the school details page.
+                Assign programs now or skip and configure later from the institution details page.
               </div>
 
               {createdSchoolId && (
@@ -224,7 +270,7 @@ const CreateSchoolDialog = ({ isOpen, onClose, onSuccess }) => {
                 Back
               </Button>
               <Button type="button" onClick={handleFinish}>
-                Finish ({assignedCount} categories assigned)
+                Finish ({assignedCount} programs assigned)
               </Button>
             </DialogFooter>
           </>

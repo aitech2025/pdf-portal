@@ -5,7 +5,7 @@ import { z } from "zod";
 import { canAccessCategory, isPlatformRole, requireCurrentUser } from "../lib/access.js";
 import { auditUnauthorized, writeAudit } from "../lib/audit.js";
 import { generateMappedPdfCode } from "../lib/codes.js";
-import { Category, DownloadLog, Pdf, PdfVersion, School, SchoolCategoryAccess, SubCategory, ViewLog } from "../models/index.js";
+import { Category, ClassMaster, SubjectMaster, DownloadLog, Pdf, PdfVersion, School, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, SubCategory, ViewLog } from "../models/index.js";
 import { enrichPdfs } from "../lib/pdfEnrich.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
@@ -39,6 +39,10 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
         categoryId: z.string().optional(),
         sub_category_id: z.string().optional(),
         subCategoryId: z.string().optional(),
+        class_id: z.string().optional(),
+        classId: z.string().optional(),
+        subject_id: z.string().optional(),
+        subjectId: z.string().optional(),
         status: z.string().optional(),
         is_active: z.coerce.boolean().optional(),
         q: z.string().optional(),
@@ -54,8 +58,12 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
     }
     const categoryId = query.category_id ?? query.categoryId;
     const subCategoryId = query.sub_category_id ?? query.subCategoryId;
+    const classId = query.class_id ?? query.classId;
+    const subjectId = query.subject_id ?? query.subjectId;
     if (categoryId) filter.category_id = categoryId;
     if (subCategoryId) filter.sub_category_id = subCategoryId;
+    if (classId) filter.class_id = classId;
+    if (subjectId) filter.subject_id = subjectId;
     if (query.status) filter.status = query.status;
     if (query.is_active !== undefined) filter.is_active = query.is_active;
     if (query.q) {
@@ -64,8 +72,29 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     if (!isPlatformRole(user.role)) {
-      const grants = await SchoolCategoryAccess.find({ school_id: user.school_id ?? "" }).lean();
-      filter.category_id = { $in: grants.map((g) => g.category_id) };
+      const schoolId = user.school_id ?? "";
+      const [subjectGrants, classGrants, progGrants] = await Promise.all([
+        SchoolSubjectAccess.find({ school_id: schoolId }).lean(),
+        SchoolClassAccess.find({ school_id: schoolId }).lean(),
+        SchoolCategoryAccess.find({ school_id: schoolId }).lean()
+      ]);
+
+      const orConditions: Record<string, unknown>[] = [];
+      // New PDFs: exact (program + class + subject) match
+      for (const g of subjectGrants) {
+        orConditions.push({ category_id: g.program_id, class_id: g.class_id, subject_id: g.subject_id });
+      }
+      // Legacy PDFs: (program + sub_category) where class_id is null
+      for (const g of classGrants) {
+        orConditions.push({ category_id: g.program_id, sub_category_id: g.class_id, class_id: null });
+      }
+      // Very legacy PDFs: program-only where both sub_category_id and class_id are null
+      for (const g of progGrants) {
+        orConditions.push({ category_id: g.category_id, sub_category_id: null, class_id: null });
+      }
+
+      if (orConditions.length === 0) return listResponse([], 0);
+      filter.$or = orConditions;
       filter.status = "approved";
       filter.is_active = true;
     }
@@ -85,7 +114,7 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
     if (!user) return;
     const pdf = await Pdf.findOne({ id: params.pdf_id, deleted_at: null });
     if (!pdf) return reply.status(404).send({ detail: "PDF not found" });
-    const allowed = await canAccessCategory(user.id, user.role, user.school_id, pdf.category_id);
+    const allowed = await canAccessCategory(user.id, user.role, user.school_id, pdf.category_id, pdf.class_id, pdf.subject_id);
     if (!allowed) {
       await auditUnauthorized(user.id, "pdf_view", params.pdf_id, request);
       return reply.status(403).send({ detail: "Insufficient permissions" });
@@ -105,7 +134,7 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
     if (!user) return;
     const pdf = await Pdf.findOne({ id: params.pdf_id, deleted_at: null });
     if (!pdf) return reply.status(404).send({ detail: "PDF not found" });
-    const allowed = await canAccessCategory(user.id, user.role, user.school_id, pdf.category_id);
+    const allowed = await canAccessCategory(user.id, user.role, user.school_id, pdf.category_id, pdf.class_id, pdf.subject_id);
     if (!allowed) {
       await auditUnauthorized(user.id, `pdf_${action}`, params.pdf_id, request);
       return reply.status(403).send({ detail: "Insufficient permissions" });
@@ -174,7 +203,7 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
     // Authorisation: every PDF must be accessible to the user. Reject the whole archive otherwise.
     const denied: string[] = [];
     for (const pdf of pdfs) {
-      const ok = await canAccessCategory(user.id, user.role, user.school_id, pdf.category_id ?? null);
+      const ok = await canAccessCategory(user.id, user.role, user.school_id, pdf.category_id ?? null, pdf.class_id ?? null, pdf.subject_id ?? null);
       if (!ok) denied.push(pdf.id);
     }
     if (denied.length) {
@@ -264,27 +293,46 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
 
       const categoryId = fieldValue("category_id", "categoryId");
       const subCategoryId = fieldValue("sub_category_id", "subCategoryId");
+      const classId = fieldValue("class_id", "classId");
+      const subjectId = fieldValue("subject_id", "subjectId");
       const description = fieldValue("description") ?? "";
       const requestedFileName = fieldValue("fileName", "file_name") ?? originalFilename;
       const requestedStatus = fieldValue("status") ?? undefined;
       const requestedIsActive = fieldValue("isActive", "is_active") ?? undefined;
       const versionNotes = fieldValue("versionNotes", "version_notes") ?? "Initial version";
 
-      if (!categoryId || !subCategoryId) {
-        return reply.status(400).send({ detail: "categoryId and subCategoryId are required for every PDF upload" });
+      if (!categoryId) {
+        return reply.status(400).send({ detail: "categoryId (programId) is required" });
+      }
+      if (!subCategoryId && !classId) {
+        return reply.status(400).send({ detail: "Either classId or subCategoryId is required" });
       }
 
-      const [cat, subCat] = await Promise.all([
-        Category.findOne({ id: categoryId }),
-        SubCategory.findOne({ id: subCategoryId })
-      ]);
+      const cat = await Category.findOne({ id: categoryId });
       if (!cat) return reply.status(404).send({ detail: "Category not found" });
-      if (!subCat) return reply.status(404).send({ detail: "Sub-category not found" });
-      if (subCat.category_id !== categoryId) {
-        return reply.status(400).send({ detail: "Sub-category does not belong to the selected category" });
+
+      let subCat = null;
+      let cls = null;
+      let subj = null;
+
+      if (subCategoryId) {
+        subCat = await SubCategory.findOne({ id: subCategoryId });
+        if (!subCat) return reply.status(404).send({ detail: "Sub-category not found" });
+        if (subCat.category_id !== categoryId) {
+          return reply.status(400).send({ detail: "Sub-category does not belong to the selected category" });
+        }
+      }
+      if (classId) {
+        cls = await ClassMaster.findOne({ id: classId });
+        if (!cls) return reply.status(404).send({ detail: "Class not found" });
+      }
+      if (subjectId) {
+        subj = await SubjectMaster.findOne({ id: subjectId });
+        if (!subj) return reply.status(404).send({ detail: "Subject not found" });
       }
 
-      const pdfCode = await generateMappedPdfCode(cat.category_name, subCat.sub_category_name);
+      const secondaryName = subCat?.sub_category_name ?? cls?.class_name ?? "general";
+      const pdfCode = await generateMappedPdfCode(cat.category_name, secondaryName);
       const isActive =
         requestedIsActive === undefined
           ? isPlatformRole(user.role)
@@ -300,7 +348,9 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
         file_size: data.length,
         file_checksum: checksum,
         category_id: categoryId,
-        sub_category_id: subCategoryId,
+        sub_category_id: subCategoryId ?? null,
+        class_id: classId ?? null,
+        subject_id: subjectId ?? null,
         uploaded_by: user.id,
         pdf_id: pdfCode,
         description,
