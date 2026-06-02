@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Loader2, ChevronDown, ChevronRight, CheckSquare, Square, Check, GraduationCap, BookOpen, Video } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+
+const COLLEGE_CLASS_CODES = new Set(['11', '12']);
 
 const getToken = () => {
   try { return localStorage.getItem('authToken') || localStorage.getItem('auth_token') || ''; } catch { return ''; }
@@ -27,39 +29,32 @@ const apiFetch = async (url, options = {}) => {
   return res.status === 204 ? null : res.json();
 };
 
-const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
+const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
+  const isCollege = institutionType === 'college';
+
   const [allPrograms, setAllPrograms] = useState([]);
-  // programId → { classes: [{classId, className, classCode, subjects: [{subjectId, subjectName, subjectCode}]}] }
+  // programId → { classes: [{classId, className, classCode, subjects: [...]}] }
   const [programStructures, setProgramStructures] = useState({});
   const [structureLoadingIds, setStructureLoadingIds] = useState(new Set());
+  const [preloadingStructures, setPreloadingStructures] = useState(false);
 
   const [assignedProgramIds, setAssignedProgramIds] = useState(new Set());
-  // flat set of classIds currently assigned to the school
   const [assignedClassIds, setAssignedClassIds] = useState(new Set());
-  // flat set of subjectIds currently assigned
   const [assignedSubjectIds, setAssignedSubjectIds] = useState(new Set());
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState({});
 
-  // Pending (unsaved) selections
   const [pendingPrograms, setPendingPrograms] = useState(new Set());
-  // programId → Set<classId>
   const [pendingClasses, setPendingClasses] = useState({});
-  // classId → Set<subjectId>
   const [pendingSubjects, setPendingSubjects] = useState({});
 
   const loadProgramStructure = useCallback(async (programId) => {
-    setProgramStructures(prev => {
-      if (prev[programId]) return prev; // already loaded
-      return prev;
-    });
+    setProgramStructures(prev => { if (prev[programId]) return prev; return prev; });
     setStructureLoadingIds(prev => {
-      if (prev.has(programId)) return prev; // already loading
-      const next = new Set(prev);
-      next.add(programId);
-      return next;
+      if (prev.has(programId)) return prev;
+      const next = new Set(prev); next.add(programId); return next;
     });
     try {
       const data = await apiFetch(`/api/programs/${programId}/structure`);
@@ -96,7 +91,6 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
       setAssignedClassIds(assignedClsIds);
       setAssignedSubjectIds(assignedSubjIds);
 
-      // Seed pending from assigned
       setPendingPrograms(new Set(assignedProgIds));
 
       const pendingCls = {};
@@ -117,18 +111,49 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
 
       if (onCountChange) onCountChange(assignedProgIds.size);
 
-      // Pre-load structures for assigned programs so classes are visible
+      // Pre-load structures for assigned programs
       for (const programId of assignedProgIds) {
         loadProgramStructure(programId);
+      }
+
+      // For colleges, pre-load ALL program structures so we can filter by class code
+      if (institutionType === 'college' && programs.length > 0) {
+        setPreloadingStructures(true);
+        const unloadedIds = programs.map(p => p.id).filter(id => !assignedProgIds.has(id));
+        await Promise.all(unloadedIds.map(async (programId) => {
+          try {
+            const data = await apiFetch(`/api/programs/${programId}/structure`);
+            setProgramStructures(prev => ({ ...prev, [programId]: data }));
+          } catch {
+            setProgramStructures(prev => ({ ...prev, [programId]: { classes: [] } }));
+          }
+        }));
+        setPreloadingStructures(false);
       }
     } catch (err) {
       toast.error(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
-  }, [schoolId, onCountChange, loadProgramStructure]);
+  }, [schoolId, institutionType, onCountChange, loadProgramStructure]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // For college: only show programs that have at least one class with code 11 or 12
+  const displayedPrograms = useMemo(() => {
+    if (!isCollege) return allPrograms;
+    return allPrograms.filter(p => {
+      const structure = programStructures[p.id];
+      if (!structure) return false;
+      return structure.classes?.some(c => COLLEGE_CLASS_CODES.has(c.classCode));
+    });
+  }, [allPrograms, programStructures, isCollege]);
+
+  // For college: filter classes to only show 11 & 12
+  const getDisplayedClasses = useCallback((programClasses) => {
+    if (!isCollege) return programClasses;
+    return programClasses.filter(c => COLLEGE_CLASS_CODES.has(c.classCode));
+  }, [isCollege]);
 
   const handleExpand = (programId) => {
     const next = !expanded[programId];
@@ -146,7 +171,6 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
         setPendingClasses(pc => { const n = { ...pc }; delete n[programId]; return n; });
       } else {
         next.add(programId);
-        // Auto-expand video programs so class/subject selection is immediately visible
         if (programType === 'video') {
           setExpanded(e => ({ ...e, [programId]: true }));
           loadProgramStructure(programId);
@@ -163,7 +187,6 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
       const set = new Set(next[programId]);
       if (set.has(classId)) {
         set.delete(classId);
-        // also clear subjects for this class
         setPendingSubjects(ps => { const n = { ...ps }; delete n[classId]; return n; });
       } else {
         set.add(classId);
@@ -176,14 +199,13 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
   const toggleAllClasses = (programId) => {
     const structure = programStructures[programId];
     if (!structure) return;
-    const programClasses = structure.classes || [];
+    const programClasses = getDisplayedClasses(structure.classes || []);
     setPendingClasses(prev => {
       const next = { ...prev };
       const currentSet = new Set(next[programId] || []);
       const allSelected = programClasses.length > 0 && programClasses.every(c => currentSet.has(c.classId));
       if (allSelected) {
         next[programId] = new Set();
-        // clear subjects for all these classes
         setPendingSubjects(ps => {
           const n = { ...ps };
           for (const c of programClasses) delete n[c.classId];
@@ -221,7 +243,6 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // --- Programs ---
       const toAddPrograms = [...pendingPrograms].filter(id => !assignedProgramIds.has(id));
       const toRemovePrograms = [...assignedProgramIds].filter(id => !pendingPrograms.has(id));
 
@@ -235,13 +256,11 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
         await apiFetch(`/api/schools/${schoolId}/categories/${id}`, { method: 'DELETE' });
       }
 
-      // --- Classes ---
       const allPendingClassIds = new Set(Object.values(pendingClasses).flatMap(s => [...s]));
       const toAddClassIds = [...allPendingClassIds].filter(id => !assignedClassIds.has(id));
       const toRemoveClassIds = [...assignedClassIds].filter(id => !allPendingClassIds.has(id));
 
       if (toAddClassIds.length) {
-        // Build { programId, classId } pairs for new assignments
         const classAssignments = [];
         for (const [programId, classIds] of Object.entries(pendingClasses)) {
           for (const classId of classIds) {
@@ -261,13 +280,11 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
         await apiFetch(`/api/schools/${schoolId}/classes/${classId}`, { method: 'DELETE' });
       }
 
-      // --- Subjects ---
       const allPendingSubjectIds = new Set(Object.values(pendingSubjects).flatMap(s => [...s]));
       const toAddSubjectIds = [...allPendingSubjectIds].filter(id => !assignedSubjectIds.has(id));
       const toRemoveSubjectIds = [...assignedSubjectIds].filter(id => !allPendingSubjectIds.has(id));
 
       if (toAddSubjectIds.length) {
-        // Build { programId, classId, subjectId } triples
         const subjectAssignments = [];
         for (const [programId, classIds] of Object.entries(pendingClasses)) {
           for (const classId of classIds) {
@@ -299,11 +316,11 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
     }
   };
 
-  if (loading) {
+  if (loading || preloadingStructures) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
         <Loader2 className="w-5 h-5 animate-spin mr-2" />
-        Loading programs…
+        {preloadingStructures ? 'Filtering programs for college…' : 'Loading programs…'}
       </div>
     );
   }
@@ -319,25 +336,30 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Select programs and their classes to grant access to this institution.
+          {isCollege
+            ? 'Showing programs with Class 11 & 12 only (college mode).'
+            : 'Select programs and their classes to grant access to this institution.'}
         </p>
         <Button size="sm" onClick={handleSave} disabled={saving || !hasChanges}>
           {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : 'Save'}
         </Button>
       </div>
 
-      {allPrograms.length === 0 ? (
+      {displayedPrograms.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center border border-dashed border-border/50 rounded-lg">
-          No programs created yet. Create programs from the Programs section first.
+          {isCollege
+            ? 'No programs with Class 11 or 12 found. Add classes 11/12 to programs from the Programs section first.'
+            : 'No programs created yet. Create programs from the Programs section first.'}
         </p>
       ) : (
         <div className="space-y-2">
-          {allPrograms.map(program => {
+          {displayedPrograms.map(program => {
             const isProgramSelected = pendingPrograms.has(program.id);
             const isExpanded = !!expanded[program.id];
             const structure = programStructures[program.id];
             const isStructureLoading = structureLoadingIds.has(program.id);
-            const programClasses = structure?.classes ?? [];
+            const allProgramClasses = structure?.classes ?? [];
+            const programClasses = getDisplayedClasses(allProgramClasses);
             const selectedClasses = pendingClasses[program.id] || new Set();
             const allClassesSelected = programClasses.length > 0 && programClasses.every(c => selectedClasses.has(c.classId));
 
@@ -392,7 +414,9 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
                       <p className="px-6 py-3 text-sm text-muted-foreground italic">
                         {program.programType === 'video'
                           ? 'No videos are assigned to this program yet. Add videos from the Programs page first.'
-                          : 'No classes assigned to this program yet.'}
+                          : isCollege
+                            ? 'No Class 11 or 12 assigned to this program yet.'
+                            : 'No classes assigned to this program yet.'}
                       </p>
                     ) : (
                       <>

@@ -140,30 +140,26 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
 
     let generatedPassword: string | undefined;
     if (body.email) {
+      let adminUser: Awaited<ReturnType<typeof createSchoolAdminUser>>["user"];
       try {
-        const { user: adminUser, generatedPassword: pwd } = await createSchoolAdminUser({
+        const result = await createSchoolAdminUser({
           email: body.email,
           name: body.point_of_contact_name || body.school_name,
           schoolId: school.id,
           mobile_number: body.mobile_number,
           password: body.password
         });
-        generatedPassword = pwd;
-
-        // Send credential notifications (email + whatsapp logs)
-        await sendCredentialNotifications(
-          adminUser.id,
-          adminUser.name,
-          adminUser.email,
-          school.school_name,
-          school_id,
-          generatedPassword,
-          adminUser.mobile_number
-        );
+        adminUser = result.user;
+        generatedPassword = result.generatedPassword;
       } catch (err) {
         await School.findOneAndDelete({ id: school.id });
         return reply.status(409).send({ detail: (err as Error).message });
       }
+      // Fire-and-forget — do not block the HTTP response on email/WhatsApp delivery
+      sendCredentialNotifications(
+        adminUser.id, adminUser.name, adminUser.email,
+        school.school_name, school_id, generatedPassword, adminUser.mobile_number
+      ).catch(err => console.error("[schools] credential notification failed:", (err as Error).message));
     }
 
     if (request.authUser?.sub) {
@@ -221,17 +217,11 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
             mobile_number: parsed.mobile_number
           });
           generatedPassword = pwd;
-
-          // Send credential notifications (email + whatsapp logs)
-          await sendCredentialNotifications(
-            adminUser.id,
-            adminUser.name,
-            adminUser.email,
-            school.school_name,
-            school_id,
-            generatedPassword,
-            adminUser.mobile_number
-          );
+          // Fire-and-forget — do not block bulk creation on notification delivery
+          sendCredentialNotifications(
+            adminUser.id, adminUser.name, adminUser.email,
+            school.school_name, school_id, generatedPassword, adminUser.mobile_number
+          ).catch(err => console.error("[schools/bulk] credential notification failed:", (err as Error).message));
         } catch {
           /* skip duplicate email schools in bulk */
         }
@@ -283,7 +273,7 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
     const params = z.object({ school_id: z.string() }).parse(request.params);
     const deleted = await School.findOneAndDelete({ id: params.school_id });
     if (!deleted) return reply.status(404).send({ detail: "School not found" });
-    await User.updateMany({ school_id: params.school_id }, { $set: { school_id: null, is_active: false } });
+    await User.deleteMany({ school_id: params.school_id });
     return { message: "School deleted" };
   });
 

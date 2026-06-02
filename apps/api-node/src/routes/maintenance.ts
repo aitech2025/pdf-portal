@@ -31,6 +31,18 @@ const mapSystemSettingsUpdate = (body: Record<string, unknown>) => {
     emailFromName: "email_from_name",
     enableTLS: "enable_tls",
     enableSSL: "enable_ssl",
+    // Brevo SMTP
+    smtp2Host: "smtp2_host",
+    smtp2Port: "smtp2_port",
+    smtp2Username: "smtp2_username",
+    smtp2Password: "smtp2_password",
+    email2FromAddress: "email2_from_address",
+    email2FromName: "email2_from_name",
+    enableSSL2: "enable_ssl2",
+    enableSsl2: "enable_ssl2",
+    enableSsl: "enable_ssl",
+    enableTls: "enable_tls",
+    activeEmailProvider: "active_email_provider",
     featureFlags: "feature_flags",
     securitySettings: "security_settings"
   };

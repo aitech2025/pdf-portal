@@ -96,7 +96,7 @@ const SchoolsAndUsersPage = () => {
       );
       setIsPanelOpen(false);
       fetchData();
-      setCategoryAssignmentSchool({ id: schoolData.id, name: request.schoolName });
+      setCategoryAssignmentSchool({ id: schoolData.id, name: request.schoolName, institutionType: schoolData.institutionType });
       setIsCategoryAssignmentOpen(true);
     } catch (err) {
       toast.error('Failed to approve: ' + (err.message || 'Unknown error'));
@@ -183,7 +183,7 @@ const SchoolsAndUsersPage = () => {
       fetchData();
 
       // Prompt for category assignment
-      setCategoryAssignmentSchool({ id: schoolData.id, name: request.schoolName });
+      setCategoryAssignmentSchool({ id: schoolData.id, name: request.schoolName, institutionType: schoolData.institutionType });
       setIsCategoryAssignmentOpen(true);
     } catch (err) {
       toast.error('Failed to revoke: ' + err.message);
@@ -337,7 +337,7 @@ const SchoolsAndUsersPage = () => {
                             size="sm"
                             className="h-7 text-xs hover:bg-primary/10 hover:text-primary"
                             onClick={() => {
-                              setCategoryAssignmentSchool({ id: school.id, name: school.schoolName });
+                              setCategoryAssignmentSchool({ id: school.id, name: school.schoolName, institutionType: school.institutionType });
                               setIsCategoryAssignmentOpen(true);
                             }}
                           >
@@ -545,6 +545,7 @@ const SchoolsAndUsersPage = () => {
         }}
         schoolId={categoryAssignmentSchool?.id}
         schoolName={categoryAssignmentSchool?.name}
+        institutionType={categoryAssignmentSchool?.institutionType}
       />
     </PageTransition>
   );

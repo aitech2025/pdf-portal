@@ -246,6 +246,7 @@ const SystemSettingsSchema = new Schema(
     maintenance_mode: { type: Boolean, default: false },
     maintenance_message: String,
     email_provider: { type: String, default: "smtp" },
+    // Primary (Resend) SMTP
     smtp_host: String,
     smtp_port: Number,
     smtp_username: String,
@@ -254,6 +255,16 @@ const SystemSettingsSchema = new Schema(
     email_from_name: String,
     enable_tls: { type: Boolean, default: true },
     enable_ssl: { type: Boolean, default: false },
+    // Secondary (Brevo) SMTP
+    smtp2_host: String,
+    smtp2_port: Number,
+    smtp2_username: String,
+    smtp2_password: String,
+    email2_from_address: String,
+    email2_from_name: String,
+    enable_ssl2: { type: Boolean, default: false },
+    // Which provider is active: 'primary' | 'brevo'
+    active_email_provider: { type: String, default: "primary" },
     integrations: Schema.Types.Mixed,
     feature_flags: Schema.Types.Mixed,
     security_settings: Schema.Types.Mixed

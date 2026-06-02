@@ -5,7 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Info } from 'lucide-react';
 import CategoryAccessPanel from './CategoryAccessPanel.jsx';
 
-const CategoryAssignmentModal = ({ isOpen, onClose, schoolId, schoolName }) => {
+const CategoryAssignmentModal = ({ isOpen, onClose, schoolId, schoolName, institutionType }) => {
     const [assignedCount, setAssignedCount] = useState(0);
 
     const handleFinish = () => {
@@ -31,6 +31,7 @@ const CategoryAssignmentModal = ({ isOpen, onClose, schoolId, schoolName }) => {
                     {schoolId && (
                         <CategoryAccessPanel
                             schoolId={schoolId}
+                            institutionType={institutionType}
                             onCountChange={setAssignedCount}
                         />
                     )}

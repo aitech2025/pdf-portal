@@ -80,21 +80,35 @@ const scheduleReconnect = () => {
   // Exponential back-off: 5s, 10s, 20s, 40s, 80s
   const delay = Math.min(5_000 * Math.pow(2, failureCount - 1), 80_000);
   console.log(`[WhatsApp] Auto-reconnecting in ${Math.round(delay / 1000)}s (attempt ${failureCount}/${MAX_AUTO_RECONNECTS})`);
-  reconnectTimer = setTimeout(() => connectWhatsApp(), delay);
+  reconnectTimer = setTimeout(() => connectWhatsApp(false), delay);
 };
 
-export const connectWhatsApp = async (): Promise<void> => {
+export const connectWhatsApp = async (isManualConnect = false): Promise<void> => {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  // Manual connect: reset failure counter and clean up any stale socket/session
+  if (isManualConnect) {
+    // If we previously exhausted auto-reconnects, the saved session may be stale — clear it
+    if (failureCount >= MAX_AUTO_RECONNECTS) {
+      clearAuthFiles();
+    }
+    failureCount = 0;
+    // Destroy lingering socket without triggering a logout
+    if (sock) {
+      try { sock.end(undefined); } catch { /* ignore */ }
+      sock = null;
+    }
+  }
+
   // Already in an active or pending state — do not create a second socket
   if (
     waState.status === "connecting" ||
     waState.status === "qr_ready" ||
     waState.status === "connected"
   ) return;
-
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
 
   // Ensure the auth directory exists
   mkdirSync(AUTH_DIR, { recursive: true });

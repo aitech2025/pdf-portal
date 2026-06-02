@@ -17,12 +17,12 @@ export const registerWhatsAppRoutes = async (app: FastifyInstance): Promise<void
     }
   );
 
-  // POST /api/whatsapp/connect — initiate connection (shows QR)
+  // POST /api/whatsapp/connect — initiate connection (shows QR); always treated as manual
   app.post(
     "/api/whatsapp/connect",
     { preHandler: requirePermission(PERMISSIONS.SETTINGS_MANAGE) },
     async () => {
-      await connectWhatsApp();
+      await connectWhatsApp(true);
       return { message: "Connecting…", status: getConnectionStatus().status };
     }
   );
@@ -34,6 +34,16 @@ export const registerWhatsAppRoutes = async (app: FastifyInstance): Promise<void
     async () => {
       await disconnectWhatsApp();
       return { message: "Disconnected" };
+    }
+  );
+
+  // POST /api/whatsapp/reset — force-clear state and start fresh QR (no logout)
+  app.post(
+    "/api/whatsapp/reset",
+    { preHandler: requirePermission(PERMISSIONS.SETTINGS_MANAGE) },
+    async () => {
+      await connectWhatsApp(true); // clears stale state and restarts
+      return { message: "Reset and connecting…", status: getConnectionStatus().status };
     }
   );
 };

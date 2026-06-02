@@ -259,6 +259,7 @@ const CreateSchoolDialog = ({ isOpen, onClose, onSuccess }) => {
               {createdSchoolId && (
                 <CategoryAccessPanel
                   schoolId={createdSchoolId}
+                  institutionType={form.getValues('institutionType')}
                   onCountChange={setAssignedCount}
                 />
               )}

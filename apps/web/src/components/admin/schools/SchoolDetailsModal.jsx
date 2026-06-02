@@ -343,7 +343,7 @@ const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
                     </TabsContent>
 
                     <TabsContent value="categories" className="m-0">
-                      <CategoryAccessPanel schoolId={schoolId} onCountChange={setAssignedCount} />
+                      <CategoryAccessPanel schoolId={schoolId} institutionType={school?.institutionType} onCountChange={setAssignedCount} />
                     </TabsContent>
                   </div>
                 </Tabs>

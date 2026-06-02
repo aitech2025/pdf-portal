@@ -81,19 +81,23 @@ const loadEmailConfig = async (): Promise<EmailConfig> => {
   // 1. DB takes precedence
   try {
     const row = await SystemSettings.findOne().sort({ created: -1 }).lean();
-    if (row && row.smtp_host) {
-      const port = row.smtp_port ?? 587;
-      return {
-        configured: true,
-        source: "db",
-        host: row.smtp_host,
-        port,
-        username: row.smtp_username ?? undefined,
-        password: row.smtp_password ?? undefined,
-        fromEmail: row.email_from_address ?? undefined,
-        fromName: row.email_from_name ?? undefined,
-        secure: row.enable_ssl === true || port === 465
-      };
+    if (row) {
+      const useBrevo = row.active_email_provider === "brevo";
+      const host = useBrevo ? row.smtp2_host : row.smtp_host;
+      if (host) {
+        const port = (useBrevo ? row.smtp2_port : row.smtp_port) ?? 587;
+        return {
+          configured: true,
+          source: "db",
+          host,
+          port,
+          username: (useBrevo ? row.smtp2_username : row.smtp_username) ?? undefined,
+          password: (useBrevo ? row.smtp2_password : row.smtp_password) ?? undefined,
+          fromEmail: (useBrevo ? row.email2_from_address : row.email_from_address) ?? undefined,
+          fromName: (useBrevo ? row.email2_from_name : row.email_from_name) ?? undefined,
+          secure: (useBrevo ? row.enable_ssl2 : row.enable_ssl) === true || port === 465
+        };
+      }
     }
   } catch (err) {
     // DB hiccup — fall through to env
