@@ -106,6 +106,7 @@ const CategorySchema = new Schema(
     category_name: { type: String, required: true, index: true },
     slug: { type: String, unique: true, sparse: true },
     category_type: { type: String, required: true, index: true },
+    program_type: { type: String, enum: ["pdf", "video"], default: "pdf" },
     description: String,
     status: { type: String, default: "active" },
     is_archived: { type: Boolean, default: false },
@@ -449,9 +450,9 @@ const VideoLessonSchema = new Schema(
     description: String,
     vimeo_url: { type: String, required: true },
     vimeo_id: String,
-    program_id: { type: String, required: true, index: true }, // = category_id
-    class_id: { type: String, required: true, index: true },   // = subcategory_id
-    subject_id: { type: String, default: null, index: true },  // optional
+    program_id: { type: String, default: null, index: true }, // optional — set when assigned to a program
+    class_id: { type: String, required: true, index: true },
+    subject_id: { type: String, default: null, index: true },
     thumbnail: String,
     is_active: { type: Boolean, default: true, index: true },
     created_by: { type: String, required: true, index: true },

@@ -39,21 +39,19 @@ services:
       # values edited live from Admin → Settings → Email. Use these only for
       # initial bootstrap (e.g. so the first onboarding email goes out before
       # an admin has logged in to save the SMTP form).
+      # For Resend: SMTP_HOST=smtp.resend.com, SMTP_PORT=465, SMTP_USERNAME=resend, SMTP_PASSWORD=re_xxx
       SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.com}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-i-icon academy}
-      # WhatsApp env vars are also a fallback. The Cloud API config is too
-      # rich for env (phone ID, token, template, language) — configure it
-      # in Admin → Settings → WhatsApp instead. The env vars below cover
-      # only the legacy "custom HTTP gateway" path.
-      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
-      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:-}
-      WHATSAPP_FROM_NUMBER: ${WHATSAPP_FROM_NUMBER:-}
+      # WhatsApp via Baileys — auth credentials are stored in /app/baileys_auth.
+      # Mount the whatsapp_auth volume so the QR session persists across restarts.
+      WHATSAPP_AUTH_DIR: /app/baileys_auth
     volumes:
       - uploads_data:/data/uploads
+      - whatsapp_auth:/app/baileys_auth
     ports:
       - "8000:8000"
 
@@ -70,3 +68,4 @@ services:
 volumes:
   mongo_data:
   uploads_data:
+  whatsapp_auth:

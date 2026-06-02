@@ -100,6 +100,11 @@ export const registerSchoolCategoryRoutes = async (app: FastifyInstance): Promis
         category_id: params.category_id
       });
       if (!deleted) return reply.status(404).send({ detail: "Category access not found" });
+
+      // Cascade: remove all class and subject access records for this program
+      await SchoolClassAccess.deleteMany({ school_id: params.school_id, program_id: params.category_id });
+      await SchoolSubjectAccess.deleteMany({ school_id: params.school_id, program_id: params.category_id });
+
       return { message: "Category access removed" };
     }
   );
@@ -189,12 +194,20 @@ export const registerSchoolCategoryRoutes = async (app: FastifyInstance): Promis
     { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) },
     async (request, reply) => {
       const params = z.object({ school_id: z.string(), class_id: z.string() }).parse(request.params);
-      const deleted = await SchoolClassAccess.findOneAndDelete({
+
+      // deleteMany handles multiple records (same class under different programs)
+      const classResult = await SchoolClassAccess.deleteMany({
         school_id: params.school_id,
         class_id: params.class_id
       });
-      if (!deleted) return reply.status(404).send({ detail: "Class access not found" });
-      return { message: "Class access removed" };
+
+      // Cascade: remove all subject access records for this class
+      await SchoolSubjectAccess.deleteMany({
+        school_id: params.school_id,
+        class_id: params.class_id
+      });
+
+      return { message: "Class access removed", deletedCount: classResult.deletedCount };
     }
   );
 
@@ -273,12 +286,14 @@ export const registerSchoolCategoryRoutes = async (app: FastifyInstance): Promis
     { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) },
     async (request, reply) => {
       const params = z.object({ school_id: z.string(), subject_id: z.string() }).parse(request.params);
-      const deleted = await SchoolSubjectAccess.findOneAndDelete({
+
+      // deleteMany handles multiple records (same subject in different class/program combinations)
+      const result = await SchoolSubjectAccess.deleteMany({
         school_id: params.school_id,
         subject_id: params.subject_id
       });
-      if (!deleted) return reply.status(404).send({ detail: "Subject access not found" });
-      return { message: "Subject access removed" };
+
+      return { message: "Subject access removed", deletedCount: result.deletedCount };
     }
   );
 };

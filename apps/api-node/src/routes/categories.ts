@@ -11,6 +11,7 @@ const parseBody = (body: Record<string, unknown>) => ({
   program_id: (body.programId ?? body.program_id) as string | undefined,
   category_name: (body.categoryName ?? body.category_name) as string,
   category_type: (body.categoryType ?? body.category_type) as string,
+  program_type: (body.programType ?? body.program_type) as string | undefined,
   category_code: (body.categoryCode ?? body.category_code) as string | undefined,
   slug: body.slug as string | undefined,
   description: body.description as string | undefined,
@@ -100,6 +101,7 @@ export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void
         category_name: raw.category_name,
         slug,
         category_type: raw.category_type,
+        program_type: raw.program_type ?? "pdf",
         description: raw.description,
         is_active: raw.is_active ?? true
       });
@@ -126,6 +128,7 @@ export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void
       if (body.categoryName !== undefined) update.category_name = body.categoryName;
       if (body.category_name !== undefined) update.category_name = body.category_name;
       if (body.categoryType !== undefined) update.category_type = body.categoryType;
+      if (body.programType !== undefined) update.program_type = body.programType;
       if (body.programId !== undefined) update.program_id = body.programId;
       if (body.isActive !== undefined) update.is_active = body.isActive;
       if (body.isArchived !== undefined) update.is_archived = body.isArchived;

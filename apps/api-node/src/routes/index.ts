@@ -15,6 +15,7 @@ import { registerSchoolRoutes } from "./schools.js";
 import { registerUserRoutes } from "./users.js";
 import { registerFavoriteRoutes } from "./favorites.js";
 import { registerSearchRoutes } from "./search.js";
+import { registerWhatsAppRoutes } from "./whatsapp.js";
 import { registerSubjectRoutes } from "./subjects.js";
 import { registerVideoLessonRoutes } from "./videoLessons.js";
 import { registerMasterClassRoutes } from "./masterClasses.js";
@@ -43,4 +44,5 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
   await registerSchoolCategoryRoutes(app);
   await registerFavoriteRoutes(app);
   await registerSearchRoutes(app);
+  await registerWhatsAppRoutes(app);
 };

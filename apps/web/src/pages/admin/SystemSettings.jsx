@@ -186,7 +186,7 @@ const SystemSettings = () => {
           </TabsContent>
 
           <TabsContent value="whatsapp" className="m-0 outline-none">
-            <WhatsAppConfigurationTab settings={settings} onSave={updateSection} saving={saving} />
+            <WhatsAppConfigurationTab />
           </TabsContent>
 
           <TabsContent value="health" className="m-0 outline-none">

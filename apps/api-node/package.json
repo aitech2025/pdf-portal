@@ -15,6 +15,7 @@
     "@fastify/multipart": "^9.2.1",
     "@fastify/websocket": "^11.2.0",
     "@types/archiver": "^7.0.0",
+    "@whiskeysockets/baileys": "^6.17.16",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.2.3",
@@ -22,12 +23,14 @@
     "mongoose": "^8.19.3",
     "nanoid": "^5.1.6",
     "nodemailer": "^8.0.7",
+    "qrcode": "^1.5.4",
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/form-data": "^2.2.1",
     "@types/node": "^24.10.0",
     "@types/nodemailer": "^8.0.0",
+    "@types/qrcode": "^1.5.5",
     "form-data": "^4.0.5",
     "mongodb-memory-server": "^11.1.0",
     "tsx": "^4.20.6",

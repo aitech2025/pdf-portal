@@ -53,7 +53,6 @@ import SchoolPortal from '@/pages/school/SchoolPortal.jsx';
 import SchoolPortalBrowse from '@/pages/school/SchoolPortalBrowse.jsx';
 import SchoolBookmarksPage from '@/pages/school/SchoolBookmarksPage.jsx';
 import FirstLoginChangePassword from '@/pages/school/FirstLoginChangePassword.jsx';
-import UserRequestsPage from '@/pages/school/UserRequestsPage.jsx';
 import SchoolSettings from '@/pages/school/SchoolSettings.jsx';
 import SchoolAnalyticsDashboard from '@/pages/school/SchoolAnalyticsDashboard.jsx';
 import SchoolVideoLessons from '@/pages/school/SchoolVideoLessons.jsx';
@@ -200,7 +199,6 @@ function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
               <Route path="portal" element={<SchoolPortal />} />
               <Route path="portal/browse" element={<SchoolPortalBrowse />} />
               <Route path="bookmarks" element={<SchoolBookmarksPage />} />
-              <Route path="user-requests" element={<UserRequestsPage />} />
               <Route path="settings" element={<SchoolSettings />} />
               <Route path="analytics" element={<SchoolAnalyticsDashboard />} />
               <Route path="video-lessons" element={<SchoolVideoLessons />} />

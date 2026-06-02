@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { Category, ClassMaster, SubjectMaster, ProgramClassMap, ProgramClassSubjectMap } from "../models/index.js";
+import { Category, ClassMaster, SubjectMaster, ProgramClassMap, ProgramClassSubjectMap, VideoLesson } from "../models/index.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
@@ -11,6 +11,50 @@ export const registerProgramStructureRoutes = async (app: FastifyInstance): Prom
     const params = z.object({ program_id: z.string() }).parse(request.params);
     const program = await Category.findOne({ id: params.program_id });
     if (!program) return reply.status(404).send({ detail: "Program not found" });
+
+    // Video programs derive their class/subject hierarchy from the videos assigned to them
+    if (program.program_type === "video") {
+      const videos = await VideoLesson.find({ program_id: params.program_id }).select("class_id subject_id").lean();
+
+      // Build unique class → subjects map
+      const classToSubjects = new Map<string, Set<string>>();
+      for (const v of videos) {
+        if (!v.class_id) continue;
+        if (!classToSubjects.has(v.class_id)) classToSubjects.set(v.class_id, new Set());
+        if (v.subject_id) classToSubjects.get(v.class_id)!.add(v.subject_id);
+      }
+
+      const allClassIds = [...classToSubjects.keys()];
+      const allSubjectIds = [...new Set([...classToSubjects.values()].flatMap((s) => [...s]))];
+
+      const [classes, subjects] = await Promise.all([
+        ClassMaster.find({ id: { $in: allClassIds } }).sort({ display_order: 1, class_name: 1 }).lean(),
+        SubjectMaster.find({ id: { $in: allSubjectIds } }).sort({ display_order: 1, subject_name: 1 }).lean(),
+      ]);
+
+      const classById = new Map(classes.map((c) => [c.id, c]));
+      const subjectById = new Map(subjects.map((s) => [s.id, s]));
+
+      const structure = allClassIds.map((classId) => {
+        const cls = classById.get(classId);
+        if (!cls) return null;
+        const subjectIds = [...(classToSubjects.get(classId) ?? [])];
+        return {
+          classId: cls.id,
+          className: cls.class_name,
+          classCode: cls.class_code,
+          isActive: cls.is_active,
+          displayOrder: cls.display_order,
+          subjects: subjectIds.map((sid) => {
+            const s = subjectById.get(sid);
+            if (!s) return null;
+            return { subjectId: s.id, subjectName: s.subject_name, subjectCode: s.subject_code, isActive: s.is_active };
+          }).filter(Boolean),
+        };
+      }).filter(Boolean);
+
+      return { programId: params.program_id, classes: structure };
+    }
 
     const classMaps = await ProgramClassMap.find({ program_id: params.program_id }).lean();
     const classIds = classMaps.map((m) => m.class_id);

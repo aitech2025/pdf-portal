@@ -44,7 +44,7 @@ const Sidebar = ({ isMobile = false }) => {
     { name: 'Programs', path: '/admin/categories-management', icon: Layers },
     { name: 'Classes', path: '/admin/classes', icon: GraduationCap },
     { name: 'Subjects', path: '/admin/subjects', icon: BookOpen },
-    { name: 'Video Lessons', path: '/admin/video-lessons', icon: Video },
+    { name: 'Video Repository', path: '/admin/video-lessons', icon: Video },
     { name: 'Content Library', path: '/admin/content-dashboard', icon: FileText },
     ...(canWrite
       ? [
@@ -63,7 +63,6 @@ const Sidebar = ({ isMobile = false }) => {
     { name: 'Video Lessons', path: '/school/video-lessons', icon: Video },
     { name: 'Bookmarks', path: '/school/bookmarks', icon: Bookmark },
     { name: 'Messages', path: '/notifications', icon: Bell },
-    ...(canWrite ? [{ name: 'User Requests', path: '/school/user-requests', icon: Users }] : []),
     { name: 'Analytics', path: '/school/analytics', icon: BarChart3 },
     ...(canWrite ? [{ name: 'Settings', path: '/school/settings', icon: Settings }] : []),
   ];

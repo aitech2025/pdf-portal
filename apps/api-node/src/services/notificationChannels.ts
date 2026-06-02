@@ -25,6 +25,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { Notification, SystemSettings } from "../models/index.js";
 import { pushNotification } from "./realtime.js";
 import { serializeDoc } from "../lib/serialize.js";
+import { sendWhatsAppText, getConnectionStatus } from "./baileysWhatsApp.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,23 +76,6 @@ interface EmailConfig {
   secure?: boolean;
 }
 
-interface WhatsAppConfig {
-  configured: boolean;
-  source: "db" | "env" | "none";
-  enabled: boolean;
-  provider: "cloud_api" | "waha" | "custom" | "none";
-  // Meta Cloud API
-  phoneNumberId?: string;
-  accessToken?: string;
-  apiVersion?: string;
-  templateName?: string;
-  templateLanguage?: string;
-  // WAHA / custom HTTP gateway
-  apiUrl?: string;
-  apiKey?: string;
-  session?: string;
-  fromNumber?: string;
-}
 
 const loadEmailConfig = async (): Promise<EmailConfig> => {
   // 1. DB takes precedence
@@ -137,51 +121,6 @@ const loadEmailConfig = async (): Promise<EmailConfig> => {
   return { configured: false, source: "none" };
 };
 
-const loadWhatsAppConfig = async (): Promise<WhatsAppConfig> => {
-  // 1. DB
-  try {
-    const row = await SystemSettings.findOne().sort({ created: -1 }).lean();
-    const wa = (row?.integrations as Record<string, unknown> | undefined)?.whatsapp as
-      | Record<string, unknown>
-      | undefined;
-    if (wa && (wa.enabled === true || wa.enabled === "true")) {
-      const provider = (wa.provider as string) || "custom";
-      return {
-        configured: Boolean(wa.accessToken || wa.apiKey || wa.apiUrl),
-        source: "db",
-        enabled: true,
-        provider: provider as WhatsAppConfig["provider"],
-        phoneNumberId: (wa.phoneNumberId as string) || undefined,
-        accessToken: (wa.accessToken as string) || undefined,
-        apiVersion: (wa.apiVersion as string) || "v22.0",
-        templateName: (wa.templateName as string) || undefined,
-        templateLanguage: (wa.templateLanguage as string) || "en_US",
-        apiUrl: (wa.apiUrl as string) || undefined,
-        apiKey: (wa.apiKey as string) || undefined,
-        session: (wa.session as string) || "default",
-        fromNumber: (wa.fromNumber as string) || undefined
-      };
-    }
-  } catch (err) {
-    console.warn("[notify] SystemSettings read failed for whatsapp:", (err as Error).message);
-  }
-
-  // 2. Env fallback (custom gateway only — Cloud API config is too rich for env)
-  const apiUrl = process.env.WHATSAPP_API_URL;
-  if (apiUrl) {
-    return {
-      configured: true,
-      source: "env",
-      enabled: true,
-      provider: "custom",
-      apiUrl,
-      apiKey: process.env.WHATSAPP_API_KEY ?? undefined,
-      fromNumber: process.env.WHATSAPP_FROM_NUMBER ?? undefined
-    };
-  }
-
-  return { configured: false, source: "none", enabled: false, provider: "none" };
-};
 
 // ---------------------------------------------------------------------------
 // Email delivery (Nodemailer)
@@ -236,147 +175,16 @@ const escapeHtml = (s: string): string =>
     .replace(/'/g, "&#039;");
 
 // ---------------------------------------------------------------------------
-// WhatsApp delivery — Meta Cloud API + WAHA + custom HTTP gateway
+// WhatsApp delivery — Baileys (WhatsApp Web)
 // ---------------------------------------------------------------------------
 
-/** Strip everything except digits and a leading '+' — Meta wants E.164 without the '+'. */
-const normaliseMsisdn = (raw: string): string => raw.replace(/[^\d]/g, "");
-
-const sendWhatsAppCloudApi = async (
-  cfg: WhatsAppConfig,
-  to: string,
-  message: string
-): Promise<{ ok: boolean; error?: string }> => {
-  if (!cfg.phoneNumberId || !cfg.accessToken) {
-    return { ok: false, error: "Cloud API requires phoneNumberId and accessToken" };
-  }
-  const version = cfg.apiVersion ?? "v22.0";
-  const url = `https://graph.facebook.com/${version}/${cfg.phoneNumberId}/messages`;
-
-  /*
-   * Outside the 24-hour service window Meta only allows pre-approved template
-   * messages. Use a template when one is configured; otherwise fall back to
-   * plain text (works in the open service window — fine for tests).
-   */
-  const body = cfg.templateName
-    ? {
-        messaging_product: "whatsapp",
-        to: normaliseMsisdn(to),
-        type: "template",
-        template: {
-          name: cfg.templateName,
-          language: { code: cfg.templateLanguage ?? "en_US" },
-          components: [
-            {
-              type: "body",
-              parameters: [{ type: "text", text: message.slice(0, 1024) }]
-            }
-          ]
-        }
-      }
-    : {
-        messaging_product: "whatsapp",
-        to: normaliseMsisdn(to),
-        type: "text",
-        text: { body: message.slice(0, 4096), preview_url: false }
-      };
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${cfg.accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      return { ok: false, error: `Meta Cloud API ${res.status}: ${txt.slice(0, 300)}` };
-    }
-    return { ok: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: msg };
-  }
-};
-
-const sendWhatsAppWaha = async (
-  cfg: WhatsAppConfig,
-  to: string,
-  message: string
-): Promise<{ ok: boolean; error?: string }> => {
-  if (!cfg.apiUrl) return { ok: false, error: "WAHA apiUrl is not set" };
-  const url = `${cfg.apiUrl.replace(/\/$/, "")}/api/sendText`;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (cfg.apiKey) headers["Authorization"] = `Bearer ${cfg.apiKey}`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        session: cfg.session ?? "default",
-        chatId: `${normaliseMsisdn(to)}@c.us`,
-        text: message
-      })
-    });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      return { ok: false, error: `WAHA ${res.status}: ${txt.slice(0, 300)}` };
-    }
-    return { ok: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: msg };
-  }
-};
-
-const sendWhatsAppCustom = async (
-  cfg: WhatsAppConfig,
-  to: string,
-  message: string
-): Promise<{ ok: boolean; error?: string }> => {
-  if (!cfg.apiUrl) return { ok: false, error: "Custom gateway apiUrl is not set" };
-  try {
-    const res = await fetch(cfg.apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {})
-      },
-      body: JSON.stringify({ to, from: cfg.fromNumber, message })
-    });
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      return { ok: false, error: `Gateway ${res.status}: ${txt.slice(0, 300)}` };
-    }
-    return { ok: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: msg };
-  }
-};
-
 const sendWhatsApp = async (to: string, message: string): Promise<{ ok: boolean; error?: string }> => {
-  const cfg = await loadWhatsAppConfig();
-  if (!cfg.enabled) {
-    console.log(`[WHATSAPP MOCK] (disabled) To: ${to} | Message: ${message.slice(0, 80)}...`);
-    return { ok: true };
+  const { status } = getConnectionStatus();
+  if (status !== "connected") {
+    console.log(`[WHATSAPP] Not connected (status: ${status}). To: ${to}`);
+    return { ok: false, error: `WhatsApp not connected (status: ${status})` };
   }
-  if (!cfg.configured) {
-    console.log(`[WHATSAPP MOCK] (unconfigured) To: ${to} | Message: ${message.slice(0, 80)}...`);
-    return { ok: true };
-  }
-  switch (cfg.provider) {
-    case "cloud_api":
-      return sendWhatsAppCloudApi(cfg, to, message);
-    case "waha":
-      return sendWhatsAppWaha(cfg, to, message);
-    case "custom":
-      return sendWhatsAppCustom(cfg, to, message);
-    default:
-      return { ok: false, error: `Unknown provider: ${cfg.provider}` };
-  }
+  return sendWhatsAppText(to, message);
 };
 
 // ---------------------------------------------------------------------------
@@ -412,36 +220,15 @@ export const validateWhatsAppConfiguration = async (): Promise<{
   source: string;
   details: string;
 }> => {
-  const cfg = await loadWhatsAppConfig();
-  if (!cfg.enabled) {
-    return {
-      configured: false,
-      provider: cfg.provider,
-      source: cfg.source,
-      details: "WhatsApp integration is disabled in Settings → WhatsApp."
-    };
-  }
-  if (!cfg.configured) {
-    return {
-      configured: false,
-      provider: cfg.provider,
-      source: cfg.source,
-      details: "WhatsApp enabled but credentials missing."
-    };
-  }
-  if (cfg.provider === "cloud_api") {
-    return {
-      configured: true,
-      provider: "cloud_api",
-      source: cfg.source,
-      details: `Meta Cloud API ${cfg.apiVersion} • phone ID ${cfg.phoneNumberId}${cfg.templateName ? ` • template "${cfg.templateName}"` : ""}`
-    };
-  }
+  const { status, phone } = getConnectionStatus();
+  const connected = status === "connected";
   return {
-    configured: true,
-    provider: cfg.provider,
-    source: cfg.source,
-    details: `${cfg.provider}: ${cfg.apiUrl}`
+    configured: connected,
+    provider: "baileys",
+    source: "service",
+    details: connected
+      ? `Baileys connected — company number: ${phone ?? "unknown"}`
+      : `Baileys not connected (status: ${status}). Scan QR in Settings → WhatsApp.`
   };
 };
 

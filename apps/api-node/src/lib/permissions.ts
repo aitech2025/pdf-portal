@@ -10,7 +10,8 @@ export const PERMISSIONS = {
   NOTIFICATION_SEND: "notification.send",
   ANALYTICS_VIEW: "analytics.view",
   AUDIT_VIEW: "audit.view",
-  SETTINGS_MANAGE: "settings.manage"
+  SETTINGS_MANAGE: "settings.manage",
+  VIDEO_MANAGE: "video.manage"
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -28,6 +29,7 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
   moderator: [
     PERMISSIONS.CATEGORY_MANAGE,
     PERMISSIONS.PDF_UPLOAD,
+    // VIDEO_MANAGE intentionally excluded — platform admins only
     PERMISSIONS.PDF_VIEW,
     PERMISSIONS.PDF_DOWNLOAD,
     PERMISSIONS.PDF_PRINT,

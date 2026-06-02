@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Loader2, ChevronDown, ChevronRight, CheckSquare, Square, Check, GraduationCap, BookOpen } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight, CheckSquare, Square, Check, GraduationCap, BookOpen, Video } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,7 +15,7 @@ const apiFetch = async (url, options = {}) => {
   const res = await fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {})
     }
@@ -138,7 +138,7 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
     }
   };
 
-  const toggleProgram = (programId) => {
+  const toggleProgram = (programId, programType) => {
     setPendingPrograms(prev => {
       const next = new Set(prev);
       if (next.has(programId)) {
@@ -146,6 +146,11 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
         setPendingClasses(pc => { const n = { ...pc }; delete n[programId]; return n; });
       } else {
         next.add(programId);
+        // Auto-expand video programs so class/subject selection is immediately visible
+        if (programType === 'video') {
+          setExpanded(e => ({ ...e, [programId]: true }));
+          loadProgramStructure(programId);
+        }
       }
       return next;
     });
@@ -227,7 +232,7 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
         });
       }
       for (const id of toRemovePrograms) {
-        await apiFetch(`/api/schools/${schoolId}/categories/${id}`, { method: 'DELETE' }).catch(() => {});
+        await apiFetch(`/api/schools/${schoolId}/categories/${id}`, { method: 'DELETE' });
       }
 
       // --- Classes ---
@@ -253,7 +258,7 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
         }
       }
       for (const classId of toRemoveClassIds) {
-        await apiFetch(`/api/schools/${schoolId}/classes/${classId}`, { method: 'DELETE' }).catch(() => {});
+        await apiFetch(`/api/schools/${schoolId}/classes/${classId}`, { method: 'DELETE' });
       }
 
       // --- Subjects ---
@@ -282,7 +287,7 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
         }
       }
       for (const subjectId of toRemoveSubjectIds) {
-        await apiFetch(`/api/schools/${schoolId}/subjects/${subjectId}`, { method: 'DELETE' }).catch(() => {});
+        await apiFetch(`/api/schools/${schoolId}/subjects/${subjectId}`, { method: 'DELETE' });
       }
 
       await refresh();
@@ -344,14 +349,18 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
                 )}>
                   <Checkbox
                     checked={isProgramSelected}
-                    onCheckedChange={() => toggleProgram(program.id)}
+                    onCheckedChange={() => toggleProgram(program.id, program.programType)}
                     id={`prog-${program.id}`}
                   />
-                  <label htmlFor={`prog-${program.id}`} className="flex-1 text-sm font-medium cursor-pointer">
+                  <label htmlFor={`prog-${program.id}`} className="flex-1 text-sm font-medium cursor-pointer flex items-center gap-2">
                     {program.categoryName}
-                    {program.categoryType && (
-                      <span className="ml-2 text-xs text-muted-foreground">({program.categoryType})</span>
-                    )}
+                    {program.programType === 'video' ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                        <Video className="w-2.5 h-2.5" /> Video
+                      </span>
+                    ) : program.categoryType ? (
+                      <span className="text-xs text-muted-foreground">({program.categoryType})</span>
+                    ) : null}
                   </label>
                   <button
                     onClick={() => handleExpand(program.id)}
@@ -370,13 +379,20 @@ const CategoryAccessPanel = ({ schoolId, onCountChange }) => {
 
                 {isExpanded && (
                   <div className="border-t border-border/30 bg-muted/20">
+                    {program.programType === 'video' && (
+                      <p className="px-6 pt-3 text-xs text-blue-600 dark:text-blue-400">
+                        Select the classes and subjects this school can access. Only videos for the selected subjects will be visible to them.
+                      </p>
+                    )}
                     {isStructureLoading ? (
                       <div className="flex items-center gap-2 px-6 py-3 text-sm text-muted-foreground">
                         <Loader2 className="w-4 h-4 animate-spin" /> Loading classes…
                       </div>
                     ) : programClasses.length === 0 ? (
                       <p className="px-6 py-3 text-sm text-muted-foreground italic">
-                        No classes assigned to this program yet.
+                        {program.programType === 'video'
+                          ? 'No videos are assigned to this program yet. Add videos from the Programs page first.'
+                          : 'No classes assigned to this program yet.'}
                       </p>
                     ) : (
                       <>

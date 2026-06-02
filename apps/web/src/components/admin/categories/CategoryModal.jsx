@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, GraduationCap, BookOpen, Search, CheckSquare, Square, ChevronDown, ChevronRight } from 'lucide-react';
+import { Loader2, GraduationCap, BookOpen, Search, CheckSquare, Square, ChevronDown, ChevronRight, FileText, Video } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import pb from '@/lib/apiClient';
 
@@ -30,10 +30,12 @@ const apiFetch = async (url, options = {}) => {
 const schema = z.object({
   categoryName: z.string().min(2, 'Name must be at least 2 characters').max(100),
   description: z.string().max(500).optional().or(z.literal('')),
-  isActive: z.boolean().default(true)
+  isActive: z.boolean().default(true),
+  programType: z.enum(['pdf', 'video']).default('pdf'),
 });
 
-const STEPS = ['Program Details', 'Assign Classes', 'Assign Subjects'];
+const PDF_STEPS = ['Program Details', 'Assign Classes', 'Assign Subjects'];
+const VIDEO_STEPS = ['Program Details'];
 
 const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
   const isEditing = !!category;
@@ -53,8 +55,11 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
 
   const form = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { categoryName: '', description: '', isActive: true }
+    defaultValues: { categoryName: '', description: '', isActive: true, programType: 'pdf' }
   });
+
+  const programType = form.watch('programType');
+  const STEPS = programType === 'video' ? VIDEO_STEPS : PDF_STEPS;
 
   const fetchMasters = useCallback(async () => {
     if (masterClasses.length > 0) return;
@@ -83,11 +88,21 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
       return;
     }
     form.reset(category
-      ? { categoryName: category.categoryName || '', description: category.description || '', isActive: category.isActive !== false }
-      : { categoryName: '', description: '', isActive: true }
+      ? {
+          categoryName: category.categoryName || '',
+          description: category.description || '',
+          isActive: category.isActive !== false,
+          programType: category.programType || 'pdf',
+        }
+      : { categoryName: '', description: '', isActive: true, programType: 'pdf' }
     );
     if (!isEditing) fetchMasters();
   }, [isOpen, category, isEditing, fetchMasters, form]);
+
+  // Reset step to 1 if program type changes while in steps 2/3
+  useEffect(() => {
+    if (step > 1 && programType === 'video') setStep(1);
+  }, [programType, step]);
 
   // ---------- class helpers ----------
   const toggleClass = (classId) => {
@@ -162,7 +177,7 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
   const onFinalSubmit = async (data) => {
     setIsSubmitting(true);
     try {
-      const structureData = isEditing ? null : {
+      const structureData = (isEditing || data.programType === 'video') ? null : {
         classIds: [...selectedClassIds],
         subjectsByClass: Object.fromEntries(
           Object.entries(subjectsByClass).map(([k, v]) => [k, [...v]])
@@ -183,6 +198,8 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
   const allVisibleSelected = visibleClasses.length > 0 && visibleClasses.every(c => selectedClassIds.has(c.id));
   const selectedClassList = masterClasses.filter(c => selectedClassIds.has(c.id));
 
+  const isLastStep = step === STEPS.length;
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !isSubmitting && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
@@ -190,7 +207,7 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
           <DialogTitle className="text-xl font-poppins">
             {isEditing ? 'Edit Program' : 'Add New Program'}
           </DialogTitle>
-          {!isEditing && (
+          {!isEditing && STEPS.length > 1 && (
             <div className="flex items-center gap-2 mt-3">
               {STEPS.map((label, i) => (
                 <React.Fragment key={i}>
@@ -224,6 +241,48 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
               {/* ── Step 1: Program Details ── */}
               {step === 1 && (
                 <div className="space-y-4 px-1">
+                  {/* Program Type selector — shown first */}
+                  <FormField control={form.control} name="programType" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Program Type <span className="text-destructive">*</span></FormLabel>
+                      <div className="grid grid-cols-2 gap-3 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => field.onChange('pdf')}
+                          className={cn(
+                            "flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all",
+                            field.value === 'pdf'
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                          )}
+                        >
+                          <FileText className="w-7 h-7" />
+                          <div className="text-center">
+                            <p className="text-sm font-semibold">PDF</p>
+                            <p className="text-[11px] opacity-70">Class & subject structure</p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => field.onChange('video')}
+                          className={cn(
+                            "flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all",
+                            field.value === 'video'
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                          )}
+                        >
+                          <Video className="w-7 h-7" />
+                          <div className="text-center">
+                            <p className="text-sm font-semibold">Video</p>
+                            <p className="text-[11px] opacity-70">Video lesson repository</p>
+                          </div>
+                        </button>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
                   <FormField control={form.control} name="categoryName" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Program Name <span className="text-destructive">*</span></FormLabel>
@@ -254,8 +313,8 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
                 </div>
               )}
 
-              {/* ── Step 2: Assign Classes ── */}
-              {step === 2 && !isEditing && (
+              {/* ── Step 2: Assign Classes (PDF only) ── */}
+              {step === 2 && !isEditing && programType === 'pdf' && (
                 <div className="space-y-3 px-1">
                   <p className="text-sm text-muted-foreground">
                     Select which classes belong to this program. You can skip this and assign later.
@@ -319,8 +378,8 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
                 </div>
               )}
 
-              {/* ── Step 3: Assign Subjects per Class ── */}
-              {step === 3 && !isEditing && (
+              {/* ── Step 3: Assign Subjects per Class (PDF only) ── */}
+              {step === 3 && !isEditing && programType === 'pdf' && (
                 <div className="space-y-3 px-1">
                   <p className="text-sm text-muted-foreground">
                     Choose which subjects are available per class in this program.
@@ -415,7 +474,7 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
             Cancel
           </Button>
 
-          {isEditing || step === STEPS.length ? (
+          {isEditing || isLastStep ? (
             <Button
               type="button"
               disabled={isSubmitting}

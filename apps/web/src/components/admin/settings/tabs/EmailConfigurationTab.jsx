@@ -8,37 +8,13 @@ import { toast } from 'sonner';
 import pb from '@/lib/apiClient';
 
 const PROVIDER_PRESETS = {
-  hostinger: {
-    label: 'Hostinger Email',
-    smtpHost: 'smtp.hostinger.com',
+  resend: {
+    label: 'Resend',
+    smtpHost: 'smtp.resend.com',
     smtpPort: 465,
     enableSSL: true,
     enableTLS: false,
-    hint: 'Use the full email address as the username and the mailbox password (set in Hostinger hPanel → Emails).',
-  },
-  gmail: {
-    label: 'Gmail (App Password)',
-    smtpHost: 'smtp.gmail.com',
-    smtpPort: 587,
-    enableSSL: false,
-    enableTLS: true,
-    hint: 'Generate an App Password at myaccount.google.com → Security → 2-Step Verification → App passwords.',
-  },
-  outlook: {
-    label: 'Outlook / Microsoft 365',
-    smtpHost: 'smtp.office365.com',
-    smtpPort: 587,
-    enableSSL: false,
-    enableTLS: true,
-    hint: 'Account must have SMTP AUTH enabled by the tenant admin.',
-  },
-  ses: {
-    label: 'Amazon SES (SMTP)',
-    smtpHost: 'email-smtp.us-east-1.amazonaws.com',
-    smtpPort: 587,
-    enableSSL: false,
-    enableTLS: true,
-    hint: 'Replace region in host if not us-east-1. Use the SMTP credentials, not the IAM access key.',
+    hint: 'Username is always "resend". Password is your Resend API key (starts with re_). From address must use a verified domain at resend.com/domains.',
   },
 };
 
@@ -135,28 +111,23 @@ const EmailConfigurationTab = ({ settings, onSave, saving }) => {
           </SettingSection>
 
           {localSettings.emailProvider === 'smtp' && (
-            <SettingSection title="Quick Presets" description="Apply provider-specific SMTP defaults, then fill in your credentials below.">
+            <SettingSection title="Provider Setup" description="Apply Resend SMTP defaults, then enter your API key and verified from address.">
               <div className="flex flex-wrap gap-2">
-                {Object.entries(PROVIDER_PRESETS).map(([key, preset]) => (
-                  <Button
-                    key={key}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => applyPreset(key)}
-                    disabled={saving}
-                    className="bg-background"
-                  >
-                    <Zap className="w-3.5 h-3.5 mr-1.5 text-amber-500" />
-                    {preset.label}
-                  </Button>
-                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyPreset('resend')}
+                  disabled={saving}
+                  className="bg-background"
+                >
+                  <Zap className="w-3.5 h-3.5 mr-1.5 text-amber-500" />
+                  Apply Resend Defaults
+                </Button>
               </div>
-              {localSettings.smtpHost && (
-                <p className="text-xs text-muted-foreground mt-3">
-                  {Object.values(PROVIDER_PRESETS).find(p => p.smtpHost === localSettings.smtpHost)?.hint}
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground mt-3">
+                {PROVIDER_PRESETS.resend.hint}
+              </p>
             </SettingSection>
           )}
 

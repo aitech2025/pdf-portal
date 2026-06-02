@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge as BadgeComponent } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Drawer, DrawerContent, DrawerTrigger } from '@/components/ui/drawer';
@@ -139,6 +140,230 @@ const ItemPickerDialog = ({ open, onClose, title, items, assignedIds, onAssign, 
   );
 };
 
+// ─── Video Panel (for video-type programs) ────────────────────────────────────
+
+const VideoProgramPanel = ({ programId }) => {
+  const [masterClasses, setMasterClasses] = useState([]);
+  const [masterSubjects, setMasterSubjects] = useState([]);
+  const [mastersLoaded, setMastersLoaded] = useState(false);
+
+  const [filterClass, setFilterClass] = useState('');
+  const [filterSubject, setFilterSubject] = useState('');
+
+  const [assignedVideos, setAssignedVideos] = useState([]);
+  const [repoVideos, setRepoVideos] = useState([]);
+  const [assignedLoading, setAssignedLoading] = useState(false);
+  const [repoLoading, setRepoLoading] = useState(false);
+  const [assigning, setAssigning] = useState(null); // videoId being assigned
+
+  // Load master classes & subjects once
+  useEffect(() => {
+    if (mastersLoaded) return;
+    Promise.all([apiFetch('/api/masterClasses'), apiFetch('/api/masterSubjects')])
+      .then(([cls, subj]) => {
+        setMasterClasses(cls?.items ?? []);
+        setMasterSubjects(subj?.items ?? []);
+        setMastersLoaded(true);
+      })
+      .catch(() => {});
+  }, [mastersLoaded]);
+
+  // Reset filters when program changes
+  useEffect(() => {
+    setFilterClass('');
+    setFilterSubject('');
+  }, [programId]);
+
+  // Load assigned videos whenever program changes
+  useEffect(() => {
+    if (!programId) return;
+    setAssignedLoading(true);
+    apiFetch(`/api/programs/${programId}/videos`)
+      .then(res => setAssignedVideos(res?.items ?? []))
+      .catch(() => toast.error('Failed to load assigned videos'))
+      .finally(() => setAssignedLoading(false));
+  }, [programId]);
+
+  // Load repo videos whenever filters change
+  useEffect(() => {
+    setRepoLoading(true);
+    const params = new URLSearchParams({ per_page: '200' });
+    if (filterClass) params.set('classId', filterClass);
+    if (filterSubject) params.set('subjectId', filterSubject);
+    apiFetch(`/api/videoLessons/admin?${params}`)
+      .then(res => setRepoVideos(res?.items ?? []))
+      .catch(() => toast.error('Failed to load video repository'))
+      .finally(() => setRepoLoading(false));
+  }, [filterClass, filterSubject]);
+
+  const assignedIds = useMemo(() => new Set(assignedVideos.map(v => v.id)), [assignedVideos]);
+
+  const handleAssign = async (videoId) => {
+    setAssigning(videoId);
+    try {
+      await apiFetch(`/api/programs/${programId}/videos`, {
+        method: 'POST',
+        body: JSON.stringify({ videoId })
+      });
+      toast.success('Video assigned to program');
+      // Refresh assigned list
+      const res = await apiFetch(`/api/programs/${programId}/videos`);
+      setAssignedVideos(res?.items ?? []);
+    } catch (err) {
+      toast.error(err.message || 'Failed to assign video');
+    } finally {
+      setAssigning(null);
+    }
+  };
+
+  const handleUnassign = async (videoId, title) => {
+    try {
+      await apiFetch(`/api/programs/${programId}/videos/${videoId}`, { method: 'DELETE' });
+      toast.success(`"${title}" removed from program`);
+      setAssignedVideos(prev => prev.filter(v => v.id !== videoId));
+    } catch (err) {
+      toast.error(err.message || 'Failed to remove video');
+    }
+  };
+
+  const availableRepoVideos = repoVideos.filter(v => !assignedIds.has(v.id));
+
+  const getClassName = (classId) => masterClasses.find(c => c.id === classId)?.className || classId;
+  const getSubjectName = (subjectId) => masterSubjects.find(s => s.id === subjectId)?.subjectName || subjectId;
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 bg-background/50">
+      {/* Assigned Videos */}
+      <div className="p-4 md:px-8 py-4 border-b border-border/50 bg-muted/5 shrink-0">
+        <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <Video className="w-5 h-5 text-primary" />
+          Assigned Videos
+          <BadgeComponent variant="secondary">{assignedVideos.length}</BadgeComponent>
+        </h3>
+      </div>
+      <div className="px-4 md:px-8 py-4 border-b border-border/50 shrink-0 overflow-y-auto" style={{ maxHeight: '220px' }}>
+        {assignedLoading ? (
+          <div className="flex gap-3">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
+          </div>
+        ) : assignedVideos.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No videos assigned yet. Assign from the repository below.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {assignedVideos.map(v => (
+              <div key={v.id} className="group flex items-center gap-3 p-2.5 bg-card border border-border/50 rounded-lg">
+                <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                  <Video className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{v.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {v.classId ? getClassName(v.classId) : '—'}
+                    {v.subjectId ? ` · ${getSubjectName(v.subjectId)}` : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleUnassign(v.id, v.title)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-1 rounded hover:bg-destructive/10"
+                  title="Remove from program"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Repository browser */}
+      <div className="p-4 md:px-8 py-4 border-b border-border/30 bg-muted/5 shrink-0">
+        <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+          <Search className="w-4 h-4 text-muted-foreground" />
+          Browse Video Repository
+        </h4>
+        <div className="flex flex-wrap gap-3">
+          <div className="flex-1 min-w-[160px]">
+            <Select value={filterClass} onValueChange={v => { setFilterClass(v === 'all' ? '' : v); setFilterSubject(''); }}>
+              <SelectTrigger className="h-9 bg-background">
+                <SelectValue placeholder="Filter by class" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Classes</SelectItem>
+                {masterClasses.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.className}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 min-w-[160px]">
+            <Select value={filterSubject} onValueChange={v => setFilterSubject(v === 'all' ? '' : v)} disabled={!filterClass}>
+              <SelectTrigger className="h-9 bg-background">
+                <SelectValue placeholder="Filter by subject" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Subjects</SelectItem>
+                {masterSubjects.map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.subjectName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {repoLoading ? (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}
+          </div>
+        ) : availableRepoVideos.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center p-10 bg-card border border-dashed border-border rounded-xl">
+            <Video className="w-10 h-10 text-muted-foreground/30 mb-3" />
+            <p className="text-sm font-medium text-foreground mb-1">No videos available</p>
+            <p className="text-xs text-muted-foreground max-w-xs">
+              {repoVideos.length === 0
+                ? 'No videos match the current filters. Upload videos in the Video Repository first.'
+                : 'All matching videos are already assigned to this program.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {availableRepoVideos.map(v => (
+              <div key={v.id} className="flex items-center gap-3 p-3 bg-card border border-border/50 rounded-lg hover:border-primary/30 transition-all">
+                <div className="w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                  {v.thumbnail ? (
+                    <img src={v.thumbnail} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Video className="w-5 h-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{v.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {v.classId ? getClassName(v.classId) : 'No class'}
+                    {v.subjectId ? ` · ${getSubjectName(v.subjectId)}` : ''}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 h-8 text-xs"
+                  disabled={assigning === v.id}
+                  onClick={() => handleAssign(v.id)}
+                >
+                  {assigning === v.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Plus className="w-3 h-3 mr-1" /> Assign</>}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 const CategoriesAndSubcategoriesPage = () => {
   const {
     categories,
@@ -155,7 +380,7 @@ const CategoriesAndSubcategoriesPage = () => {
   const [catSearch, setCatSearch] = useState('');
   const [catStatusFilter, setCatStatusFilter] = useState('all');
 
-  // Program structure (classes + subjects from junction tables)
+  // Program structure (classes + subjects from junction tables) — for PDF programs
   const [programStructure, setProgramStructure] = useState(null);
   const [structureLoading, setStructureLoading] = useState(false);
 
@@ -183,6 +408,7 @@ const CategoriesAndSubcategoriesPage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const selectedCategory = useMemo(() => categories.find(c => c.id === selectedCategoryId) || null, [categories, selectedCategoryId]);
+  const isVideoProgram = selectedCategory?.programType === 'video';
 
   const filteredCategories = useMemo(() => {
     if (!Array.isArray(categories)) return [];
@@ -229,10 +455,13 @@ const CategoriesAndSubcategoriesPage = () => {
   useEffect(() => {
     if (selectedCategoryId) {
       setProgramStructure(null);
-      fetchProgramStructure(selectedCategoryId);
-      fetchMasters();
+      const cat = categories.find(c => c.id === selectedCategoryId);
+      if (cat?.programType !== 'video') {
+        fetchProgramStructure(selectedCategoryId);
+        fetchMasters();
+      }
     }
-  }, [selectedCategoryId, fetchProgramStructure, fetchMasters]);
+  }, [selectedCategoryId, fetchProgramStructure, fetchMasters, categories]);
 
   const assignedClassIds = useMemo(() => {
     if (!programStructure) return new Set();
@@ -310,23 +539,25 @@ const CategoriesAndSubcategoriesPage = () => {
     } else {
       const newCat = await createCategory(data);
       setSelectedCategoryId(newCat.id);
-      // Assign classes and subjects from the wizard
-      if (structureData?.classIds?.length) {
-        await apiFetch(`/api/programs/${newCat.id}/classes`, {
-          method: 'POST',
-          body: JSON.stringify({ classIds: structureData.classIds })
-        });
-      }
-      for (const [classId, subjectIds] of Object.entries(structureData?.subjectsByClass || {})) {
-        if (subjectIds.length > 0) {
-          await apiFetch(`/api/programs/${newCat.id}/classes/${classId}/subjects`, {
+      // For PDF programs, assign classes and subjects from the wizard
+      if (data.programType !== 'video') {
+        if (structureData?.classIds?.length) {
+          await apiFetch(`/api/programs/${newCat.id}/classes`, {
             method: 'POST',
-            body: JSON.stringify({ subjectIds })
+            body: JSON.stringify({ classIds: structureData.classIds })
           });
         }
-      }
-      if (structureData?.classIds?.length) {
-        await fetchProgramStructure(newCat.id);
+        for (const [classId, subjectIds] of Object.entries(structureData?.subjectsByClass || {})) {
+          if (subjectIds.length > 0) {
+            await apiFetch(`/api/programs/${newCat.id}/classes/${classId}/subjects`, {
+              method: 'POST',
+              body: JSON.stringify({ subjectIds })
+            });
+          }
+        }
+        if (structureData?.classIds?.length) {
+          await fetchProgramStructure(newCat.id);
+        }
       }
     }
   };
@@ -400,7 +631,7 @@ const CategoriesAndSubcategoriesPage = () => {
         ) : (
           filteredCategories.map(cat => {
             const isSelected = selectedCategoryId === cat.id;
-            const classCount = isSelected ? (programStructure?.classes || []).length : 0;
+            const classCount = isSelected && cat.programType !== 'video' ? (programStructure?.classes || []).length : 0;
 
             return (
               <div
@@ -417,15 +648,20 @@ const CategoriesAndSubcategoriesPage = () => {
                   "w-10 h-10 rounded-[var(--radius-sm)] flex items-center justify-center shrink-0 transition-colors",
                   isSelected ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground group-hover:bg-background"
                 )}>
-                  <DynamicIcon name={cat.icon} className="w-5 h-5" />
+                  {cat.programType === 'video'
+                    ? <Video className="w-5 h-5" />
+                    : <DynamicIcon name={cat.icon} className="w-5 h-5" />
+                  }
                 </div>
                 <div className="flex-1 min-w-0 pr-2">
                   <p className={cn("text-sm font-semibold truncate", isSelected ? "text-foreground" : "text-foreground/80")}>
                     {cat.categoryName}
                   </p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <GraduationCap className="w-3 h-3" />
-                    {isSelected ? `${classCount} class(es)` : '—'}
+                    {cat.programType === 'video'
+                      ? <><Video className="w-3 h-3" /> Video</>
+                      : <><GraduationCap className="w-3 h-3" />{isSelected ? `${classCount} class(es)` : 'PDF'}</>
+                    }
                     {!cat.isActive && (
                       <span className="w-2 h-2 rounded-full bg-muted-foreground/40 shrink-0 ml-1" title="Inactive" />
                     )}
@@ -481,7 +717,7 @@ const CategoriesAndSubcategoriesPage = () => {
             Programs
           </h1>
           <p className="text-muted-foreground mt-1 hidden sm:block text-sm">
-            Assign pre-created classes and subjects to programs.
+            Manage PDF and Video programs with their classes and content.
           </p>
         </div>
       </div>
@@ -502,7 +738,7 @@ const CategoriesAndSubcategoriesPage = () => {
                 <FolderTree className="w-10 h-10 text-muted-foreground/40" />
               </div>
               <h2 className="text-2xl font-semibold text-foreground mb-2">No Program Selected</h2>
-              <p className="text-muted-foreground max-w-sm mb-6">Choose a program from the sidebar or create a new one to manage its classes and subjects.</p>
+              <p className="text-muted-foreground max-w-sm mb-6">Choose a program from the sidebar or create a new one to manage its content.</p>
               <Button onClick={() => { setEditingCat(null); setCatModalOpen(true); }} className="shadow-sm">
                 <Plus className="w-4 h-4 mr-2" /> Create First Program
               </Button>
@@ -514,28 +750,26 @@ const CategoriesAndSubcategoriesPage = () => {
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 relative z-10">
                   <div className="flex items-start gap-5">
                     <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-inner border border-primary/20 shrink-0">
-                      <DynamicIcon name={selectedCategory.icon} className="w-8 h-8" />
+                      {isVideoProgram
+                        ? <Video className="w-8 h-8" />
+                        : <DynamicIcon name={selectedCategory.icon} className="w-8 h-8" />
+                      }
                     </div>
                     <div>
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <h2 className="text-2xl sm:text-3xl font-bold font-poppins text-foreground">{selectedCategory.categoryName}</h2>
                         {selectedCategory.isActive ? (
                           <BadgeComponent variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"><CheckCircle2 className="w-3 h-3 mr-1" /> Active</BadgeComponent>
                         ) : (
                           <BadgeComponent variant="outline" className="bg-muted text-muted-foreground"><XCircle className="w-3 h-3 mr-1" /> Inactive</BadgeComponent>
                         )}
+                        <BadgeComponent variant="secondary" className="capitalize">
+                          {isVideoProgram ? <><Video className="w-3 h-3 mr-1" /> Video</> : <><FileText className="w-3 h-3 mr-1" /> PDF</>}
+                        </BadgeComponent>
                       </div>
                       <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
                         {selectedCategory.description || 'No description provided.'}
                       </p>
-                      {selectedCategory.categoryType && (
-                        <div className="flex items-center gap-2 mt-3">
-                          <span className="flex items-center bg-background px-2.5 py-1 rounded-[var(--radius-sm)] border border-border shadow-sm text-sm">
-                            <Hash className="w-4 h-4 mr-2 text-muted-foreground" />
-                            <span className="text-muted-foreground mr-1">Level:</span> {selectedCategory.categoryType}
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => { setEditingCat(selectedCategory); setCatModalOpen(true); }} className="bg-background shadow-sm shrink-0">
@@ -544,143 +778,147 @@ const CategoriesAndSubcategoriesPage = () => {
                 </div>
               </div>
 
-              {/* Classes panel */}
-              <div className="flex flex-col flex-1 min-h-0 bg-background/50">
-                <div className="p-4 md:px-8 py-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/5 shrink-0">
-                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                    <GraduationCap className="w-5 h-5 text-primary" />
-                    Assigned Classes
-                    <BadgeComponent variant="secondary">{(programStructure?.classes || []).length}</BadgeComponent>
-                  </h3>
-                  <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <div className="relative flex-1 sm:w-56">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search classes..."
-                        value={classSearch}
-                        onChange={e => setClassSearch(e.target.value)}
-                        className="pl-9 h-9 bg-background shadow-sm"
-                      />
-                    </div>
-                    <Button size="sm" onClick={() => setClassPickerOpen(true)} className="shadow-sm shrink-0">
-                      <Plus className="w-4 h-4 mr-1.5" /> Add Class
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
-                  {structureLoading ? (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                      {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
-                    </div>
-                  ) : filteredStructureClasses.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center text-center p-12 bg-card border border-border border-dashed rounded-[var(--radius-xl)]">
-                      <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                        <GraduationCap className="w-8 h-8 text-muted-foreground/50" />
+              {/* Content panel — Video or PDF */}
+              {isVideoProgram ? (
+                <VideoProgramPanel programId={selectedCategory.id} />
+              ) : (
+                <div className="flex flex-col flex-1 min-h-0 bg-background/50">
+                  <div className="p-4 md:px-8 py-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted/5 shrink-0">
+                    <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                      <GraduationCap className="w-5 h-5 text-primary" />
+                      Assigned Classes
+                      <BadgeComponent variant="secondary">{(programStructure?.classes || []).length}</BadgeComponent>
+                    </h3>
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <div className="relative flex-1 sm:w-56">
+                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search classes..."
+                          value={classSearch}
+                          onChange={e => setClassSearch(e.target.value)}
+                          className="pl-9 h-9 bg-background shadow-sm"
+                        />
                       </div>
-                      <h4 className="text-lg font-semibold text-foreground mb-1">No classes assigned</h4>
-                      <p className="text-muted-foreground text-sm max-w-sm mb-6">
-                        Assign pre-created classes to this program. Go to <strong>Classes</strong> in the sidebar to create classes first.
-                      </p>
-                      <Button onClick={() => setClassPickerOpen(true)} variant="outline" className="shadow-sm">
-                        <Plus className="w-4 h-4 mr-2" /> Assign Class
+                      <Button size="sm" onClick={() => setClassPickerOpen(true)} className="shadow-sm shrink-0">
+                        <Plus className="w-4 h-4 mr-1.5" /> Add Class
                       </Button>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                      <AnimatePresence>
-                        {filteredStructureClasses.map(cls => (
-                          <motion.div
-                            layout
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            key={cls.classId}
-                            className={cn(
-                              "group flex flex-col p-5 bg-card border border-border/50 rounded-[var(--radius-lg)] hover:border-primary/30 hover:shadow-soft-md transition-all duration-200",
-                              cls.isActive === false && "opacity-60"
-                            )}
-                          >
-                            <div className="flex items-start gap-3 mb-3">
-                              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                                <GraduationCap className="w-5 h-5" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <h4 className="text-sm font-semibold text-foreground">{cls.className}</h4>
-                                  {cls.classCode && <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{cls.classCode}</span>}
-                                </div>
-                                {cls.isActive === false && <BadgeComponent variant="secondary" className="text-[10px] mt-0.5">Inactive</BadgeComponent>}
-                              </div>
-                              <button
-                                onClick={() => handleRemoveClass(cls.classId, cls.className)}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-7 w-7 flex items-center justify-center rounded hover:bg-destructive/10"
-                                title="Remove from program"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
+                  </div>
 
-                            {/* Subjects */}
-                            <div className="mb-3">
-                              <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                                  <BookOpen className="w-3 h-3" /> Subjects ({(cls.subjects || []).length})
-                                </span>
+                  <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+                    {structureLoading ? (
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
+                      </div>
+                    ) : filteredStructureClasses.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center text-center p-12 bg-card border border-border border-dashed rounded-[var(--radius-xl)]">
+                        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                          <GraduationCap className="w-8 h-8 text-muted-foreground/50" />
+                        </div>
+                        <h4 className="text-lg font-semibold text-foreground mb-1">No classes assigned</h4>
+                        <p className="text-muted-foreground text-sm max-w-sm mb-6">
+                          Assign pre-created classes to this program. Go to <strong>Classes</strong> in the sidebar to create classes first.
+                        </p>
+                        <Button onClick={() => setClassPickerOpen(true)} variant="outline" className="shadow-sm">
+                          <Plus className="w-4 h-4 mr-2" /> Assign Class
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <AnimatePresence>
+                          {filteredStructureClasses.map(cls => (
+                            <motion.div
+                              layout
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              key={cls.classId}
+                              className={cn(
+                                "group flex flex-col p-5 bg-card border border-border/50 rounded-[var(--radius-lg)] hover:border-primary/30 hover:shadow-soft-md transition-all duration-200",
+                                cls.isActive === false && "opacity-60"
+                              )}
+                            >
+                              <div className="flex items-start gap-3 mb-3">
+                                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                                  <GraduationCap className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="text-sm font-semibold text-foreground">{cls.className}</h4>
+                                    {cls.classCode && <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{cls.classCode}</span>}
+                                  </div>
+                                  {cls.isActive === false && <BadgeComponent variant="secondary" className="text-[10px] mt-0.5">Inactive</BadgeComponent>}
+                                </div>
                                 <button
-                                  onClick={() => { setSubjectPickerClassId(cls.classId); setSubjectPickerOpen(true); }}
-                                  className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                                  onClick={() => handleRemoveClass(cls.classId, cls.className)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-7 w-7 flex items-center justify-center rounded hover:bg-destructive/10"
+                                  title="Remove from program"
                                 >
-                                  <Plus className="w-3 h-3" /> Add
+                                  <X className="w-4 h-4" />
                                 </button>
                               </div>
-                              {(cls.subjects || []).length === 0 ? (
-                                <p className="text-xs text-muted-foreground/60 italic">No subjects assigned yet.</p>
-                              ) : (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {(cls.subjects || []).map(subj => (
-                                    <span
-                                      key={subj.subjectId}
-                                      className={cn(
-                                        "group/subj inline-flex items-center gap-1 text-xs border rounded-full px-2.5 py-0.5",
-                                        subj.isActive !== false ? "bg-muted/60 border-border/50" : "bg-muted/20 border-border/30 opacity-60 line-through"
-                                      )}
-                                    >
-                                      {subj.subjectName}
-                                      {subj.subjectCode && <span className="text-muted-foreground font-mono">({subj.subjectCode})</span>}
-                                      <button
-                                        onClick={() => handleRemoveSubject(cls.classId, subj.subjectId, subj.subjectName)}
-                                        className="opacity-0 group-hover/subj:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                                        title="Remove subject"
-                                      >
-                                        <X className="w-2.5 h-2.5" />
-                                      </button>
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
 
-                            <div className="flex items-center justify-between pt-3 border-t border-border/50 mt-auto">
-                              <span className="text-xs text-muted-foreground">
-                                {(cls.subjects || []).length} subject(s) assigned
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs text-primary hover:text-primary h-7 px-2"
-                                onClick={() => { setSubjectPickerClassId(cls.classId); setSubjectPickerOpen(true); }}
-                              >
-                                <Plus className="w-3 h-3 mr-1" /> Add Subject
-                              </Button>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
+                              {/* Subjects */}
+                              <div className="mb-3">
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                                    <BookOpen className="w-3 h-3" /> Subjects ({(cls.subjects || []).length})
+                                  </span>
+                                  <button
+                                    onClick={() => { setSubjectPickerClassId(cls.classId); setSubjectPickerOpen(true); }}
+                                    className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                                  >
+                                    <Plus className="w-3 h-3" /> Add
+                                  </button>
+                                </div>
+                                {(cls.subjects || []).length === 0 ? (
+                                  <p className="text-xs text-muted-foreground/60 italic">No subjects assigned yet.</p>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {(cls.subjects || []).map(subj => (
+                                      <span
+                                        key={subj.subjectId}
+                                        className={cn(
+                                          "group/subj inline-flex items-center gap-1 text-xs border rounded-full px-2.5 py-0.5",
+                                          subj.isActive !== false ? "bg-muted/60 border-border/50" : "bg-muted/20 border-border/30 opacity-60 line-through"
+                                        )}
+                                      >
+                                        {subj.subjectName}
+                                        {subj.subjectCode && <span className="text-muted-foreground font-mono">({subj.subjectCode})</span>}
+                                        <button
+                                          onClick={() => handleRemoveSubject(cls.classId, subj.subjectId, subj.subjectName)}
+                                          className="opacity-0 group-hover/subj:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                                          title="Remove subject"
+                                        >
+                                          <X className="w-2.5 h-2.5" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between pt-3 border-t border-border/50 mt-auto">
+                                <span className="text-xs text-muted-foreground">
+                                  {(cls.subjects || []).length} subject(s) assigned
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs text-primary hover:text-primary h-7 px-2"
+                                  onClick={() => { setSubjectPickerClassId(cls.classId); setSubjectPickerOpen(true); }}
+                                >
+                                  <Plus className="w-3 h-3 mr-1" /> Add Subject
+                                </Button>
+                              </div>
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </Card>
