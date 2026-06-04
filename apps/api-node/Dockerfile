@@ -19,8 +19,9 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
-# /data/uploads — PDF/file storage
-# /app/baileys_auth — WhatsApp session credentials (must persist across restarts)
-VOLUME ["/data/uploads", "/app/baileys_auth"]
+# WhatsApp session credentials — must persist across restarts via named volume
+VOLUME ["/app/baileys_auth"]
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD wget -qO- http://localhost:8000/api/health || exit 1
 CMD ["node", "dist/server.js"]

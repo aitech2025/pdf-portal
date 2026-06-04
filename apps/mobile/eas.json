@@ -19,10 +19,11 @@
                 "simulator": false
             },
             "env": {
-                "EXPO_PUBLIC_API_URL": "https://staging-api.yourdomain.com"
+                "EXPO_PUBLIC_API_URL": "https://iiconacademy.in"
             }
         },
         "production": {
+            "channel": "production",
             "android": {
                 "buildType": "app-bundle"
             },
@@ -30,7 +31,7 @@
                 "credentialsSource": "remote"
             },
             "env": {
-                "EXPO_PUBLIC_API_URL": "https://api.yourdomain.com"
+                "EXPO_PUBLIC_API_URL": "https://iiconacademy.in"
             }
         }
     },

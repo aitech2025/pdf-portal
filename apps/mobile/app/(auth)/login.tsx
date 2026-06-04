@@ -132,9 +132,9 @@ export default function LoginScreen() {
                             </Text>}
                     </TouchableOpacity>
 
-                    <Text className="text-center text-xs text-muted mt-2">
-                        Forgot password? Use the web portal reset flow.
-                    </Text>
+                    <TouchableOpacity className="mt-2 items-center" onPress={() => router.push('/(auth)/forgot-password')}>
+                        <Text className="text-xs text-primary font-medium">Forgot password?</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
         </KeyboardAvoidingView>

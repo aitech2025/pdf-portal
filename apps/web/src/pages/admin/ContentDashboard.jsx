@@ -1,52 +1,57 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import pb from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { FileText, BookOpen, FolderTree, UploadCloud, ArrowRight, HardDrive, BarChart3, Star, DownloadCloud, History } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  FileText, BookOpen, FolderTree, UploadCloud, ArrowRight, HardDrive, BarChart3,
+  Eye, GraduationCap, Search
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import EnhancedPDFViewer from '@/components/EnhancedPDFViewer.jsx';
 import VersionHistoryModal from '@/components/admin/pdfs/VersionHistoryModal.jsx';
 import { formatBytes, cn, getPdfCode } from '@/lib/utils';
-import { motion } from 'framer-motion';
 
 const ContentDashboard = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
-  const [recentUploads, setRecentUploads] = useState([]);
+  const [allPdfs, setAllPdfs] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [allClasses, setAllClasses] = useState([]);
+  const [allSubjects, setAllSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPdf, setSelectedPdf] = useState(null);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [contentSearch, setContentSearch] = useState('');
 
   const fetchData = async () => {
     try {
-      const [pdfs, cats, subCats] = await Promise.all([
-        pb.collection('pdfs').getList(1, 8, { sort: '-created', $autoCancel: false }),
-        pb.collection('categories').getList(1, 4, { sort: '-created', $autoCancel: false }),
-        pb.collection('subCategories').getList(1, 1, { $autoCancel: false }),
+      const [pdfsRes, catsRes, classesRes, subjectsRes] = await Promise.all([
+        pb.fetch('/pdfs', 'GET', null, { per_page: 300, sort: '-created' }),
+        pb.fetch('/categories', 'GET', null, { per_page: 100, sort: 'displayOrder' }),
+        pb.fetch('/masterClasses', 'GET'),
+        pb.fetch('/masterSubjects', 'GET'),
       ]);
 
-      const storageUsageMB = (pdfs.totalItems * 2.4).toFixed(1);
+      const pdfs = pdfsRes?.items ?? [];
+      const cats = catsRes?.items ?? [];
 
+      setAllPdfs(pdfs);
+      setCategories(cats);
+      setAllClasses(classesRes?.items ?? []);
+      setAllSubjects(subjectsRes?.items ?? []);
+
+      const totalBytes = pdfs.reduce((s, p) => s + (p.fileSize || 0), 0);
       setStats({
-        totalPdfs: pdfs.totalItems,
-        totalCategories: cats.totalItems,
-        totalSubCategories: subCats.totalItems,
-        storageUsage: `${storageUsageMB} MB`
+        totalPdfs: pdfsRes?.totalItems ?? pdfs.length,
+        totalCategories: catsRes?.totalItems ?? cats.length,
+        storageUsage: formatBytes(totalBytes) || `${(pdfs.length * 2.4).toFixed(1)} MB`
       });
-
-      const enhancedPdfs = pdfs.items.map(pdf => ({
-        ...pdf,
-        mockRating: (Math.random() * (5 - 3.5) + 3.5).toFixed(1),
-        mockDownloads: Math.floor(Math.random() * 500)
-      }));
-
-      setRecentUploads(enhancedPdfs);
-      setCategories(cats.items);
     } catch (error) {
       console.error(error);
     } finally {
@@ -57,6 +62,33 @@ const ContentDashboard = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const classMap = useMemo(() =>
+    Object.fromEntries(allClasses.map(c => [c.id, c.className])),
+    [allClasses]
+  );
+
+  const subjectMap = useMemo(() =>
+    Object.fromEntries(allSubjects.map(s => [s.id, s.subjectName])),
+    [allSubjects]
+  );
+
+  const categoryMap = useMemo(() =>
+    Object.fromEntries(categories.map(c => [c.id, c.categoryName])),
+    [categories]
+  );
+
+  const filteredPdfs = useMemo(() => {
+    if (!contentSearch.trim()) return allPdfs;
+    const q = contentSearch.toLowerCase();
+    return allPdfs.filter(p =>
+      p.fileName?.toLowerCase().includes(q) ||
+      classMap[p.classId]?.toLowerCase().includes(q) ||
+      subjectMap[p.subjectId]?.toLowerCase().includes(q) ||
+      categoryMap[p.categoryId]?.toLowerCase().includes(q) ||
+      (p.subCategoryName || '').toLowerCase().includes(q)
+    );
+  }, [allPdfs, contentSearch, classMap, subjectMap, categoryMap]);
 
   const StatCard = ({ title, value, icon: Icon, colorClass, bgClass }) => (
     <Card className="shadow-soft-sm hover:shadow-soft-md transition-base border-none overflow-hidden relative">
@@ -110,119 +142,149 @@ const ContentDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <StatCard title="Total PDFs" value={stats?.totalPdfs || 0} icon={FileText} colorClass="text-primary" bgClass="bg-primary/10" />
           <StatCard title="Categories" value={stats?.totalCategories || 0} icon={BookOpen} colorClass="text-secondary" bgClass="bg-secondary/10" />
-          <StatCard title="Storage Used" value={stats?.storageUsage || "0 MB"} icon={HardDrive} colorClass="text-accent" bgClass="bg-accent/10" />
+          <StatCard title="Storage Used" value={stats?.storageUsage || '0 MB'} icon={HardDrive} colorClass="text-accent" bgClass="bg-accent/10" />
         </div>
       )}
 
       <div className="flex flex-col lg:flex-row gap-8 min-h-[600px]">
-        <div className={cn("flex flex-col gap-8 transition-all duration-300", selectedPdf ? "lg:w-1/3" : "w-full")}>
+        {/* Left: Content table */}
+        <div className={cn("flex flex-col gap-8 transition-all duration-300", selectedPdf ? "lg:w-[40%]" : "w-full")}>
           <Card className="shadow-soft-sm border-border/50 flex-1 flex flex-col overflow-hidden">
-            <CardHeader className="flex flex-row items-center justify-between pb-4 shrink-0 bg-card z-10 border-b border-border/30">
-              <div>
-                <CardTitle>Recent Uploads</CardTitle>
-                <CardDescription>Click a document to preview</CardDescription>
+            <CardHeader className="shrink-0 bg-card z-10 border-b border-border/30 pb-3">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <CardTitle>Content</CardTitle>
+                  <CardDescription>
+                    {loading ? 'Loading…' : `${filteredPdfs.length} of ${allPdfs.length} PDF${allPdfs.length !== 1 ? 's' : ''}`}
+                  </CardDescription>
+                </div>
+                {!selectedPdf && (
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/admin/pdf-upload')} className="text-primary hover:text-primary">
+                    Upload <ArrowRight className="w-4 h-4 ml-1" />
+                  </Button>
+                )}
               </div>
-              {!selectedPdf && (
-                <Button variant="ghost" size="sm" onClick={() => navigate('/admin/pdf-upload')} className="text-primary hover:text-primary">
-                  View All <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              )}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Search by name, class, subject or program…"
+                  value={contentSearch}
+                  onChange={e => setContentSearch(e.target.value)}
+                  className="pl-9 h-9 text-sm"
+                />
+              </div>
             </CardHeader>
             <CardContent className="p-0 overflow-y-auto flex-1">
               {loading ? (
-                <div className="p-4 space-y-3">
-                  {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+                <div className="p-4 space-y-2">
+                  {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-10 w-full" />)}
                 </div>
-              ) : recentUploads.length === 0 ? (
-                <div className="text-center py-12 px-4">
-                  <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                  <p className="text-muted-foreground font-medium">No PDFs uploaded yet.</p>
+              ) : filteredPdfs.length === 0 ? (
+                <div className="text-center py-16 px-4">
+                  <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-40" />
+                  <p className="text-muted-foreground font-medium">
+                    {allPdfs.length === 0 ? 'No PDFs uploaded yet.' : 'No PDFs match your search.'}
+                  </p>
                 </div>
               ) : (
-                <div className={cn("grid gap-0", selectedPdf ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 p-4 gap-4")}>
-                  {recentUploads.map(pdf => (
-                    <motion.div
-                      key={pdf.id}
-                      whileHover={{ scale: selectedPdf ? 1 : 1.01 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setSelectedPdf(pdf)}
-                      className={cn(
-                        "flex flex-col p-4 transition-all duration-200 cursor-pointer group relative overflow-hidden",
-                        selectedPdf?.id === pdf.id
-                          ? "bg-primary/5 border-l-4 border-l-primary"
-                          : selectedPdf
-                            ? "border-b border-border/50 hover:bg-muted/30"
-                            : "rounded-[var(--radius-md)] bg-card border border-border/50 hover:shadow-soft-md hover:border-primary/30"
-                      )}
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className={cn(
-                          "w-12 h-12 rounded-[var(--radius-sm)] flex items-center justify-center shrink-0 transition-colors",
-                          selectedPdf?.id === pdf.id ? "bg-primary/10 text-primary" : "bg-rose-500/10 text-rose-500 group-hover:bg-rose-500/20"
-                        )}>
-                          <FileText className="w-6 h-6" />
-                        </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/20 hover:bg-muted/20">
+                      <TableHead>PDF File</TableHead>
+                      {!selectedPdf && <TableHead className="hidden sm:table-cell">Class</TableHead>}
+                      {!selectedPdf && <TableHead className="hidden md:table-cell">Subject</TableHead>}
+                      {!selectedPdf && <TableHead className="hidden lg:table-cell">Program</TableHead>}
+                      <TableHead className="w-16 text-center">View</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPdfs.map(pdf => {
+                      const className = classMap[pdf.classId] || pdf.subCategoryName || '—';
+                      const subjectName = subjectMap[pdf.subjectId] || '—';
+                      const programName = categoryMap[pdf.categoryId] || pdf.categoryName || '—';
+                      const isSelected = selectedPdf?.id === pdf.id;
 
-                        <div className="flex-1 min-w-0 pt-0.5">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-border text-muted-foreground font-mono">
-                              {getPdfCode(pdf) ?? 'ID PENDING'}
-                            </Badge>
-                            <Badge variant="secondary" className="text-[10px] px-1.5 h-4 bg-primary/10 text-primary hover:bg-primary/20">
-                              v{pdf.currentVersion || 1}
-                            </Badge>
-                          </div>
-                          <p className={cn(
-                            "text-sm font-semibold truncate transition-colors",
-                            selectedPdf?.id === pdf.id ? "text-primary" : "text-foreground group-hover:text-primary"
-                          )}>
-                            {pdf.fileName}
-                          </p>
-
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
-                            <Badge variant="outline" className="text-[10px] h-5 font-normal">
-                              {pdf.categoryName || pdf.expand?.categoryId?.categoryName || 'No category'}
-                            </Badge>
-                            {(pdf.subCategoryName || pdf.expand?.subCategoryId?.subCategoryName) && (
-                              <Badge variant="secondary" className="text-[10px] h-5 font-normal">
-                                {pdf.subCategoryName || pdf.expand?.subCategoryId?.subCategoryName}
-                              </Badge>
-                            )}
-                            {(pdf.programName || pdf.expand?.programId?.programName) && (
-                              <span className="text-[10px] text-muted-foreground">
-                                {pdf.programName || pdf.expand?.programId?.programName}
-                              </span>
-                            )}
-                            <span className="text-xs text-muted-foreground font-medium">
-                              {formatBytes(pdf.fileSize)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {!selectedPdf && (
-                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-border/30">
-                          <div className="flex items-center gap-4 text-xs text-muted-foreground font-medium">
-                            <span className="flex items-center text-amber-500"><Star className="w-3.5 h-3.5 mr-1 fill-amber-500" /> {pdf.mockRating}</span>
-                            <span className="flex items-center"><DownloadCloud className="w-3.5 h-3.5 mr-1" /> {pdf.mockDownloads}</span>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs text-muted-foreground hover:text-primary z-10"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedPdf(pdf);
-                              setHistoryModalOpen(true);
-                            }}
-                          >
-                            <History className="w-3 h-3 mr-1" /> History
-                          </Button>
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
+                      return (
+                        <TableRow
+                          key={pdf.id}
+                          className={cn(
+                            "cursor-pointer transition-colors",
+                            isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/30"
+                          )}
+                          onClick={() => setSelectedPdf(pdf)}
+                        >
+                          <TableCell className="max-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={cn(
+                                "w-7 h-7 rounded-md flex items-center justify-center shrink-0",
+                                isSelected ? "bg-primary/10" : "bg-rose-500/10"
+                              )}>
+                                <FileText className={cn("w-3.5 h-3.5", isSelected ? "text-primary" : "text-rose-500")} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className={cn(
+                                  "text-sm font-medium truncate",
+                                  isSelected ? "text-primary" : "text-foreground"
+                                )}>
+                                  {pdf.fileName}
+                                </p>
+                                <p className="text-xs text-muted-foreground font-mono truncate">
+                                  {getPdfCode(pdf) ?? ''}{pdf.fileSize ? ` · ${formatBytes(pdf.fileSize)}` : ''}
+                                </p>
+                                {selectedPdf && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {classMap[pdf.classId] && (
+                                      <Badge variant="outline" className="text-[10px] h-4 gap-1 font-normal">
+                                        <GraduationCap className="w-2.5 h-2.5" />{classMap[pdf.classId]}
+                                      </Badge>
+                                    )}
+                                    {subjectMap[pdf.subjectId] && (
+                                      <Badge variant="outline" className="text-[10px] h-4 gap-1 font-normal">
+                                        <BookOpen className="w-2.5 h-2.5" />{subjectMap[pdf.subjectId]}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          {!selectedPdf && (
+                            <TableCell className="hidden sm:table-cell">
+                              {classMap[pdf.classId]
+                                ? <Badge variant="outline" className="text-xs gap-1"><GraduationCap className="w-3 h-3" />{classMap[pdf.classId]}</Badge>
+                                : <span className="text-xs text-muted-foreground">{pdf.subCategoryName || '—'}</span>
+                              }
+                            </TableCell>
+                          )}
+                          {!selectedPdf && (
+                            <TableCell className="hidden md:table-cell">
+                              {subjectMap[pdf.subjectId]
+                                ? <Badge variant="outline" className="text-xs gap-1"><BookOpen className="w-3 h-3" />{subjectMap[pdf.subjectId]}</Badge>
+                                : <span className="text-xs text-muted-foreground">—</span>
+                              }
+                            </TableCell>
+                          )}
+                          {!selectedPdf && (
+                            <TableCell className="hidden lg:table-cell">
+                              <span className="text-xs text-muted-foreground">{programName}</span>
+                            </TableCell>
+                          )}
+                          <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                            <Button
+                              variant={isSelected ? "default" : "ghost"}
+                              size="icon"
+                              className="h-7 w-7"
+                              title="View PDF"
+                              onClick={() => setSelectedPdf(isSelected ? null : pdf)}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
@@ -233,7 +295,7 @@ const ContentDashboard = () => {
                 <CardTitle>Categories Structure</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {categories.map(cat => (
+                {categories.slice(0, 4).map(cat => (
                   <div key={cat.id} className="flex items-center justify-between p-3 rounded-[var(--radius-md)] border border-transparent hover:border-border/50 hover:bg-muted/30 transition-colors">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-[var(--radius-sm)] bg-secondary/20 flex items-center justify-center text-secondary-foreground">
@@ -254,9 +316,10 @@ const ContentDashboard = () => {
           )}
         </div>
 
+        {/* Right: PDF viewer */}
         <div className={cn(
           "hidden lg:flex transition-all duration-300",
-          selectedPdf ? "lg:w-2/3 h-auto min-h-[600px] opacity-100" : "w-0 opacity-0 overflow-hidden"
+          selectedPdf ? "lg:flex-1 h-auto min-h-[600px] opacity-100" : "w-0 opacity-0 overflow-hidden"
         )}>
           {selectedPdf && (
             <EnhancedPDFViewer

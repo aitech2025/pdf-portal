@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { schoolsApi } from '@shared/api/index.js';
-import { useAuth } from '../../src/context/AuthContext';
+import { apiFetch } from '../../src/lib/apiClient';
 
 interface SchoolStats {
     totalUsers: number; totalDownloads: number; totalPdfs?: number;
@@ -18,15 +17,13 @@ const STAT_TILES = [
 ];
 
 export default function SchoolAnalyticsScreen() {
-    const { user } = useAuth();
     const [stats, setStats] = useState<SchoolStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
     const fetchStats = async () => {
-        if (!user?.schoolId) { setLoading(false); return; }
         try {
-            const res = await schoolsApi.getSchoolStats(user.schoolId);
+            const res = await apiFetch('/api/analytics/school');
             setStats(res);
         } catch (e) { console.error(e); }
         finally { setLoading(false); setRefreshing(false); }

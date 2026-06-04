@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Play, Edit2, Trash2, Video, VideoOff, Search, ExternalLink, Loader2,
-  Eye, GraduationCap, BookOpen, Tag, Info
+  Eye, GraduationCap, BookOpen, Tag, Info, LayoutList, LayoutGrid
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -377,6 +378,7 @@ const VideoLessonsPage = () => {
   const [filterSubject, setFilterSubject] = useState('all');
   const [filterUnassigned, setFilterUnassigned] = useState(false);
 
+  const [viewMode, setViewMode] = useState('list');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const [playingLesson, setPlayingLesson] = useState(null);
@@ -488,7 +490,7 @@ const VideoLessonsPage = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -512,13 +514,35 @@ const VideoLessonsPage = () => {
             {subjects.map(s => <SelectItem key={s.id} value={s.id}>{s.subjectName}</SelectItem>)}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-0.5 border border-border/50 rounded-md p-0.5 bg-muted/30 ml-auto">
+          <button
+            onClick={() => setViewMode('list')}
+            title="List view"
+            className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            <LayoutList className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('grid')}
+            title="Grid view"
+            className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Grid */}
+      {/* List / Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-72 rounded-xl" />)}
-        </div>
+        viewMode === 'list' ? (
+          <div className="border rounded-xl overflow-hidden">
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-none border-b" />)}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-72 rounded-xl" />)}
+          </div>
+        )
       ) : filtered.length === 0 ? (
         <Card className="border-border/50">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -538,6 +562,102 @@ const VideoLessonsPage = () => {
             )}
           </CardContent>
         </Card>
+      ) : viewMode === 'list' ? (
+        <div className="border border-border/50 rounded-xl overflow-hidden bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="w-8 text-center text-xs">#</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead className="w-36">Class</TableHead>
+                <TableHead className="w-36 hidden md:table-cell">Subject</TableHead>
+                <TableHead className="hidden lg:table-cell">Program</TableHead>
+                <TableHead className="w-16 text-center">Views</TableHead>
+                <TableHead className="w-20 text-center">Status</TableHead>
+                <TableHead className="w-28 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((lesson, idx) => {
+                const vimeoId = extractVimeoId(lesson.vimeoUrl);
+                const thumbUrl = vimeoId ? `https://vumbnail.com/${vimeoId}.jpg` : null;
+                const className = getClassName(lesson.classId);
+                const subjectName = getSubjectName(lesson.subjectId);
+                const programName = getProgramName(lesson.programId);
+                return (
+                  <TableRow key={lesson.id} className="hover:bg-muted/30">
+                    <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-8 rounded overflow-hidden bg-muted shrink-0">
+                          {thumbUrl
+                            ? <img src={thumbUrl} alt={lesson.title} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center"><Video className="w-4 h-4 text-muted-foreground/40" /></div>
+                          }
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm text-foreground line-clamp-1">{lesson.title}</p>
+                          {lesson.description && <p className="text-xs text-muted-foreground line-clamp-1">{lesson.description}</p>}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {className
+                        ? <Badge variant="outline" className="text-xs gap-1"><GraduationCap className="w-3 h-3" />{className}</Badge>
+                        : <span className="text-muted-foreground text-xs">—</span>
+                      }
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {subjectName
+                        ? <Badge variant="outline" className="text-xs gap-1"><BookOpen className="w-3 h-3" />{subjectName}</Badge>
+                        : <span className="text-muted-foreground text-xs">—</span>
+                      }
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {programName
+                        ? <span className="text-xs text-emerald-700 dark:text-emerald-400">{programName}</span>
+                        : <span className="text-xs text-amber-600">Unassigned</span>
+                      }
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                        <Eye className="w-3 h-3" />{lesson.viewCount ?? 0}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={lesson.isActive !== false ? 'default' : 'secondary'} className="text-xs">
+                        {lesson.isActive !== false ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPlayingLesson(lesson)} title="Play">
+                          <Play className="w-3.5 h-3.5" />
+                        </Button>
+                        {isPlatformAdmin && (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditingLesson(lesson); setModalOpen(true); }} title="Edit">
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDelete(lesson.id)}
+                              disabled={deletingId === lesson.id}
+                              title="Delete"
+                            >
+                              {deletingId === lesson.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(lesson => {
@@ -578,7 +698,6 @@ const VideoLessonsPage = () => {
                 <CardContent className="p-4 space-y-2">
                   <h3 className="font-semibold text-foreground line-clamp-1">{lesson.title}</h3>
 
-                  {/* Tags */}
                   <div className="flex flex-wrap gap-1.5">
                     {className && (
                       <Badge variant="outline" className="text-xs gap-1">
@@ -592,7 +711,6 @@ const VideoLessonsPage = () => {
                     )}
                   </div>
 
-                  {/* Program assignment */}
                   <div>
                     {programName
                       ? (
@@ -611,26 +729,17 @@ const VideoLessonsPage = () => {
                     <p className="text-xs text-muted-foreground line-clamp-2">{lesson.description}</p>
                   )}
 
-                  {/* Actions */}
                   <div className="flex items-center justify-between pt-1 border-t border-border/50">
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Eye className="w-3 h-3" /> {lesson.viewCount ?? 0}
                     </span>
                     <div className="flex gap-1">
-                      <Button
-                        variant="ghost" size="icon" className="h-8 w-8"
-                        onClick={() => setPlayingLesson(lesson)}
-                        title="Play"
-                      >
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPlayingLesson(lesson)} title="Play">
                         <Play className="w-3.5 h-3.5" />
                       </Button>
                       {isPlatformAdmin && (
                         <>
-                          <Button
-                            variant="ghost" size="icon" className="h-8 w-8"
-                            onClick={() => { setEditingLesson(lesson); setModalOpen(true); }}
-                            title="Edit"
-                          >
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingLesson(lesson); setModalOpen(true); }} title="Edit">
                             <Edit2 className="w-3.5 h-3.5" />
                           </Button>
                           <Button

@@ -17,6 +17,7 @@ import {
   useMultiFileAuthState,
   DisconnectReason,
   Browsers,
+  fetchLatestBaileysVersion,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
@@ -89,18 +90,18 @@ export const connectWhatsApp = async (isManualConnect = false): Promise<void> =>
     reconnectTimer = null;
   }
 
-  // Manual connect: reset failure counter and clean up any stale socket/session
+  // Manual connect: always start completely fresh — clear stale session, reset counters, kill socket
   if (isManualConnect) {
-    // If we previously exhausted auto-reconnects, the saved session may be stale — clear it
-    if (failureCount >= MAX_AUTO_RECONNECTS) {
-      clearAuthFiles();
-    }
+    // Always clear auth files on manual connect — stale sessions cause immediate 401/loggedOut disconnect
+    clearAuthFiles();
     failureCount = 0;
-    // Destroy lingering socket without triggering a logout
+    // Tear down lingering socket without triggering a server-side logout
     if (sock) {
-      try { sock.end(undefined); } catch { /* ignore */ }
+      try { (sock.ws as { close?: () => void })?.close?.(); } catch { /* ignore */ }
       sock = null;
     }
+    // CRITICAL: Reset waState so the guard below does not short-circuit the new connection
+    waState = { status: "disconnected", qrDataUrl: null, phone: null, lastError: null };
   }
 
   // Already in an active or pending state — do not create a second socket
@@ -119,15 +120,30 @@ export const connectWhatsApp = async (isManualConnect = false): Promise<void> =>
   try {
     const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
+    // Fetch the latest WhatsApp Web client version so the connection isn't rejected
+    // for using an outdated version string
+    let waVersion: [number, number, number] | undefined;
+    try {
+      const { version, isLatest } = await fetchLatestBaileysVersion();
+      waVersion = version;
+      console.log(`[WhatsApp] Using WA client version ${version.join(".")} (isLatest: ${isLatest})`);
+    } catch {
+      console.warn("[WhatsApp] Could not fetch latest version — using Baileys default");
+    }
+
     sock = makeWASocket({
+      ...(waVersion ? { version: waVersion } : {}),
       auth: authState,
-      printQRInTerminal: false,
-      // Use a recognised browser fingerprint — custom names are rejected by WhatsApp servers
+      // Print QR as ASCII art in the server terminal — useful when the frontend
+      // QR display is being debugged or as an emergency fallback
+      printQRInTerminal: true,
       browser: Browsers.ubuntu("Chrome"),
       logger: silentLogger,
       getMessage: async () => undefined,
-      // Don't sync full history on connect — faster QR generation
       syncFullHistory: false,
+      // Give the handshake more time on slow connections
+      connectTimeoutMs: 60_000,
+      defaultQueryTimeoutMs: 60_000,
     });
 
     const currentSock = sock;
@@ -159,12 +175,16 @@ export const connectWhatsApp = async (isManualConnect = false): Promise<void> =>
       }
 
       if (connection === "close") {
-        const err = lastDisconnect?.error as { output?: { statusCode?: number }; message?: string } | undefined;
-        const code = err?.output?.statusCode;
+        const err = lastDisconnect?.error as {
+          output?: { statusCode?: number };
+          statusCode?: number;
+          message?: string;
+        } | undefined;
+        const code = err?.output?.statusCode ?? err?.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
         const reason = err?.message || (code ? `code ${code}` : "unknown reason");
 
-        console.error(`[WhatsApp] Connection closed — ${reason} (loggedOut=${loggedOut})`);
+        console.error(`[WhatsApp] Connection closed — code=${code ?? "N/A"} reason="${reason}" loggedOut=${loggedOut}`);
 
         sock = null;
         failureCount++;

@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import pb from '@/lib/apiClient';
 import { toast } from 'sonner';
-import { Plus, Search, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2, BookOpen } from 'lucide-react';
+import {
+  Plus, Search, Edit2, Trash2, ToggleLeft, ToggleRight, Loader2, BookOpen,
+  LayoutList, LayoutGrid
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
@@ -136,6 +140,7 @@ const SubjectManagementPage = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('list');
   const [formOpen, setFormOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
   const [deletingSubject, setDeletingSubject] = useState(null);
@@ -223,12 +228,13 @@ const SubjectManagementPage = () => {
           </Button>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
+        {/* Toolbar */}
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input placeholder="Search subjects..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 items-center">
             {['all', 'active', 'inactive'].map(s => (
               <button
                 key={s}
@@ -239,13 +245,35 @@ const SubjectManagementPage = () => {
                 )}
               >{s}</button>
             ))}
+            <div className="ml-2 flex items-center gap-0.5 border border-border/50 rounded-md p-0.5 bg-muted/30">
+              <button
+                onClick={() => setViewMode('list')}
+                title="List view"
+                className={cn("p-1.5 rounded transition-colors", viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+              >
+                <LayoutList className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                title="Grid view"
+                className={cn("p-1.5 rounded transition-colors", viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
-          </div>
+          viewMode === 'list' ? (
+            <div className="border rounded-xl overflow-hidden">
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-none border-b" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+            </div>
+          )
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-border/50 rounded-xl">
             <BookOpen className="w-10 h-10 text-muted-foreground/30 mb-3" />
@@ -260,6 +288,70 @@ const SubjectManagementPage = () => {
                 <Plus className="w-4 h-4 mr-2" /> Add Subject
               </Button>
             )}
+          </div>
+        ) : viewMode === 'list' ? (
+          <div className="border border-border/50 rounded-xl overflow-hidden bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="w-8 text-center text-xs">#</TableHead>
+                  <TableHead>Subject Name</TableHead>
+                  <TableHead className="w-28">Code</TableHead>
+                  <TableHead className="hidden md:table-cell">Description</TableHead>
+                  <TableHead className="w-20 text-center">Order</TableHead>
+                  <TableHead className="w-24 text-center">Status</TableHead>
+                  <TableHead className="w-28 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((subj, idx) => (
+                  <TableRow key={subj.id} className={cn("transition-colors", subj.isActive === false && "opacity-60")}>
+                    <TableCell className="text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                          <BookOpen className="w-3.5 h-3.5 text-primary" />
+                        </div>
+                        <span className="font-medium text-sm text-foreground">{subj.subjectName}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {subj.subjectCode
+                        ? <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">{subj.subjectCode}</span>
+                        : <span className="text-muted-foreground text-xs">—</span>
+                      }
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <span className="text-xs text-muted-foreground line-clamp-1">{subj.description || '—'}</span>
+                    </TableCell>
+                    <TableCell className="text-center text-sm text-muted-foreground">{subj.displayOrder ?? 0}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={subj.isActive !== false ? 'default' : 'secondary'} className="text-xs">
+                        {subj.isActive !== false ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => { setEditingSubject(subj); setFormOpen(true); }}>
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="ghost" size="sm"
+                          className={cn("h-7 px-2 text-xs", subj.isActive !== false ? "text-amber-600 hover:bg-amber-50" : "text-emerald-600 hover:bg-emerald-50")}
+                          onClick={() => handleToggleActive(subj)}
+                          title={subj.isActive !== false ? 'Deactivate' : 'Activate'}
+                        >
+                          {subj.isActive !== false ? <ToggleLeft className="w-3.5 h-3.5" /> : <ToggleRight className="w-3.5 h-3.5" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeletingSubject(subj)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

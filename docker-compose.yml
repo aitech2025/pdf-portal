@@ -22,7 +22,6 @@ services:
       MONGODB_URI: mongodb://mongo:27017/iiconacademy
       DB_NAME: iiconacademy
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
-      UPLOAD_DIR: /data/uploads
       PORT: 8000
       HOST: 0.0.0.0
       DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@iiconacademy.com}
@@ -44,13 +43,12 @@ services:
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.com}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.org}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-i-icon academy}
       # WhatsApp via Baileys — auth credentials are stored in /app/baileys_auth.
       # Mount the whatsapp_auth volume so the QR session persists across restarts.
       WHATSAPP_AUTH_DIR: /app/baileys_auth
     volumes:
-      - uploads_data:/data/uploads
       - whatsapp_auth:/app/baileys_auth
     ports:
       - "8000:8000"
@@ -67,5 +65,4 @@ services:
 
 volumes:
   mongo_data:
-  uploads_data:
   whatsapp_auth:

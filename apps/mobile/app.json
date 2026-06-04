@@ -48,6 +48,12 @@
     "experiments": {
       "typedRoutes": true
     },
+    "updates": {
+      "url": "https://u.expo.dev/03dce7fa-888b-4d00-8a34-a7003391ebe6"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "apiUrl": "http://192.168.1.9:8000",
       "eas": {

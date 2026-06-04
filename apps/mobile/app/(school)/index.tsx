@@ -78,34 +78,33 @@ export default function SchoolDashboard() {
                             onPress={() => router.push('/(school)/portal')}
                         >
                             <Ionicons name="library-outline" size={22} color="#4f46e5" />
-                            <Text className="text-xs font-medium text-foreground mt-1.5">Browse Library</Text>
+                            <Text className="text-xs font-medium text-foreground mt-1.5">Library</Text>
                         </TouchableOpacity>
-                        {canWrite ? (
+                        <TouchableOpacity
+                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
+                            onPress={() => router.push('/(school)/videos')}
+                        >
+                            <Ionicons name="play-circle-outline" size={22} color="#0891b2" />
+                            <Text className="text-xs font-medium text-foreground mt-1.5">Videos</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
+                            onPress={() => router.push('/(school)/bookmarks')}
+                        >
+                            <Ionicons name="bookmark-outline" size={22} color="#059669" />
+                            <Text className="text-xs font-medium text-foreground mt-1.5">Bookmarks</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <View className="flex-row gap-3 mt-3">
+                        {canWrite && (
                             <TouchableOpacity
                                 className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
                                 onPress={() => router.push('/(school)/requests')}
                             >
-                                <Ionicons name="clipboard-outline" size={22} color="#059669" />
-                                <Text className="text-xs font-medium text-foreground mt-1.5">User Requests</Text>
-                            </TouchableOpacity>
-                        ) : (
-                            <TouchableOpacity
-                                className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                                onPress={() => router.push('/(school)/portal')}
-                            >
-                                <Ionicons name="bookmarks-outline" size={22} color="#059669" />
-                                <Text className="text-xs font-medium text-foreground mt-1.5">My Library</Text>
+                                <Ionicons name="clipboard-outline" size={22} color="#d97706" />
+                                <Text className="text-xs font-medium text-foreground mt-1.5">Requests</Text>
                             </TouchableOpacity>
                         )}
-                        <TouchableOpacity
-                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                            onPress={() => router.push('/(school)/notifications')}
-                        >
-                            <Ionicons name="notifications-outline" size={22} color="#d97706" />
-                            <Text className="text-xs font-medium text-foreground mt-1.5">Notifications</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <View className="flex-row gap-3 mt-3">
                         <TouchableOpacity
                             className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
                             onPress={() => router.push('/(school)/analytics')}
@@ -115,20 +114,11 @@ export default function SchoolDashboard() {
                         </TouchableOpacity>
                         <TouchableOpacity
                             className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                            onPress={() => router.push('/(school)/profile')}
+                            onPress={() => router.push('/(school)/notifications')}
                         >
-                            <Ionicons name="person-outline" size={22} color="#6b7280" />
-                            <Text className="text-xs font-medium text-foreground mt-1.5">My Profile</Text>
+                            <Ionicons name="notifications-outline" size={22} color="#6b7280" />
+                            <Text className="text-xs font-medium text-foreground mt-1.5">Alerts</Text>
                         </TouchableOpacity>
-                        {canWrite && (
-                            <TouchableOpacity
-                                className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                                onPress={() => router.push('/(school)/settings')}
-                            >
-                                <Ionicons name="settings-outline" size={22} color="#0891b2" />
-                                <Text className="text-xs font-medium text-foreground mt-1.5">Settings</Text>
-                            </TouchableOpacity>
-                        )}
                     </View>
                 </View>
             </View>

@@ -1,0 +1,33 @@
+iiconacademy.in {
+    # Automatic HTTPS via Let's Encrypt — Caddy handles cert provisioning and renewal.
+
+    # WebSocket upgrade for real-time notifications
+    handle /api/notifications/ws {
+        reverse_proxy web:80 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # All other traffic goes to the web container (nginx handles /api proxy internally)
+    reverse_proxy web:80 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Compress responses
+    encode gzip
+}

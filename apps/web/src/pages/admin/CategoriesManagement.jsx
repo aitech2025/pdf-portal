@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import client from '@/lib/apiClient';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Search, FileText, ChevronRight, ArrowLeft, FolderOpen } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, FileText, ArrowLeft, FolderOpen, GraduationCap, BookOpen, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,12 @@ const CategoriesManagement = () => {
   const [categoryPdfs, setCategoryPdfs] = useState([]);
   const [pdfsLoading, setPdfsLoading] = useState(false);
 
+  // Class/subject lookup
+  const [allClasses, setAllClasses] = useState([]);
+  const [allSubjects, setAllSubjects] = useState([]);
+  const [filterClass, setFilterClass] = useState('all');
+  const [filterSubject, setFilterSubject] = useState('all');
+
   const fetchCategories = async () => {
     try {
       setLoading(true);
@@ -51,6 +57,8 @@ const CategoriesManagement = () => {
   const fetchCategoryPdfs = async (categoryId) => {
     setPdfsLoading(true);
     setCategoryPdfs([]);
+    setFilterClass('all');
+    setFilterSubject('all');
     try {
       const response = await client.fetch(`/categories/${categoryId}/pdfs`, 'GET', null, {
         per_page: 200
@@ -65,6 +73,13 @@ const CategoriesManagement = () => {
 
   useEffect(() => {
     fetchCategories();
+    Promise.all([
+      client.fetch('/masterClasses'),
+      client.fetch('/masterSubjects')
+    ]).then(([cls, subj]) => {
+      setAllClasses(cls?.items ?? []);
+      setAllSubjects(subj?.items ?? []);
+    }).catch(() => {});
   }, []);
 
   const handleCategoryClick = (category) => {
@@ -125,6 +140,28 @@ const CategoriesManagement = () => {
     c.categoryName && c.categoryName.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Build class/subject maps from the PDF list (only IDs that actually appear)
+  const classesInPdfs = useMemo(() => {
+    const ids = [...new Set(categoryPdfs.map(p => p.classId).filter(Boolean))];
+    return ids.map(id => ({ id, name: allClasses.find(c => c.id === id)?.className || id }));
+  }, [categoryPdfs, allClasses]);
+
+  const subjectsInPdfs = useMemo(() => {
+    const ids = [...new Set(categoryPdfs.map(p => p.subjectId).filter(Boolean))];
+    return ids.map(id => ({ id, name: allSubjects.find(s => s.id === id)?.subjectName || id }));
+  }, [categoryPdfs, allSubjects]);
+
+  const classMap = useMemo(() => Object.fromEntries(allClasses.map(c => [c.id, c.className])), [allClasses]);
+  const subjectMap = useMemo(() => Object.fromEntries(allSubjects.map(s => [s.id, s.subjectName])), [allSubjects]);
+
+  const filteredPdfs = useMemo(() => {
+    return categoryPdfs.filter(p => {
+      if (filterClass !== 'all' && p.classId !== filterClass) return false;
+      if (filterSubject !== 'all' && p.subjectId !== filterSubject) return false;
+      return true;
+    });
+  }, [categoryPdfs, filterClass, filterSubject]);
+
   const formatBytes = (bytes) => {
     if (!bytes) return '—';
     const k = 1024;
@@ -132,6 +169,8 @@ const CategoriesManagement = () => {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
+
+  const hasFilters = filterClass !== 'all' || filterSubject !== 'all';
 
   return (
     <div className="container max-w-7xl mx-auto py-8 px-4">
@@ -284,12 +323,7 @@ const CategoriesManagement = () => {
               <CardHeader className="pb-3 border-b">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="lg:hidden"
-                      onClick={() => setSelectedCategory(null)}
-                    >
+                    <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSelectedCategory(null)}>
                       <ArrowLeft className="w-4 h-4 mr-1" /> Back
                     </Button>
                     <div>
@@ -302,29 +336,71 @@ const CategoriesManagement = () => {
                         {selectedCategory.categoryCode && ` · ${selectedCategory.categoryCode}`}
                         {' · '}
                         <span className="font-medium text-foreground">{categoryPdfs.length} PDF{categoryPdfs.length !== 1 ? 's' : ''}</span>
+                        {hasFilters && <span className="ml-1 text-primary">({filteredPdfs.length} shown)</span>}
                       </CardDescription>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="hidden lg:flex"
-                    onClick={() => setSelectedCategory(null)}
-                  >
+                  <Button variant="ghost" size="sm" className="hidden lg:flex" onClick={() => setSelectedCategory(null)}>
                     <ArrowLeft className="w-4 h-4 mr-1" /> Back to list
                   </Button>
                 </div>
+
+                {/* Class / Subject filter dropdowns */}
+                {!pdfsLoading && categoryPdfs.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/30">
+                    <Select value={filterClass} onValueChange={v => { setFilterClass(v); setFilterSubject('all'); }}>
+                      <SelectTrigger className="h-8 w-44 text-xs">
+                        <GraduationCap className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                        <SelectValue placeholder="All Classes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Classes</SelectItem>
+                        {classesInPdfs.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select value={filterSubject} onValueChange={setFilterSubject}>
+                      <SelectTrigger className="h-8 w-44 text-xs">
+                        <BookOpen className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                        <SelectValue placeholder="All Subjects" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Subjects</SelectItem>
+                        {subjectsInPdfs.map(s => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {hasFilters && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-xs text-muted-foreground"
+                        onClick={() => { setFilterClass('all'); setFilterSubject('all'); }}
+                      >
+                        <X className="w-3.5 h-3.5 mr-1" /> Clear filters
+                      </Button>
+                    )}
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="p-0">
                 {pdfsLoading ? (
                   <div className="py-12 flex justify-center">
                     <LoadingSpinner />
                   </div>
-                ) : categoryPdfs.length === 0 ? (
+                ) : filteredPdfs.length === 0 ? (
                   <div className="py-16 text-center">
                     <FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="font-medium text-muted-foreground">No PDFs in this category</p>
-                    <p className="text-sm text-muted-foreground mt-1">Upload PDFs and assign them to this category.</p>
+                    <p className="font-medium text-muted-foreground">
+                      {hasFilters ? 'No PDFs match the selected filters' : 'No PDFs in this category'}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {hasFilters ? 'Try a different class or subject filter.' : 'Upload PDFs and assign them to this category.'}
+                    </p>
                   </div>
                 ) : (
                   <Table>
@@ -332,14 +408,15 @@ const CategoriesManagement = () => {
                       <TableRow>
                         <TableHead>PDF ID</TableHead>
                         <TableHead>File Name</TableHead>
-                        <TableHead>Sub-Category</TableHead>
+                        <TableHead>Class</TableHead>
+                        <TableHead>Subject</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Size</TableHead>
                         <TableHead>Uploaded</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {categoryPdfs.map(pdf => (
+                      {filteredPdfs.map(pdf => (
                         <TableRow key={pdf.id} className="hover:bg-muted/30">
                           <TableCell>
                             <span className="font-mono text-xs text-muted-foreground">
@@ -349,15 +426,22 @@ const CategoriesManagement = () => {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <FileText className="w-4 h-4 text-rose-500 shrink-0" />
-                              <span className="font-medium text-sm truncate max-w-[200px]" title={pdf.fileName}>
+                              <span className="font-medium text-sm truncate max-w-[180px]" title={pdf.fileName}>
                                 {pdf.fileName}
                               </span>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm text-muted-foreground">
-                              {pdf.subCategoryName || '—'}
-                            </span>
+                            {pdf.classId
+                              ? <Badge variant="outline" className="text-xs gap-1"><GraduationCap className="w-3 h-3" />{classMap[pdf.classId] || pdf.subCategoryName || '—'}</Badge>
+                              : <span className="text-sm text-muted-foreground">{pdf.subCategoryName || '—'}</span>
+                            }
+                          </TableCell>
+                          <TableCell>
+                            {pdf.subjectId
+                              ? <Badge variant="outline" className="text-xs gap-1"><BookOpen className="w-3 h-3" />{subjectMap[pdf.subjectId]}</Badge>
+                              : <span className="text-sm text-muted-foreground">—</span>
+                            }
                           </TableCell>
                           <TableCell>
                             <Badge

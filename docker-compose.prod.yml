@@ -1,0 +1,61 @@
+services:
+  api:
+    image: ${IMAGE_API:-iiconacademy/api:latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: ${MONGODB_URI}
+      DB_NAME: ${DB_NAME:-iiconacademy}
+      SECRET_KEY: ${SECRET_KEY}
+      PORT: 8000
+      HOST: 0.0.0.0
+      APP_BASE_URL: ${APP_BASE_URL:-https://iiconacademy.in}
+      DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD}
+      DEFAULT_ADMIN_NAME: ${DEFAULT_ADMIN_NAME:-Platform Admin}
+      RESET_DEFAULT_ADMIN_PASSWORD: ${RESET_DEFAULT_ADMIN_PASSWORD:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.in}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-i-icon academy}
+      WHATSAPP_AUTH_DIR: /app/baileys_auth
+    volumes:
+      - whatsapp_auth:/app/baileys_auth
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    # api is NOT exposed on the host — only reachable inside the Docker network.
+    # Caddy → web (nginx) → api:8000 is the request path.
+
+  web:
+    image: ${IMAGE_WEB:-iiconacademy/web:latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    # web is NOT exposed directly on the host — Caddy terminates TLS and proxies here.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      ACME_AGREE: "true"
+
+volumes:
+  whatsapp_auth:
+  caddy_data:
+  caddy_config:
