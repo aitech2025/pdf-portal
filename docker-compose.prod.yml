@@ -9,7 +9,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       PORT: 8000
       HOST: 0.0.0.0
-      APP_BASE_URL: ${APP_BASE_URL:-https://iiconacademy.in}
+      APP_BASE_URL: ${APP_BASE_URL:-https://iiconacademy.org/solutions}
       DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL}
       DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD}
       DEFAULT_ADMIN_NAME: ${DEFAULT_ADMIN_NAME:-Platform Admin}
@@ -18,13 +18,13 @@ services:
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.in}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.org}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-i-icon academy}
       WHATSAPP_AUTH_DIR: /app/baileys_auth
     volumes:
       - whatsapp_auth:/app/baileys_auth
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/api/health || exit 1"]
       interval: 30s
       timeout: 10s
       start_period: 15s
