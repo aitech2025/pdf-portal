@@ -9,7 +9,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       PORT: 8000
       HOST: 0.0.0.0
-      APP_BASE_URL: ${APP_BASE_URL:-https://iiconacademy.org/solutions}
+      APP_BASE_URL: ${APP_BASE_URL:-https://iiconacademy.in/}
       DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL}
       DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD}
       DEFAULT_ADMIN_NAME: ${DEFAULT_ADMIN_NAME:-Platform Admin}
@@ -18,7 +18,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.org}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.in}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-i-icon academy}
       WHATSAPP_AUTH_DIR: /app/baileys_auth
     volumes:
