@@ -140,6 +140,47 @@ const buildTransport = (cfg: EmailConfig): Transporter | null => {
   });
 };
 
+// Use Resend HTTP API (port 443) instead of SMTP when the host is smtp.resend.com.
+// DigitalOcean blocks outbound SMTP ports 465/587, but HTTPS is always open.
+const sendViaResendApi = async (
+  cfg: EmailConfig,
+  to: string,
+  subject: string,
+  text: string,
+  html?: string
+): Promise<{ ok: boolean; error?: string }> => {
+  const from = cfg.fromEmail ?? "noreply@iiconacademy.in";
+  const fromName = cfg.fromName ?? "i-icon Academy";
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${cfg.password}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: `${fromName} <${from}>`,
+        to: [to],
+        subject,
+        text,
+        html: html ?? `<pre style="font-family:sans-serif;white-space:pre-wrap">${escapeHtml(text)}</pre>`
+      })
+    });
+    const data = await res.json() as Record<string, unknown>;
+    if (!res.ok) {
+      const msg = (data.message as string) ?? (data.name as string) ?? `HTTP ${res.status}`;
+      console.error("[EMAIL] Resend API error:", msg, data);
+      return { ok: false, error: msg };
+    }
+    console.log(`[EMAIL] Resend API sent id=${data.id} to=${to}`);
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[EMAIL] Resend API fetch failed:", msg);
+    return { ok: false, error: msg };
+  }
+};
+
 const sendEmail = async (
   to: string,
   subject: string,
@@ -147,13 +188,24 @@ const sendEmail = async (
   html?: string
 ): Promise<{ ok: boolean; error?: string }> => {
   const cfg = await loadEmailConfig();
+
+  if (!cfg.configured) {
+    console.log(`[EMAIL MOCK] To: ${to} | Subject: ${subject}`);
+    return { ok: true };
+  }
+
+  // Resend's SMTP ports are blocked by DigitalOcean — use their HTTP API directly.
+  if (cfg.host === "smtp.resend.com" && cfg.password) {
+    return sendViaResendApi(cfg, to, subject, text, html);
+  }
+
   const transport = buildTransport(cfg);
   if (!transport) {
     console.log(`[EMAIL MOCK] To: ${to} | Subject: ${subject}`);
     return { ok: true };
   }
   try {
-    const from = cfg.fromEmail ?? "noreply@iiconacademy.com";
+    const from = cfg.fromEmail ?? "noreply@iiconacademy.in";
     const fromName = cfg.fromName ?? "i-icon Academy";
     await transport.sendMail({
       from: `"${fromName}" <${from}>`,
