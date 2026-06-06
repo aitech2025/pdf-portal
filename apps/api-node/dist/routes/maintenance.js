@@ -4,6 +4,9 @@ import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
 import { createAndSendNotification, validateEmailConfiguration, validateWhatsAppConfiguration } from "../services/notificationChannels.js";
+// Fields that must never appear in a $set — they are either immutable identifiers
+// or Mongoose-managed timestamps.
+const SKIP_FROM_SET = new Set(["id", "_id", "created", "updated"]);
 const mapSystemSettingsUpdate = (body) => {
     const update = {};
     const fieldMap = {
@@ -25,10 +28,24 @@ const mapSystemSettingsUpdate = (body) => {
         emailFromName: "email_from_name",
         enableTLS: "enable_tls",
         enableSSL: "enable_ssl",
+        // Brevo SMTP
+        smtp2Host: "smtp2_host",
+        smtp2Port: "smtp2_port",
+        smtp2Username: "smtp2_username",
+        smtp2Password: "smtp2_password",
+        email2FromAddress: "email2_from_address",
+        email2FromName: "email2_from_name",
+        enableSSL2: "enable_ssl2",
+        enableSsl2: "enable_ssl2",
+        enableSsl: "enable_ssl",
+        enableTls: "enable_tls",
+        activeEmailProvider: "active_email_provider",
         featureFlags: "feature_flags",
         securitySettings: "security_settings"
     };
     for (const [key, raw] of Object.entries(body)) {
+        if (SKIP_FROM_SET.has(key))
+            continue;
         update[fieldMap[key] ?? key] = raw;
     }
     return update;
@@ -75,9 +92,19 @@ export const registerMaintenanceRoutes = async (app) => {
     app.patch("/api/systemSettings/:ss_id", { preHandler: requirePermission(PERMISSIONS.SETTINGS_MANAGE) }, async (request, reply) => {
         const params = z.object({ ss_id: z.string() }).parse(request.params);
         const body = z.record(z.string(), z.unknown()).parse(request.body);
-        const updated = await SystemSettings.findOneAndUpdate({ id: params.ss_id }, { $set: mapSystemSettingsUpdate(body) }, { new: true });
-        if (!updated)
-            return reply.status(404).send({ detail: "System settings not found" });
+        const mapped = mapSystemSettingsUpdate(body);
+        console.log(`[systemSettings] PATCH id=${params.ss_id} updating fields: ${Object.keys(mapped).join(", ")}`);
+        const updated = await SystemSettings.findOneAndUpdate({ id: params.ss_id }, { $set: mapped }, { new: true, runValidators: false });
+        if (!updated) {
+            console.error(`[systemSettings] PATCH: no document found with id=${params.ss_id}`);
+            // Fallback: try to find any document and update it (handles ID mismatch on first deploy)
+            const fallback = await SystemSettings.findOneAndUpdate({}, { $set: mapped }, { new: true, sort: { created: -1 }, runValidators: false });
+            if (!fallback)
+                return reply.status(404).send({ detail: "System settings not found" });
+            console.log(`[systemSettings] PATCH fallback: updated document id=${fallback.id}`);
+            return serializeDoc(fallback.toObject());
+        }
+        console.log(`[systemSettings] PATCH success id=${updated.id}`);
         return serializeDoc(updated.toObject());
     });
     app.post("/api/systemSettings/:ss_id/test-email", { preHandler: requirePermission(PERMISSIONS.SETTINGS_MANAGE) }, async (request) => {

@@ -6,25 +6,38 @@ import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
 import { createAndSendNotification } from "../services/notificationChannels.js";
-/** Create email + whatsapp credential notification logs for a newly created school admin */
+/** Fan-out credential delivery to in-app + email + WhatsApp for a new school admin */
 const sendCredentialNotifications = async (userId, userName, userEmail, schoolName, schoolId, password, mobileNumber) => {
-    const subject = "Welcome to i-icon Academy - Your School Account Credentials";
-    const message = `Dear ${userName},\n\n` +
+    const subject = "Welcome to i-icon Academy — your school account is ready";
+    const text = `Dear ${userName},\n\n` +
         `Your school "${schoolName}" (ID: ${schoolId}) has been registered on i-icon Academy.\n\n` +
         `Your login credentials:\n` +
         `  Email: ${userEmail}\n` +
         `  Password: ${password}\n\n` +
-        `Please log in and change your password immediately.\n\n` +
-        `Thank you,\ni-icon Academy Team`;
-    for (const method of ["email", "whatsapp"]) {
-        await createAndSendNotification({
-            recipient: { id: userId, email: userEmail, mobile_number: mobileNumber },
-            method,
-            type: "credential_delivery",
-            subject,
-            message
-        });
-    }
+        `Please log in and change your password immediately on first sign-in.\n\n` +
+        `— i-icon Academy team`;
+    const html = `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0f172a">` +
+        `<h2 style="margin:0 0 16px;color:#4338ca">Welcome to i-icon Academy</h2>` +
+        `<p>Dear ${userName},</p>` +
+        `<p>Your school <strong>${schoolName}</strong> (ID: <code>${schoolId}</code>) has been registered on i-icon Academy.</p>` +
+        `<div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:16px 0">` +
+        `<div><strong>Email:</strong> ${userEmail}</div>` +
+        `<div><strong>Temporary password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${password}</code></div>` +
+        `</div>` +
+        `<p>Please log in and change your password on first sign-in.</p>` +
+        `<p style="font-size:12px;color:#94a3b8;margin-top:24px">— i-icon Academy team</p>` +
+        `</div>`;
+    const channels = ["email"];
+    if (mobileNumber)
+        channels.push("whatsapp");
+    await createAndSendNotification({
+        recipient: { id: userId, email: userEmail, mobile_number: mobileNumber, name: userName },
+        channels,
+        type: "credential_delivery",
+        subject,
+        message: text,
+        html
+    });
 };
 const parseSchoolBody = (body) => ({
     school_name: (body.schoolName ?? body.school_name),
@@ -36,6 +49,7 @@ const parseSchoolBody = (body) => ({
     point_of_contact_mobile: (body.pointOfContactMobile ?? body.point_of_contact_mobile),
     principal_name: (body.principalName ?? body.principal_name),
     grades: body.grades,
+    institution_type: (body.institutionType ?? body.institution_type ?? "school"),
     is_active: (body.isActive ?? body.is_active ?? true),
     send_email: (body.sendEmail ?? body.send_email ?? true),
     password: body.password
@@ -91,6 +105,7 @@ export const registerSchoolRoutes = async (app) => {
         const school = await School.create({
             school_name: body.school_name,
             school_id,
+            institution_type: body.institution_type,
             location: body.location,
             address: body.address,
             email: body.email,
@@ -103,22 +118,24 @@ export const registerSchoolRoutes = async (app) => {
         });
         let generatedPassword;
         if (body.email) {
+            let adminUser;
             try {
-                const { user: adminUser, generatedPassword: pwd } = await createSchoolAdminUser({
+                const result = await createSchoolAdminUser({
                     email: body.email,
                     name: body.point_of_contact_name || body.school_name,
                     schoolId: school.id,
                     mobile_number: body.mobile_number,
                     password: body.password
                 });
-                generatedPassword = pwd;
-                // Send credential notifications (email + whatsapp logs)
-                await sendCredentialNotifications(adminUser.id, adminUser.name, adminUser.email, school.school_name, school_id, generatedPassword, adminUser.mobile_number);
+                adminUser = result.user;
+                generatedPassword = result.generatedPassword;
             }
             catch (err) {
                 await School.findOneAndDelete({ id: school.id });
                 return reply.status(409).send({ detail: err.message });
             }
+            // Fire-and-forget — do not block the HTTP response on email/WhatsApp delivery
+            sendCredentialNotifications(adminUser.id, adminUser.name, adminUser.email, school.school_name, school_id, generatedPassword, adminUser.mobile_number).catch(err => console.error("[schools] credential notification failed:", err.message));
         }
         if (request.authUser?.sub) {
             await writeAudit({
@@ -150,6 +167,7 @@ export const registerSchoolRoutes = async (app) => {
             const school = await School.create({
                 school_name: parsed.school_name,
                 school_id,
+                institution_type: parsed.institution_type ?? "school",
                 location: parsed.location,
                 address: parsed.address,
                 email: parsed.email,
@@ -170,8 +188,8 @@ export const registerSchoolRoutes = async (app) => {
                         mobile_number: parsed.mobile_number
                     });
                     generatedPassword = pwd;
-                    // Send credential notifications (email + whatsapp logs)
-                    await sendCredentialNotifications(adminUser.id, adminUser.name, adminUser.email, school.school_name, school_id, generatedPassword, adminUser.mobile_number);
+                    // Fire-and-forget — do not block bulk creation on notification delivery
+                    sendCredentialNotifications(adminUser.id, adminUser.name, adminUser.email, school.school_name, school_id, generatedPassword, adminUser.mobile_number).catch(err => console.error("[schools/bulk] credential notification failed:", err.message));
                 }
                 catch {
                     /* skip duplicate email schools in bulk */
@@ -212,6 +230,10 @@ export const registerSchoolRoutes = async (app) => {
             update.mobile_number = body.mobileNumber;
         if (body.isActive !== undefined)
             update.is_active = body.isActive;
+        if (body.institutionType !== undefined)
+            update.institution_type = body.institutionType;
+        if (body.institution_type !== undefined)
+            update.institution_type = body.institution_type;
         if (body.deactivationMessage !== undefined)
             update.deactivation_message = body.deactivationMessage;
         const updated = await School.findOneAndUpdate({ id: params.school_id }, { $set: update }, { new: true });
@@ -224,7 +246,7 @@ export const registerSchoolRoutes = async (app) => {
         const deleted = await School.findOneAndDelete({ id: params.school_id });
         if (!deleted)
             return reply.status(404).send({ detail: "School not found" });
-        await User.updateMany({ school_id: params.school_id }, { $set: { school_id: null, is_active: false } });
+        await User.deleteMany({ school_id: params.school_id });
         return { message: "School deleted" };
     });
     app.get("/api/schools/:school_id/stats", { preHandler: requireAuth }, async (request) => {

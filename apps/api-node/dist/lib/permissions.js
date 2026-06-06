@@ -10,7 +10,8 @@ export const PERMISSIONS = {
     NOTIFICATION_SEND: "notification.send",
     ANALYTICS_VIEW: "analytics.view",
     AUDIT_VIEW: "audit.view",
-    SETTINGS_MANAGE: "settings.manage"
+    SETTINGS_MANAGE: "settings.manage",
+    VIDEO_MANAGE: "video.manage"
 };
 /** FRD SUPER_ADMIN maps to platform_admin/admin in this codebase */
 export const SUPER_ADMIN_ROLES = ["platform_admin", "admin", "super_admin"];
@@ -24,6 +25,7 @@ const ROLE_PERMISSIONS = {
     moderator: [
         PERMISSIONS.CATEGORY_MANAGE,
         PERMISSIONS.PDF_UPLOAD,
+        // VIDEO_MANAGE intentionally excluded — platform admins only
         PERMISSIONS.PDF_VIEW,
         PERMISSIONS.PDF_DOWNLOAD,
         PERMISSIONS.PDF_PRINT,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Category, School, SchoolCategoryAccess } from "../models/index.js";
+import { Category, ClassMaster, School, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, SubCategory, Subject, SubjectMaster } from "../models/index.js";
 import { canAccessSchool } from "../lib/access.js";
 import { auditUnauthorized, writeAudit } from "../lib/audit.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
@@ -81,6 +81,150 @@ export const registerSchoolCategoryRoutes = async (app) => {
         });
         if (!deleted)
             return reply.status(404).send({ detail: "Category access not found" });
+        // Cascade: remove all class and subject access records for this program
+        await SchoolClassAccess.deleteMany({ school_id: params.school_id, program_id: params.category_id });
+        await SchoolSubjectAccess.deleteMany({ school_id: params.school_id, program_id: params.category_id });
         return { message: "Category access removed" };
+    });
+    // Class (SubCategory) access endpoints
+    app.get("/api/schools/:school_id/classes", { preHandler: requireAuth }, async (request, reply) => {
+        const params = z.object({ school_id: z.string() }).parse(request.params);
+        const role = request.authUser?.role ?? "";
+        const schoolId = request.authUser?.school_id ?? null;
+        if (!canAccessSchool(role, schoolId, params.school_id)) {
+            await auditUnauthorized(request.authUser?.sub ?? null, "school_classes", params.school_id, request);
+            return reply.status(403).send({ detail: "Insufficient permissions" });
+        }
+        const grants = await SchoolClassAccess.find({ school_id: params.school_id }).lean();
+        const classIds = grants.map((g) => g.class_id);
+        // Try ClassMaster first (new model), fall back to SubCategory (legacy)
+        const masterClasses = await ClassMaster.find({ id: { $in: classIds } }).lean();
+        const masterClassMap = new Map(masterClasses.map((c) => [c.id, { name: c.class_name, isActive: c.is_active }]));
+        const legacyClasses = await SubCategory.find({ id: { $in: classIds } }).lean();
+        const legacyClassMap = new Map(legacyClasses.map((c) => [c.id, { name: c.sub_category_name, isActive: c.is_active }]));
+        const items = grants
+            .map((g) => {
+            const master = masterClassMap.get(g.class_id) ?? legacyClassMap.get(g.class_id);
+            if (!master)
+                return null;
+            return {
+                id: g.id,
+                programId: g.program_id,
+                classId: g.class_id,
+                className: master.name,
+                isActive: master.isActive
+            };
+        })
+            .filter(Boolean);
+        return { items };
+    });
+    app.post("/api/schools/:school_id/classes", { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) }, async (request, reply) => {
+        const params = z.object({ school_id: z.string() }).parse(request.params);
+        const body = z
+            .object({
+            assignments: z.array(z.object({ programId: z.string(), classId: z.string() })).optional(),
+            class_ids: z.array(z.string()).optional(),
+            classIds: z.array(z.string()).optional(),
+            program_id: z.string().optional(),
+            programId: z.string().optional()
+        })
+            .parse(request.body);
+        const school = await School.findOne({ id: params.school_id });
+        if (!school)
+            return reply.status(404).send({ detail: "School not found" });
+        const assignments = body.assignments ?? [];
+        // Support simple classIds + programId form
+        const simpleClassIds = body.class_ids ?? body.classIds ?? [];
+        const simpleProgramId = body.programId ?? body.program_id;
+        if (simpleClassIds.length && simpleProgramId) {
+            for (const classId of simpleClassIds) {
+                assignments.push({ programId: simpleProgramId, classId });
+            }
+        }
+        const added = [];
+        for (const { programId, classId } of assignments) {
+            const result = await SchoolClassAccess.updateOne({ school_id: params.school_id, program_id: programId, class_id: classId }, { $setOnInsert: { school_id: params.school_id, program_id: programId, class_id: classId } }, { upsert: true });
+            if (result.upsertedCount > 0)
+                added.push(classId);
+        }
+        return { school_id: params.school_id, added };
+    });
+    app.delete("/api/schools/:school_id/classes/:class_id", { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) }, async (request, reply) => {
+        const params = z.object({ school_id: z.string(), class_id: z.string() }).parse(request.params);
+        // deleteMany handles multiple records (same class under different programs)
+        const classResult = await SchoolClassAccess.deleteMany({
+            school_id: params.school_id,
+            class_id: params.class_id
+        });
+        // Cascade: remove all subject access records for this class
+        await SchoolSubjectAccess.deleteMany({
+            school_id: params.school_id,
+            class_id: params.class_id
+        });
+        return { message: "Class access removed", deletedCount: classResult.deletedCount };
+    });
+    app.get("/api/schools/:school_id/subjects", { preHandler: requireAuth }, async (request, reply) => {
+        const params = z.object({ school_id: z.string() }).parse(request.params);
+        const role = request.authUser?.role ?? "";
+        const schoolId = request.authUser?.school_id ?? null;
+        if (!canAccessSchool(role, schoolId, params.school_id)) {
+            return reply.status(403).send({ detail: "Insufficient permissions" });
+        }
+        const grants = await SchoolSubjectAccess.find({ school_id: params.school_id }).lean();
+        const subjectIds = grants.map((g) => g.subject_id);
+        // Try SubjectMaster first (new model), fall back to old Subject model
+        const masterSubjects = await SubjectMaster.find({ id: { $in: subjectIds } }).lean();
+        const masterSubjectMap = new Map(masterSubjects.map((s) => [s.id, { name: s.subject_name, code: s.subject_code, isActive: s.is_active }]));
+        const legacySubjects = await Subject.find({ id: { $in: subjectIds } }).lean();
+        const legacySubjectMap = new Map(legacySubjects.map((s) => [s.id, { name: s.subject_name, code: s.subject_code, isActive: s.is_active }]));
+        const items = grants
+            .map((g) => {
+            const subj = masterSubjectMap.get(g.subject_id) ?? legacySubjectMap.get(g.subject_id);
+            if (!subj)
+                return null;
+            return {
+                id: g.id,
+                programId: g.program_id,
+                classId: g.class_id,
+                subjectId: g.subject_id,
+                subjectName: subj.name,
+                subjectCode: subj.code,
+                isActive: subj.isActive
+            };
+        })
+            .filter(Boolean);
+        return { items };
+    });
+    app.post("/api/schools/:school_id/subjects", { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) }, async (request, reply) => {
+        const params = z.object({ school_id: z.string() }).parse(request.params);
+        const body = z
+            .object({
+            assignments: z.array(z.object({
+                programId: z.string(),
+                classId: z.string(),
+                subjectId: z.string()
+            })).optional()
+        })
+            .parse(request.body);
+        const school = await School.findOne({ id: params.school_id });
+        if (!school)
+            return reply.status(404).send({ detail: "School not found" });
+        const assignments = body.assignments ?? [];
+        const added = [];
+        for (const { programId, classId, subjectId } of assignments) {
+            const result = await SchoolSubjectAccess.updateOne({ school_id: params.school_id, program_id: programId, class_id: classId, subject_id: subjectId }, { $setOnInsert: { school_id: params.school_id, program_id: programId, class_id: classId, subject_id: subjectId } }, { upsert: true });
+            if (result.upsertedCount > 0)
+                added.push(subjectId);
+        }
+        return { school_id: params.school_id, added };
+    });
+    app.delete("/api/schools/:school_id/subjects/:subject_id", { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) }, async (request, reply) => {
+        const params = z.object({ school_id: z.string(), subject_id: z.string() }).parse(request.params);
+        // deleteMany handles multiple records (same subject in different class/program combinations)
+        const result = await SchoolSubjectAccess.deleteMany({
+            school_id: params.school_id,
+            subject_id: params.subject_id
+        });
+        return { message: "Subject access removed", deletedCount: result.deletedCount };
     });
 };

@@ -52,6 +52,7 @@ const SchoolSchema = new Schema({
     school_name: { type: String, required: true, index: true },
     school_id: { type: String, unique: true, sparse: true, index: true },
     organization_type: { type: String, default: "school" },
+    institution_type: { type: String, default: "school", index: true }, // 'school' | 'college'
     whatsapp_number: String,
     location: String,
     address: String,
@@ -82,6 +83,7 @@ const CategorySchema = new Schema({
     category_name: { type: String, required: true, index: true },
     slug: { type: String, unique: true, sparse: true },
     category_type: { type: String, required: true, index: true },
+    program_type: { type: String, enum: ["pdf", "video"], default: "pdf" },
     description: String,
     status: { type: String, default: "active" },
     is_archived: { type: Boolean, default: false },
@@ -94,11 +96,13 @@ const SubCategorySchema = new Schema({
     id: { type: String, default: genId, unique: true, index: true },
     sub_category_name: { type: String, required: true, index: true },
     category_id: { type: String, required: true, index: true },
+    sub_category_code: { type: String, sparse: true, index: true },
     description: String,
     is_active: { type: Boolean, default: true, index: true },
     icon: String,
     display_order: { type: Number, default: 0 }
 }, commonOptions);
+SubCategorySchema.index({ category_id: 1, sub_category_code: 1 }, { unique: true, sparse: true });
 const PdfSchema = new Schema({
     id: { type: String, default: genId, unique: true, index: true },
     file_name: { type: String, required: true },
@@ -107,6 +111,8 @@ const PdfSchema = new Schema({
     file_size: Number,
     category_id: { type: String, default: null, index: true },
     sub_category_id: { type: String, default: null, index: true },
+    class_id: { type: String, default: null, index: true },
+    subject_id: { type: String, default: null, index: true },
     uploaded_by: { type: String, default: null, index: true },
     is_active: { type: Boolean, default: false, index: true },
     status: { type: String, default: "pending", index: true },
@@ -185,6 +191,7 @@ const SystemSettingsSchema = new Schema({
     maintenance_mode: { type: Boolean, default: false },
     maintenance_message: String,
     email_provider: { type: String, default: "smtp" },
+    // Primary (Resend) SMTP
     smtp_host: String,
     smtp_port: Number,
     smtp_username: String,
@@ -193,6 +200,16 @@ const SystemSettingsSchema = new Schema({
     email_from_name: String,
     enable_tls: { type: Boolean, default: true },
     enable_ssl: { type: Boolean, default: false },
+    // Secondary (Brevo) SMTP
+    smtp2_host: String,
+    smtp2_port: Number,
+    smtp2_username: String,
+    smtp2_password: String,
+    email2_from_address: String,
+    email2_from_name: String,
+    enable_ssl2: { type: Boolean, default: false },
+    // Which provider is active: 'primary' | 'brevo'
+    active_email_provider: { type: String, default: "primary" },
     integrations: Schema.Types.Mixed,
     feature_flags: Schema.Types.Mixed,
     security_settings: Schema.Types.Mixed
@@ -254,6 +271,7 @@ FavoriteSchema.index({ user_id: 1, pdf_id: 1 }, { unique: true });
 const OnboardingRequestSchema = new Schema({
     id: { type: String, default: genId, unique: true, index: true },
     school_name: { type: String, required: true },
+    institution_type: { type: String, default: "school" }, // 'school' | 'college'
     address: String,
     location: String,
     email: { type: String, required: true },
@@ -266,6 +284,76 @@ const OnboardingRequestSchema = new Schema({
     rejection_reason: String,
     submitted_at: { type: Date, default: Date.now },
     approved_at: Date
+}, commonOptions);
+const SubjectSchema = new Schema({
+    id: { type: String, default: genId, unique: true, index: true },
+    subject_name: { type: String, required: true, index: true },
+    class_id: { type: String, required: true, index: true }, // references SubCategory.id
+    subject_code: { type: String, sparse: true, index: true },
+    description: String,
+    is_active: { type: Boolean, default: true, index: true },
+    display_order: { type: Number, default: 0 }
+}, commonOptions);
+SubjectSchema.index({ class_id: 1, subject_name: 1 }, { unique: true, sparse: true });
+SubjectSchema.index({ class_id: 1, subject_code: 1 }, { unique: true, sparse: true });
+const ClassMasterSchema = new Schema({
+    id: { type: String, default: genId, unique: true, index: true },
+    class_name: { type: String, required: true, unique: true, index: true },
+    class_code: { type: String, unique: true, sparse: true, index: true },
+    description: String,
+    is_active: { type: Boolean, default: true, index: true },
+    display_order: { type: Number, default: 0 }
+}, commonOptions);
+const SubjectMasterSchema = new Schema({
+    id: { type: String, default: genId, unique: true, index: true },
+    subject_name: { type: String, required: true, unique: true, index: true },
+    subject_code: { type: String, unique: true, sparse: true, index: true },
+    description: String,
+    is_active: { type: Boolean, default: true, index: true },
+    display_order: { type: Number, default: 0 }
+}, commonOptions);
+const ProgramClassMapSchema = new Schema({
+    id: { type: String, default: genId, unique: true, index: true },
+    program_id: { type: String, required: true, index: true },
+    class_id: { type: String, required: true, index: true }
+}, commonOptions);
+ProgramClassMapSchema.index({ program_id: 1, class_id: 1 }, { unique: true });
+const ProgramClassSubjectMapSchema = new Schema({
+    id: { type: String, default: genId, unique: true, index: true },
+    program_id: { type: String, required: true, index: true },
+    class_id: { type: String, required: true, index: true },
+    subject_id: { type: String, required: true, index: true }
+}, commonOptions);
+ProgramClassSubjectMapSchema.index({ program_id: 1, class_id: 1, subject_id: 1 }, { unique: true });
+const SchoolClassAccessSchema = new Schema({
+    id: { type: String, default: genId, unique: true, index: true },
+    school_id: { type: String, required: true, index: true },
+    program_id: { type: String, required: true, index: true }, // = category_id
+    class_id: { type: String, required: true, index: true } // = subcategory_id
+}, commonOptions);
+SchoolClassAccessSchema.index({ school_id: 1, program_id: 1, class_id: 1 }, { unique: true });
+const SchoolSubjectAccessSchema = new Schema({
+    id: { type: String, default: genId, unique: true, index: true },
+    school_id: { type: String, required: true, index: true },
+    program_id: { type: String, required: true, index: true },
+    class_id: { type: String, required: true, index: true },
+    subject_id: { type: String, required: true, index: true }
+}, commonOptions);
+SchoolSubjectAccessSchema.index({ school_id: 1, program_id: 1, class_id: 1, subject_id: 1 }, { unique: true });
+const VideoLessonSchema = new Schema({
+    id: { type: String, default: genId, unique: true, index: true },
+    title: { type: String, required: true, index: true },
+    description: String,
+    vimeo_url: { type: String, required: true },
+    vimeo_id: String,
+    program_id: { type: String, default: null, index: true }, // optional — set when assigned to a program
+    class_id: { type: String, required: true, index: true },
+    subject_id: { type: String, default: null, index: true },
+    thumbnail: String,
+    is_active: { type: Boolean, default: true, index: true },
+    created_by: { type: String, required: true, index: true },
+    download_count: { type: Number, default: 0 },
+    view_count: { type: Number, default: 0 }
 }, commonOptions);
 const UserRequestSchema = new Schema({
     id: { type: String, default: genId, unique: true, index: true },
@@ -283,6 +371,14 @@ export const School = mongoose.model("School", SchoolSchema);
 export const Program = mongoose.model("Program", ProgramSchema);
 export const Category = mongoose.model("Category", CategorySchema);
 export const SubCategory = mongoose.model("SubCategory", SubCategorySchema);
+export const Subject = mongoose.model("Subject", SubjectSchema);
+export const ClassMaster = mongoose.model("ClassMaster", ClassMasterSchema);
+export const SubjectMaster = mongoose.model("SubjectMaster", SubjectMasterSchema);
+export const ProgramClassMap = mongoose.model("ProgramClassMap", ProgramClassMapSchema);
+export const ProgramClassSubjectMap = mongoose.model("ProgramClassSubjectMap", ProgramClassSubjectMapSchema);
+export const SchoolClassAccess = mongoose.model("SchoolClassAccess", SchoolClassAccessSchema);
+export const SchoolSubjectAccess = mongoose.model("SchoolSubjectAccess", SchoolSubjectAccessSchema);
+export const VideoLesson = mongoose.model("VideoLesson", VideoLessonSchema);
 export const Pdf = mongoose.model("Pdf", PdfSchema);
 export const PdfVersion = mongoose.model("PdfVersion", PdfVersionSchema);
 export const SchoolCategoryAccess = mongoose.model("SchoolCategoryAccess", SchoolCategoryAccessSchema);

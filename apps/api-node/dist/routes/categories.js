@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Category, Program, SubCategory } from "../models/index.js";
+import { Category, Program, SubCategory, Subject } from "../models/index.js";
 import { writeAudit } from "../lib/audit.js";
 import { generateCategoryCode, slugify } from "../lib/codes.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
@@ -9,6 +9,7 @@ const parseBody = (body) => ({
     program_id: (body.programId ?? body.program_id),
     category_name: (body.categoryName ?? body.category_name),
     category_type: (body.categoryType ?? body.category_type),
+    program_type: (body.programType ?? body.program_type),
     category_code: (body.categoryCode ?? body.category_code),
     slug: body.slug,
     description: body.description,
@@ -71,9 +72,10 @@ export const registerCategoryRoutes = async (app) => {
     });
     app.post("/api/categories", { preHandler: requirePermission(PERMISSIONS.CATEGORY_MANAGE) }, async (request, reply) => {
         const raw = parseBody(z.record(z.string(), z.unknown()).parse(request.body));
-        if (!raw.category_name || !raw.category_type) {
-            return reply.status(400).send({ detail: "categoryName and categoryType are required" });
+        if (!raw.category_name) {
+            return reply.status(400).send({ detail: "categoryName is required" });
         }
+        raw.category_type = raw.category_type ?? "general";
         let category_code = raw.category_code;
         const slug = raw.slug ?? slugify(raw.category_name);
         if (raw.program_id) {
@@ -90,6 +92,7 @@ export const registerCategoryRoutes = async (app) => {
             category_name: raw.category_name,
             slug,
             category_type: raw.category_type,
+            program_type: raw.program_type ?? "pdf",
             description: raw.description,
             is_active: raw.is_active ?? true
         });
@@ -114,6 +117,8 @@ export const registerCategoryRoutes = async (app) => {
             update.category_name = body.category_name;
         if (body.categoryType !== undefined)
             update.category_type = body.categoryType;
+        if (body.programType !== undefined)
+            update.program_type = body.programType;
         if (body.programId !== undefined)
             update.program_id = body.programId;
         if (body.isActive !== undefined)
@@ -131,7 +136,10 @@ export const registerCategoryRoutes = async (app) => {
     });
     app.delete("/api/categories/:cat_id", { preHandler: requirePermission(PERMISSIONS.CATEGORY_MANAGE) }, async (request, reply) => {
         const params = z.object({ cat_id: z.string() }).parse(request.params);
-        await SubCategory.deleteMany({ category_id: params.cat_id });
+        const childCount = await SubCategory.countDocuments({ category_id: params.cat_id });
+        if (childCount > 0) {
+            return reply.status(409).send({ detail: `Cannot delete: ${childCount} class(es) exist under this program. Delete or move them first.` });
+        }
         const deleted = await Category.findOneAndDelete({ id: params.cat_id });
         if (!deleted)
             return reply.status(404).send({ detail: "Category not found" });
@@ -141,11 +149,14 @@ export const registerCategoryRoutes = async (app) => {
         const query = z
             .object({
             category_id: z.string().optional(),
-            categoryId: z.string().optional()
+            categoryId: z.string().optional(),
+            is_active: z.coerce.boolean().optional()
         })
             .parse(request.query);
         const categoryId = query.category_id ?? query.categoryId;
         const filter = categoryId ? { category_id: categoryId } : {};
+        if (query.is_active !== undefined)
+            filter.is_active = query.is_active;
         const rows = await SubCategory.find(filter).sort({ display_order: 1 }).lean();
         return listResponse(rows.map((r) => serializeDoc(r)));
     });
@@ -154,7 +165,10 @@ export const registerCategoryRoutes = async (app) => {
         const sub = await SubCategory.create({
             sub_category_name: (body.subCategoryName ?? body.sub_category_name),
             category_id: (body.categoryId ?? body.category_id),
-            description: body.description
+            sub_category_code: (body.subCategoryCode ?? body.sub_category_code),
+            description: body.description,
+            is_active: (body.isActive ?? body.is_active ?? true),
+            display_order: (body.displayOrder ?? body.display_order ?? 0)
         });
         return serializeDoc(sub.toObject());
     });
@@ -168,6 +182,12 @@ export const registerCategoryRoutes = async (app) => {
             update.category_id = body.categoryId;
         if (body.isActive !== undefined)
             update.is_active = body.isActive;
+        if (body.subCategoryCode !== undefined)
+            update.sub_category_code = body.subCategoryCode;
+        if (body.description !== undefined)
+            update.description = body.description;
+        if (body.displayOrder !== undefined)
+            update.display_order = body.displayOrder;
         const updated = await SubCategory.findOneAndUpdate({ id: params.sub_id }, { $set: update }, { new: true });
         if (!updated)
             return reply.status(404).send({ detail: "Sub-category not found" });
@@ -175,6 +195,10 @@ export const registerCategoryRoutes = async (app) => {
     });
     app.delete("/api/subCategories/:sub_id", { preHandler: requirePermission(PERMISSIONS.CATEGORY_MANAGE) }, async (request, reply) => {
         const params = z.object({ sub_id: z.string() }).parse(request.params);
+        const childCount = await Subject.countDocuments({ class_id: params.sub_id });
+        if (childCount > 0) {
+            return reply.status(409).send({ detail: `Cannot delete: ${childCount} subject(s) exist under this class. Delete them first.` });
+        }
         const deleted = await SubCategory.findOneAndDelete({ id: params.sub_id });
         if (!deleted)
             return reply.status(404).send({ detail: "Sub-category not found" });

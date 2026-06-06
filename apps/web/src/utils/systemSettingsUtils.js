@@ -101,9 +101,11 @@ export function validateURL(url) {
 }
 
 export function formatSettingsForSave(settings) {
-  // JSON fields are passed as objects; the API handles serialization
+  // Strip read-only / Mongoose-managed fields so they never appear in $set.
+  // Sending `id` in $set can cause MongoDB to reject the update entirely.
+  const { id, _id, created, updated, ...rest } = settings;
   return {
-    ...settings,
+    ...rest,
     featureFlags: settings.featureFlags || DEFAULT_SETTINGS.featureFlags,
     integrations: settings.integrations || DEFAULT_SETTINGS.integrations,
     securitySettings: settings.securitySettings || DEFAULT_SETTINGS.securitySettings,
@@ -113,9 +115,15 @@ export function formatSettingsForSave(settings) {
 
 export function formatSettingsForDisplay(settings) {
   if (!settings) return DEFAULT_SETTINGS;
+  // Merge: DB values win over defaults, but null/undefined DB values fall back to defaults.
+  const merged = { ...DEFAULT_SETTINGS };
+  for (const [key, value] of Object.entries(settings)) {
+    if (value !== null && value !== undefined) {
+      merged[key] = value;
+    }
+  }
   return {
-    ...DEFAULT_SETTINGS,
-    ...settings,
+    ...merged,
     featureFlags: { ...DEFAULT_SETTINGS.featureFlags, ...(settings.featureFlags || {}) },
     integrations: { ...DEFAULT_SETTINGS.integrations, ...(settings.integrations || {}) },
     securitySettings: { ...DEFAULT_SETTINGS.securitySettings, ...(settings.securitySettings || {}) },

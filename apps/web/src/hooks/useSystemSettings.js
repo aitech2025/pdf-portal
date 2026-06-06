@@ -51,13 +51,17 @@ export function useSystemSettings() {
 
   const saveSettings = async (newSettings) => {
     if (!recordId) {
-      toast.error('No settings record found');
+      toast.error('No settings record found. Try reloading the page.');
       return false;
     }
     setSaving(true);
     try {
       const dataToSave = formatSettingsForSave(newSettings);
       const saved = await apiFetch(`/api/systemSettings/${recordId}`, 'PATCH', dataToSave);
+      if (saved?.id && saved.id !== recordId) {
+        // Fallback path: backend used a different document (ID mismatch on first deploy)
+        setRecordId(saved.id);
+      }
       setSettings(formatSettingsForDisplay(saved || dataToSave));
       toast.success('Settings saved successfully');
       return true;
