@@ -58,6 +58,12 @@ let waState: WAState = { status: "disconnected", qrDataUrl: null, phone: null, l
 let reconnectTimer: NodeJS.Timeout | null = null;
 let failureCount = 0;
 const MAX_AUTO_RECONNECTS = 5;
+// Track when the connection last opened so we can tell whether it was stable.
+// A connection that lives < STABLE_THRESHOLD_MS is treated as another failure
+// rather than a fresh start — prevents the backoff from resetting on every
+// brief connect-then-428 cycle.
+const STABLE_THRESHOLD_MS = 30_000;
+let connectionOpenedAt: number | null = null;
 
 export const getConnectionStatus = (): WAState => ({ ...waState });
 
@@ -134,16 +140,15 @@ export const connectWhatsApp = async (isManualConnect = false): Promise<void> =>
     sock = makeWASocket({
       ...(waVersion ? { version: waVersion } : {}),
       auth: authState,
-      // Print QR as ASCII art in the server terminal — useful when the frontend
-      // QR display is being debugged or as an emergency fallback
       printQRInTerminal: true,
       browser: Browsers.ubuntu("Chrome"),
       logger: silentLogger,
       getMessage: async () => undefined,
       syncFullHistory: false,
-      // Give the handshake more time on slow connections
       connectTimeoutMs: 60_000,
       defaultQueryTimeoutMs: 60_000,
+      // Keep-alive pings prevent idle-timeout 428s from WhatsApp servers
+      keepAliveIntervalMs: 15_000,
     });
 
     const currentSock = sock;
@@ -184,10 +189,14 @@ export const connectWhatsApp = async (isManualConnect = false): Promise<void> =>
         const loggedOut = code === DisconnectReason.loggedOut;
         const reason = err?.message || (code ? `code ${code}` : "unknown reason");
 
-        console.error(`[WhatsApp] Connection closed — code=${code ?? "N/A"} reason="${reason}" loggedOut=${loggedOut}`);
+        // Was this connection stable long enough to be treated as a fresh start?
+        const uptime = connectionOpenedAt ? Date.now() - connectionOpenedAt : 0;
+        connectionOpenedAt = null;
+        const wasStable = uptime >= STABLE_THRESHOLD_MS;
+
+        console.error(`[WhatsApp] Connection closed — code=${code ?? "N/A"} reason="${reason}" loggedOut=${loggedOut} uptime=${Math.round(uptime / 1000)}s stable=${wasStable}`);
 
         sock = null;
-        failureCount++;
 
         if (loggedOut) {
           console.log("[WhatsApp] Logged out from phone — clearing saved session");
@@ -195,14 +204,22 @@ export const connectWhatsApp = async (isManualConnect = false): Promise<void> =>
           failureCount = 0;
           waState = { status: "disconnected", qrDataUrl: null, phone: null, lastError: "Session ended from your phone. Scan a new QR to reconnect." };
         } else {
+          // Only reset failureCount when the connection was genuinely stable.
+          // A brief connect-then-428 cycle must NOT reset the counter —
+          // that would keep the backoff at 5 s forever.
+          if (wasStable) {
+            failureCount = 1;
+          } else {
+            failureCount++;
+          }
           waState = { status: "disconnected", qrDataUrl: null, phone: null, lastError: reason };
           scheduleReconnect();
         }
       }
 
       if (connection === "open") {
+        connectionOpenedAt = Date.now();
         console.log("[WhatsApp] Connected —", currentSock.user?.id);
-        failureCount = 0;
         waState = {
           status: "connected",
           qrDataUrl: null,
@@ -241,16 +258,24 @@ export const sendWhatsAppText = async (
   text: string
 ): Promise<{ ok: boolean; error?: string }> => {
   if (!sock || waState.status !== "connected") {
+    console.warn(`[WhatsApp] sendWhatsAppText: not connected (status=${waState.status}, sock=${sock ? "present" : "null"})`);
     return { ok: false, error: "WhatsApp not connected. Link a number in Settings → WhatsApp." };
   }
   const digits = phone.replace(/[^\d]/g, "");
-  if (!digits) return { ok: false, error: "Invalid phone number" };
+  if (!digits) {
+    console.warn(`[WhatsApp] sendWhatsAppText: invalid phone number "${phone}"`);
+    return { ok: false, error: "Invalid phone number" };
+  }
   const jid = `${digits}@s.whatsapp.net`;
+  console.log(`[WhatsApp] Sending message to ${jid} (${text.length} chars)`);
   try {
     await sock.sendMessage(jid, { text });
+    console.log(`[WhatsApp] Message delivered to ${jid}`);
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[WhatsApp] Send failed to ${jid}:`, msg);
+    return { ok: false, error: msg };
   }
 };
 

@@ -236,11 +236,16 @@ const escapeHtml = (s: string): string =>
 
 const sendWhatsApp = async (to: string, message: string): Promise<{ ok: boolean; error?: string }> => {
   const { status } = getConnectionStatus();
+  console.log(`[WHATSAPP] Attempting send to="${to}" status=${status}`);
   if (status !== "connected") {
     console.log(`[WHATSAPP] Not connected (status: ${status}). To: ${to}`);
     return { ok: false, error: `WhatsApp not connected (status: ${status})` };
   }
-  return sendWhatsAppText(to, message);
+  const result = await sendWhatsAppText(to, message);
+  if (!result.ok) {
+    console.error(`[WHATSAPP] Delivery failed to "${to}": ${result.error}`);
+  }
+  return result;
 };
 
 // ---------------------------------------------------------------------------
