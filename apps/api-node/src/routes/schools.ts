@@ -8,43 +8,63 @@ import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
 import { createAndSendNotification } from "../services/notificationChannels.js";
 
-/** Fan-out credential delivery to in-app + email + WhatsApp for a new school admin */
-const sendCredentialNotifications = async (
-  userId: string,
-  userName: string,
-  userEmail: string,
-  schoolName: string,
-  schoolId: string,
-  password: string,
-  mobileNumber?: string | null
-): Promise<void> => {
+/**
+ * Fan-out credential delivery for a new school admin.
+ * loginId  — the generated @iiconacademy.in address shown as the login credential.
+ * contactEmail — the school's real contact email; this is where the email is delivered.
+ *               If absent, only WhatsApp is attempted (when mobileNumber is present).
+ */
+const sendCredentialNotifications = async (opts: {
+  userId: string;
+  userName: string;
+  loginId: string;
+  contactEmail?: string | null;
+  schoolName: string;
+  schoolId: string;
+  password: string;
+  mobileNumber?: string | null;
+}): Promise<void> => {
+  const { userId, userName, loginId, contactEmail, schoolName, schoolId, password, mobileNumber } = opts;
+
   const subject = "Welcome to i-icon Academy — your school account is ready";
+  const mobileNote = mobileNumber
+    ? `  Mobile: ${mobileNumber} (can also be used to log in)\n`
+    : "";
   const text =
     `Dear ${userName},\n\n` +
     `Your school "${schoolName}" (ID: ${schoolId}) has been registered on i-icon Academy.\n\n` +
     `Your login credentials:\n` +
-    `  Email: ${userEmail}\n` +
-    `  Password: ${password}\n\n` +
-    `Please log in and change your password immediately on first sign-in.\n\n` +
+    `  User ID: ${loginId}\n` +
+    `  Password: ${password}\n` +
+    mobileNote +
+    `\nUse these credentials to log in to i-icon Academy.\n\n` +
     `— i-icon Academy team`;
+
+  const mobileHtml = mobileNumber
+    ? `<div><strong>Mobile (alternate login):</strong> ${mobileNumber}</div>`
+    : "";
   const html =
     `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0f172a">` +
     `<h2 style="margin:0 0 16px;color:#4338ca">Welcome to i-icon Academy</h2>` +
     `<p>Dear ${userName},</p>` +
     `<p>Your school <strong>${schoolName}</strong> (ID: <code>${schoolId}</code>) has been registered on i-icon Academy.</p>` +
     `<div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:16px 0">` +
-    `<div><strong>Email:</strong> ${userEmail}</div>` +
-    `<div><strong>Temporary password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${password}</code></div>` +
+    `<div><strong>User ID:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${loginId}</code></div>` +
+    `<div style="margin-top:8px"><strong>Password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${password}</code></div>` +
+    (mobileNumber ? `<div style="margin-top:8px"><strong>Mobile (alternate login):</strong> ${mobileNumber}</div>` : "") +
     `</div>` +
-    `<p>Please log in and change your password on first sign-in.</p>` +
+    `<p>Use these credentials to log in to i-icon Academy.</p>` +
     `<p style="font-size:12px;color:#94a3b8;margin-top:24px">— i-icon Academy team</p>` +
     `</div>`;
 
-  const channels: Array<"email" | "whatsapp"> = ["email"];
+  // Deliver email to the school's contact email, not the generated login address.
+  const channels: Array<"email" | "whatsapp"> = [];
+  if (contactEmail) channels.push("email");
   if (mobileNumber) channels.push("whatsapp");
+  if (!channels.length) return;
 
   await createAndSendNotification({
-    recipient: { id: userId, email: userEmail, mobile_number: mobileNumber, name: userName },
+    recipient: { id: userId, email: contactEmail ?? "", mobile_number: mobileNumber, name: userName },
     channels,
     type: "credential_delivery",
     subject,
@@ -158,10 +178,16 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
         return reply.status(409).send({ detail: (err as Error).message });
       }
       // Fire-and-forget — do not block the HTTP response on email/WhatsApp delivery
-      sendCredentialNotifications(
-        adminUser.id, adminUser.name, adminUser.email,
-        school.school_name, school_id, generatedPassword, adminUser.mobile_number
-      ).catch(err => console.error("[schools] credential notification failed:", (err as Error).message));
+      sendCredentialNotifications({
+        userId: adminUser.id,
+        userName: adminUser.name,
+        loginId: generatedEmail!,
+        contactEmail: body.email,
+        schoolName: school.school_name,
+        schoolId: school_id,
+        password: generatedPassword!,
+        mobileNumber: adminUser.mobile_number
+      }).catch(err => console.error("[schools] credential notification failed:", (err as Error).message));
     }
 
     if (request.authUser?.sub) {
@@ -221,10 +247,16 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
         generatedPassword = result.generatedPassword;
         generatedEmail = result.generatedEmail;
         // Fire-and-forget — do not block bulk creation on notification delivery
-        sendCredentialNotifications(
-          result.user.id, result.user.name, result.user.email,
-          school.school_name, school_id, generatedPassword, result.user.mobile_number
-        ).catch(err => console.error("[schools/bulk] credential notification failed:", (err as Error).message));
+        sendCredentialNotifications({
+          userId: result.user.id,
+          userName: result.user.name,
+          loginId: generatedEmail!,
+          contactEmail: parsed.email,
+          schoolName: school.school_name,
+          schoolId: school_id,
+          password: generatedPassword!,
+          mobileNumber: result.user.mobile_number
+        }).catch(err => console.error("[schools/bulk] credential notification failed:", (err as Error).message));
       } catch {
         /* skip schools whose generated email is already taken */
       }

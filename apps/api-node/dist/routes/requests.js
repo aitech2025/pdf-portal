@@ -5,6 +5,7 @@ import { requireAuth, requirePermission, requireRole } from "../plugins/auth.js"
 import { PERMISSIONS } from "../lib/permissions.js";
 import { createSchoolAdminUser, genSchoolId } from "../lib/schools.js";
 import { School } from "../models/index.js";
+import { createAndSendNotification } from "../services/notificationChannels.js";
 export const registerRequestRoutes = async (app) => {
     app.get("/api/onboardingRequests", { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) }, async () => {
         const rows = await OnboardingRequest.find().sort({ created: -1 }).lean();
@@ -86,6 +87,47 @@ export const registerRequestRoutes = async (app) => {
             catch (err) {
                 await School.findOneAndDelete({ id: school.id });
                 return reply.status(409).send({ detail: err.message });
+            }
+            // Fire-and-forget credential notification to the school's contact email / WhatsApp
+            if (generatedEmail && generatedPassword) {
+                const userName = req.point_of_contact_name || req.school_name;
+                const mobileNumber = req.mobile_number ?? undefined;
+                const mobileNote = mobileNumber ? `  Mobile: ${mobileNumber} (can also be used to log in)\n` : "";
+                const text = `Dear ${userName},\n\n` +
+                    `Your school "${req.school_name}" has been approved on i-icon Academy.\n\n` +
+                    `Your login credentials:\n` +
+                    `  User ID: ${generatedEmail}\n` +
+                    `  Password: ${generatedPassword}\n` +
+                    mobileNote +
+                    `\nUse these credentials to log in to i-icon Academy.\n\n` +
+                    `— i-icon Academy team`;
+                const html = `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0f172a">` +
+                    `<h2 style="margin:0 0 16px;color:#4338ca">Your school is approved on i-icon Academy</h2>` +
+                    `<p>Dear ${userName},</p>` +
+                    `<p>Your school <strong>${req.school_name}</strong> has been approved.</p>` +
+                    `<div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:16px 0">` +
+                    `<div><strong>User ID:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${generatedEmail}</code></div>` +
+                    `<div style="margin-top:8px"><strong>Password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${generatedPassword}</code></div>` +
+                    (mobileNumber ? `<div style="margin-top:8px"><strong>Mobile (alternate login):</strong> ${mobileNumber}</div>` : "") +
+                    `</div>` +
+                    `<p>Use these credentials to log in to i-icon Academy.</p>` +
+                    `<p style="font-size:12px;color:#94a3b8;margin-top:24px">— i-icon Academy team</p>` +
+                    `</div>`;
+                const channels = [];
+                if (req.email)
+                    channels.push("email");
+                if (mobileNumber)
+                    channels.push("whatsapp");
+                if (channels.length) {
+                    createAndSendNotification({
+                        recipient: { id: school.id, email: req.email ?? "", mobile_number: mobileNumber, name: userName },
+                        channels,
+                        type: "credential_delivery",
+                        subject: "Your i-icon Academy school account is ready",
+                        message: text,
+                        html
+                    }).catch(err => console.error("[onboarding] credential notification failed:", err.message));
+                }
             }
             req.status = "approved";
             req.approved_at = new Date();
