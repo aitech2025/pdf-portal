@@ -33,13 +33,11 @@ export const buildSchoolLoginEmail = (schoolName: string): string => {
   return `${cleaned || "school"}@iiconacademy.in`;
 };
 
-// Derives the deterministic password: first 4 alphanumeric chars of school name + last 4 digits of mobile.
-export const buildSchoolPassword = (schoolName: string, mobileNumber: string): string => {
-  const nameCleaned = schoolName.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-  const namePart = nameCleaned.slice(0, 4).padEnd(4, "x");
+// Derives the deterministic password: "iicon" + last 4 digits of mobile.
+export const buildSchoolPassword = (_schoolName: string, mobileNumber: string): string => {
   const digits = mobileNumber.replace(/\D/g, "");
   const mobilePart = digits.slice(-4).padStart(4, "0");
-  return `${namePart}${mobilePart}`;
+  return `iicon${mobilePart}`;
 };
 
 export type CreateSchoolAdminInput = {

@@ -30,13 +30,11 @@ export const buildSchoolLoginEmail = (schoolName) => {
     const cleaned = firstWord.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
     return `${cleaned || "school"}@iiconacademy.in`;
 };
-// Derives the deterministic password: first 4 alphanumeric chars of school name + last 4 digits of mobile.
-export const buildSchoolPassword = (schoolName, mobileNumber) => {
-    const nameCleaned = schoolName.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-    const namePart = nameCleaned.slice(0, 4).padEnd(4, "x");
+// Derives the deterministic password: "iicon" + last 4 digits of mobile.
+export const buildSchoolPassword = (_schoolName, mobileNumber) => {
     const digits = mobileNumber.replace(/\D/g, "");
     const mobilePart = digits.slice(-4).padStart(4, "0");
-    return `${namePart}${mobilePart}`;
+    return `iicon${mobilePart}`;
 };
 export const createSchoolAdminUser = async (input) => {
     // Resolve unique @iiconacademy.in login email — naveen, naveen2, naveen3, …
