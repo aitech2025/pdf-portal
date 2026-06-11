@@ -11,7 +11,7 @@ const UserSchema = new Schema(
     password_hash: { type: String, required: true },
     name: { type: String, required: true, index: true },
     role: { type: String, default: "school_viewer", index: true },
-    mobile_number: String,
+    mobile_number: { type: String, index: true, sparse: true },
     address: String,
     school_id: { type: String, default: null, index: true },
     is_active: { type: Boolean, default: true, index: true },

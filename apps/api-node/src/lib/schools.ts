@@ -25,8 +25,25 @@ export const genPassword = (length = 10): string => {
   return out;
 };
 
+// Derives the @iiconacademy.in login email from the school name.
+// Uses the first alphanumeric word, lowercased. Conflict resolution appends a counter.
+export const buildSchoolLoginEmail = (schoolName: string): string => {
+  const firstWord = schoolName.trim().split(/\s+/)[0] ?? schoolName.trim();
+  const cleaned = firstWord.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  return `${cleaned || "school"}@iiconacademy.in`;
+};
+
+// Derives the deterministic password: first 4 alphanumeric chars of school name + last 4 digits of mobile.
+export const buildSchoolPassword = (schoolName: string, mobileNumber: string): string => {
+  const nameCleaned = schoolName.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const namePart = nameCleaned.slice(0, 4).padEnd(4, "x");
+  const digits = mobileNumber.replace(/\D/g, "");
+  const mobilePart = digits.slice(-4).padStart(4, "0");
+  return `${namePart}${mobilePart}`;
+};
+
 export type CreateSchoolAdminInput = {
-  email: string;
+  school_name: string;
   name: string;
   schoolId: string;
   mobile_number?: string;
@@ -34,13 +51,23 @@ export type CreateSchoolAdminInput = {
 };
 
 export const createSchoolAdminUser = async (input: CreateSchoolAdminInput) => {
-  const existing = await User.findOne({ email: input.email.toLowerCase() });
-  if (existing) {
-    throw new Error(`User with email ${input.email} already exists`);
+  // Resolve unique @iiconacademy.in login email — naveen, naveen2, naveen3, …
+  let loginEmail = buildSchoolLoginEmail(input.school_name);
+  const baseLocal = loginEmail.split("@")[0]!;
+  let suffix = 2;
+  while (await User.findOne({ email: loginEmail }).lean()) {
+    loginEmail = `${baseLocal}${suffix}@iiconacademy.in`;
+    suffix++;
   }
-  const password = input.password ?? genPassword();
+
+  const password =
+    input.password ??
+    (input.mobile_number
+      ? buildSchoolPassword(input.school_name, input.mobile_number)
+      : genPassword());
+
   const user = await User.create({
-    email: input.email.toLowerCase(),
+    email: loginEmail,
     password_hash: await hashPassword(password),
     name: input.name,
     role: "school_admin",
@@ -48,7 +75,7 @@ export const createSchoolAdminUser = async (input: CreateSchoolAdminInput) => {
     mobile_number: input.mobile_number,
     is_active: true,
     verified: true,
-    must_change_password: true
+    must_change_password: false
   });
-  return { user, generatedPassword: password };
+  return { user, generatedPassword: password, generatedEmail: loginEmail };
 };

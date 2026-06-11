@@ -262,9 +262,9 @@ class ApiClient {
         }
     }
 
-    /** Login */
-    async login(email, password) {
-        const data = await apiFetch("/auth/login", "POST", { email, password });
+    /** Login — identifier can be email or mobile number */
+    async login(identifier, password) {
+        const data = await apiFetch("/auth/login", "POST", { identifier, password });
         this.authStore.save(data.token, data.record, data.refreshToken);
         return data;
     }

@@ -88,11 +88,14 @@ const SchoolsAndUsersPage = () => {
     try {
       const result = await pb.fetch(`/onboardingRequests/${request.id}`, 'PATCH', { status: 'approved' });
       const schoolData = result.school || result;
-      if (result.generatedPassword) {
-        toast.info(`School login password: ${result.generatedPassword}`, { duration: 12000 });
+      if (result.generatedEmail || result.generatedPassword) {
+        toast.info(
+          `School login — Email: ${result.generatedEmail ?? '—'}  |  Password: ${result.generatedPassword ?? '—'}`,
+          { duration: 20000 }
+        );
       }
       toast.success(
-        `School "${request.schoolName}" approved. ID: ${schoolData.schoolId || schoolData.school_id || '—'}`
+        `School "${request.schoolName || request.school_name}" approved. ID: ${schoolData.schoolId || schoolData.school_id || '—'}`
       );
       setIsPanelOpen(false);
       fetchData();

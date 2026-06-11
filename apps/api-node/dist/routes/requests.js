@@ -72,14 +72,16 @@ export const registerRequestRoutes = async (app) => {
                 is_active: true
             });
             let generatedPassword;
+            let generatedEmail;
             try {
-                const { generatedPassword: pwd } = await createSchoolAdminUser({
-                    email: req.email,
+                const result = await createSchoolAdminUser({
+                    school_name: req.school_name,
                     name: req.point_of_contact_name || req.school_name,
                     schoolId: school.id,
                     mobile_number: req.mobile_number ?? undefined
                 });
-                generatedPassword = pwd;
+                generatedPassword = result.generatedPassword;
+                generatedEmail = result.generatedEmail;
             }
             catch (err) {
                 await School.findOneAndDelete({ id: school.id });
@@ -91,6 +93,7 @@ export const registerRequestRoutes = async (app) => {
             return {
                 ...serializeDoc(req.toObject()),
                 school: serializeDoc(school.toObject()),
+                generatedEmail,
                 generatedPassword
             };
         }

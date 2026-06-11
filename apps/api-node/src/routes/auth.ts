@@ -18,7 +18,12 @@ import { getCurrentUser, requireAuth } from "../plugins/auth.js";
 import { env } from "../config/env.js";
 import { createAndSendNotification } from "../services/notificationChannels.js";
 
-const LoginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
+// 'identifier' accepts email or mobile number; 'email' kept as legacy alias.
+const LoginSchema = z.object({
+  identifier: z.string().min(1).optional(),
+  email: z.string().min(1).optional(),
+  password: z.string().min(1)
+});
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
 
@@ -32,8 +37,21 @@ const escapeHtml = (s: string): string =>
 
 export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> => {
   app.post("/api/auth/login", async (request, reply) => {
-    const body = LoginSchema.parse(request.body);
-    const user = await User.findOne({ email: body.email });
+    const raw = LoginSchema.parse(request.body);
+    const identifier = (raw.identifier ?? raw.email ?? "").trim();
+    if (!identifier) return reply.status(400).send({ detail: "Email or mobile number is required" });
+
+    // Route lookup: email format → by email field; otherwise treat as mobile number.
+    const isEmail = identifier.includes("@");
+    let user;
+    if (isEmail) {
+      user = await User.findOne({ email: identifier.toLowerCase() });
+    } else {
+      // Strip all non-digit characters so "+91-9876543210", "9876543210", "09876543210" all resolve.
+      const digits = identifier.replace(/\D/g, "");
+      // Match stored mobile_number values that end with the supplied digit string.
+      user = await User.findOne({ mobile_number: { $regex: new RegExp(digits.replace(/^0+/, "") + "$") } });
+    }
 
     if (!user) {
       return reply.status(400).send({ detail: "Invalid email or password" });
@@ -47,7 +65,7 @@ export const registerAuthRoutes = async (app: FastifyInstance): Promise<void> =>
       return reply.status(403).send({ detail: "Account is temporarily locked" });
     }
 
-    const ok = await verifyPassword(body.password, user.password_hash);
+    const ok = await verifyPassword(raw.password, user.password_hash);
     if (!ok) {
       user.login_attempts = (user.login_attempts ?? 0) + 1;
       if (user.login_attempts >= MAX_ATTEMPTS) {

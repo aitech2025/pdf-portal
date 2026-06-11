@@ -30,7 +30,7 @@ const sendUserCredentialNotifications = async (
     `Login credentials:\n` +
     `  Email: ${user.email}\n` +
     `  Password: ${password}\n\n` +
-    `Please log in and change your password immediately on first sign-in.\n\n` +
+    `Use these credentials to log in to i-icon Academy.\n\n` +
     `— i-icon Academy team`;
   const html =
     `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0f172a">` +
@@ -39,9 +39,9 @@ const sendUserCredentialNotifications = async (
     `<p>Your account at <strong>${schoolName}</strong> has been created.</p>` +
     `<div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:16px 0">` +
     `<div><strong>Email:</strong> ${user.email}</div>` +
-    `<div><strong>Temporary password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${password}</code></div>` +
+    `<div><strong>Password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${password}</code></div>` +
     `</div>` +
-    `<p>Please log in and change your password on first sign-in.</p>` +
+    `<p>Use these credentials to log in to i-icon Academy.</p>` +
     `<p style="font-size:12px;color:#94a3b8;margin-top:24px">— i-icon Academy team</p>` +
     `</div>`;
 
@@ -154,7 +154,7 @@ export const registerUserRoutes = async (app: FastifyInstance): Promise<void> =>
         password_hash,
         is_active: true,
         verified: true,
-        must_change_password: !platformRoleSet.has(role)
+        must_change_password: false
       });
 
       const sendCreds = body.sendCredentials ?? body.send_credentials ?? !platformRoleSet.has(role);

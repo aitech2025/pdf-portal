@@ -81,14 +81,16 @@ export const registerRequestRoutes = async (app: FastifyInstance): Promise<void>
           is_active: true
         });
         let generatedPassword: string | undefined;
+        let generatedEmail: string | undefined;
         try {
-          const { generatedPassword: pwd } = await createSchoolAdminUser({
-            email: req.email,
+          const result = await createSchoolAdminUser({
+            school_name: req.school_name,
             name: req.point_of_contact_name || req.school_name,
             schoolId: school.id,
             mobile_number: req.mobile_number ?? undefined
           });
-          generatedPassword = pwd;
+          generatedPassword = result.generatedPassword;
+          generatedEmail = result.generatedEmail;
         } catch (err) {
           await School.findOneAndDelete({ id: school.id });
           return reply.status(409).send({ detail: (err as Error).message });
@@ -99,6 +101,7 @@ export const registerRequestRoutes = async (app: FastifyInstance): Promise<void>
         return {
           ...serializeDoc(req.toObject()),
           school: serializeDoc(school.toObject()),
+          generatedEmail,
           generatedPassword
         };
       }

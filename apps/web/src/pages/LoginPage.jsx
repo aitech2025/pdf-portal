@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowRight, Mail, Lock, ShieldCheck, Layers, Sparkles } from 'lucide-react';
+import { ArrowRight, AtSign, Lock, ShieldCheck, Layers, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Feature = ({ icon: Icon, title, body }) => (
@@ -22,7 +22,7 @@ const Feature = ({ icon: Icon, title, body }) => (
 );
 
 const LoginPage = () => {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,7 +37,7 @@ const LoginPage = () => {
     setError('');
     setLoading(true);
     try {
-      const authData = await login(email, password);
+      const authData = await login(identifier, password);
       const role = authData.record.role;
       const platformRoles = ['admin', 'platform_admin', 'platform_viewer', 'moderator'];
       const schoolRoles = ['school', 'school_admin', 'school_viewer', 'teacher'];
@@ -45,7 +45,7 @@ const LoginPage = () => {
       else if (schoolRoles.includes(role)) navigate('/school/dashboard');
       else navigate(from);
     } catch {
-      setError('Invalid email or password. Please try again.');
+      setError('Invalid credentials. Please check your email / mobile and password.');
     } finally {
       setLoading(false);
     }
@@ -147,19 +147,19 @@ const LoginPage = () => {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-foreground font-medium">
-                    Email address
+                  <Label htmlFor="identifier" className="text-foreground font-medium">
+                    Email or Mobile Number
                   </Label>
                   <Input
-                    id="email"
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    placeholder="name@school.edu"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="identifier"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="username"
+                    placeholder="name@iiconacademy.in or 9876543210"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     required
-                    icon={Mail}
+                    icon={AtSign}
                     className="h-12 text-base bg-background/60 border-border"
                   />
                 </div>

@@ -117,11 +117,12 @@ export const registerSchoolRoutes = async (app) => {
             is_active: body.is_active
         });
         let generatedPassword;
-        if (body.email) {
+        let generatedEmail;
+        {
             let adminUser;
             try {
                 const result = await createSchoolAdminUser({
-                    email: body.email,
+                    school_name: body.school_name,
                     name: body.point_of_contact_name || body.school_name,
                     schoolId: school.id,
                     mobile_number: body.mobile_number,
@@ -129,6 +130,7 @@ export const registerSchoolRoutes = async (app) => {
                 });
                 adminUser = result.user;
                 generatedPassword = result.generatedPassword;
+                generatedEmail = result.generatedEmail;
             }
             catch (err) {
                 await School.findOneAndDelete({ id: school.id });
@@ -147,7 +149,7 @@ export const registerSchoolRoutes = async (app) => {
                 request
             });
         }
-        return schoolToResponse(school, { generatedPassword, sendEmail: body.send_email });
+        return schoolToResponse(school, { generatedEmail, generatedPassword, sendEmail: body.send_email });
     });
     app.post("/api/schools/bulk", { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) }, async (request) => {
         const body = z
@@ -179,21 +181,21 @@ export const registerSchoolRoutes = async (app) => {
                 is_active: parsed.is_active ?? true
             });
             let generatedPassword;
-            if (parsed.email) {
-                try {
-                    const { user: adminUser, generatedPassword: pwd } = await createSchoolAdminUser({
-                        email: parsed.email,
-                        name: parsed.point_of_contact_name || parsed.school_name,
-                        schoolId: school.id,
-                        mobile_number: parsed.mobile_number
-                    });
-                    generatedPassword = pwd;
-                    // Fire-and-forget — do not block bulk creation on notification delivery
-                    sendCredentialNotifications(adminUser.id, adminUser.name, adminUser.email, school.school_name, school_id, generatedPassword, adminUser.mobile_number).catch(err => console.error("[schools/bulk] credential notification failed:", err.message));
-                }
-                catch {
-                    /* skip duplicate email schools in bulk */
-                }
+            let generatedEmail;
+            try {
+                const result = await createSchoolAdminUser({
+                    school_name: parsed.school_name,
+                    name: parsed.point_of_contact_name || parsed.school_name,
+                    schoolId: school.id,
+                    mobile_number: parsed.mobile_number
+                });
+                generatedPassword = result.generatedPassword;
+                generatedEmail = result.generatedEmail;
+                // Fire-and-forget — do not block bulk creation on notification delivery
+                sendCredentialNotifications(result.user.id, result.user.name, result.user.email, school.school_name, school_id, generatedPassword, result.user.mobile_number).catch(err => console.error("[schools/bulk] credential notification failed:", err.message));
+            }
+            catch {
+                /* skip schools whose generated email is already taken */
             }
             // Assign categories if provided
             if (categoryIds.length) {
