@@ -4,7 +4,8 @@ import { z } from "zod";
 import { canAccessCategory, isPlatformRole, requireCurrentUser } from "../lib/access.js";
 import { auditUnauthorized, writeAudit } from "../lib/audit.js";
 import { generateMappedPdfCode } from "../lib/codes.js";
-import { Category, ClassMaster, SubjectMaster, DownloadLog, Pdf, PdfVersion, School, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, SubCategory, ViewLog } from "../models/index.js";
+import { Category, ClassMaster, SubjectMaster, DownloadLog, Pdf, PdfVersion, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, SubCategory, User, ViewLog } from "../models/index.js";
+import { createAndSendNotification } from "../services/notificationChannels.js";
 import { enrichPdfs } from "../lib/pdfEnrich.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
@@ -12,19 +13,9 @@ import { PERMISSIONS } from "../lib/permissions.js";
 // archiver is a CJS module; load via createRequire so it works under both Node ESM and Vite SSR (vitest)
 const nodeRequire = createRequire(import.meta.url);
 const archiver = nodeRequire("archiver");
-const watermarkHeaders = async (userId, schoolId) => {
-    const { User } = await import("../models/index.js");
-    const user = await User.findOne({ id: userId }).lean();
-    let schoolName = "";
-    if (schoolId) {
-        const school = await School.findOne({ id: schoolId }).lean();
-        schoolName = school?.school_name ?? "";
-    }
-    return {
-        "X-Watermark-User": user?.email ?? "",
-        "X-Watermark-School": schoolName
-    };
-};
+const watermarkHeaders = () => ({
+    "X-Watermark-School": "iicon academy"
+});
 export const registerPdfRoutes = async (app) => {
     app.get("/api/pdfs", { preHandler: requireAuth }, async (request, reply) => {
         const user = await requireCurrentUser(request, reply);
@@ -170,7 +161,7 @@ export const registerPdfRoutes = async (app) => {
                 request
             });
         }
-        const wm = await watermarkHeaders(user.id, user.school_id);
+        const wm = watermarkHeaders();
         reply.header("Content-Type", "application/pdf");
         reply.header("Content-Disposition", `${disposition}; filename="${pdf.file_name}"`);
         reply.header("Cache-Control", "private, no-store");
@@ -207,7 +198,7 @@ export const registerPdfRoutes = async (app) => {
             return reply.status(403).send({ detail: "One or more PDFs are not accessible", denied });
         }
         const archiveName = (body.archiveName ?? `pdfs-${new Date().toISOString().slice(0, 10)}.zip`).replace(/[^\w.\-]+/g, "_");
-        const wm = await watermarkHeaders(user.id, user.school_id);
+        const wm = watermarkHeaders();
         reply.header("Content-Type", "application/zip");
         reply.header("Content-Disposition", `attachment; filename="${archiveName}"`);
         reply.header("Cache-Control", "private, no-store");
@@ -359,6 +350,37 @@ export const registerPdfRoutes = async (app) => {
             resource_id: doc.id,
             request
         });
+        // Notify school admins when an approved PDF is uploaded to a category they have access to
+        if (status === "approved" && categoryId) {
+            (async () => {
+                try {
+                    const accesses = await SchoolCategoryAccess.find({ category_id: categoryId }).lean();
+                    const schoolIds = [...new Set(accesses.map(a => a.school_id))];
+                    if (schoolIds.length === 0)
+                        return;
+                    const admins = await User.find({
+                        school_id: { $in: schoolIds },
+                        role: { $in: ["school_admin", "school"] },
+                        is_active: true
+                    }).lean();
+                    const pdfTitle = requestedFileName || originalFilename || "New PDF";
+                    const categoryName = cat?.category_name ?? "your program";
+                    for (const admin of admins) {
+                        createAndSendNotification({
+                            recipient: { id: admin.id, email: admin.email, mobile_number: admin.mobile_number, name: admin.name },
+                            channels: ["email", "whatsapp", "in_app"],
+                            type: "new_content",
+                            subject: `New content available: ${pdfTitle}`,
+                            message: `A new PDF "${pdfTitle}" has been added to the ${categoryName} program. Log in to your i-iCON Academy portal to access it.`,
+                            html: `<p>Dear ${admin.name || "Admin"},</p><p>A new PDF <strong>${pdfTitle}</strong> has been added to the <strong>${categoryName}</strong> program.</p><p>Log in to your <a href="https://iiconacademy.in">i-iCON Academy portal</a> to access it.</p>`
+                        }).catch(() => { });
+                    }
+                }
+                catch {
+                    // fire-and-forget — do not fail the upload response
+                }
+            })();
+        }
         return serializeDoc(doc.toObject());
     });
     app.post("/api/pdfs/bulk-reassign", { preHandler: requirePermission(PERMISSIONS.PDF_UPLOAD) }, async (request, reply) => {

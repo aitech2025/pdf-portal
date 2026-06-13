@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Bell, Check, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import pb from '@/lib/apiClient';
+import { useAuth } from '@/contexts/AuthContext.jsx';
 import { useNotifications } from '@/hooks/useNotifications.js';
 import { useNotificationNavigation } from '@/hooks/useNotificationNavigation.js';
 import { Button } from '@/components/ui/button';
@@ -14,8 +15,10 @@ import { formatDistanceToNow } from 'date-fns';
 
 const NotificationBell = () => {
   const navigate = useNavigate();
+  const { isPlatform } = useAuth();
   const { unreadCount, loading: countLoading } = useNotifications();
   const { handleNotificationClick } = useNotificationNavigation();
+  const viewAllRoute = isPlatform ? '/admin/notifications' : '/notifications';
   const [isOpen, setIsOpen] = useState(false);
   const [recentNotifications, setRecentNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -76,7 +79,7 @@ const NotificationBell = () => {
       <PopoverContent className="w-80 p-0 shadow-soft-xl border-border/50 rounded-xl overflow-hidden" align="end">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/20">
           <h4 className="font-semibold text-sm">Notifications</h4>
-          <Button variant="ghost" size="sm" className="h-auto py-1 text-xs text-primary" onClick={() => navigate('/admin/notifications')}>
+          <Button variant="ghost" size="sm" className="h-auto py-1 text-xs text-primary" onClick={() => { setIsOpen(false); navigate(viewAllRoute); }}>
             View All
           </Button>
         </div>

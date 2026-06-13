@@ -139,10 +139,7 @@ const PDFViewer = ({ isOpen, onClose, pdfId, title, onDownload }) => {
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, changePage, toggleFullscreen, onClose]);
 
-  const schoolName = currentUser?.schoolName || currentUser?.school_name || '';
-  const watermarkText = currentUser?.email
-    ? `${currentUser.email}${schoolName ? ` · ${schoolName}` : currentUser.name ? ` · ${currentUser.name}` : ''}`
-    : schoolName;
+  const watermarkText = 'iicon academy';
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

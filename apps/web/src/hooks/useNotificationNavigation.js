@@ -1,8 +1,13 @@
 
 import pb from '@/lib/apiClient';
+import { useAuth } from '@/contexts/AuthContext.jsx';
 
 export const useNotificationNavigation = () => {
+  const { isPlatform } = useAuth();
+
   const getNotificationRoute = (notificationType) => {
+    if (!isPlatform) return '/notifications';
+
     const routes = {
       'pdf_uploaded': '/admin/pdf-upload',
       'user_registered': '/admin/schools-and-users?tab=users',
@@ -11,7 +16,8 @@ export const useNotificationNavigation = () => {
       'user_activity': '/admin/analytics-reports?tab=user',
       'system_alert': '/admin/settings',
       'onboarding_submission': '/admin/schools-and-users?tab=onboarding',
-      'user_request_submission': '/admin/schools-and-users?tab=users'
+      'user_request_submission': '/admin/schools-and-users?tab=users',
+      'new_content': '/school/portal/browse'
     };
     return routes[notificationType] || '/admin/notifications';
   };

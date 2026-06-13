@@ -332,6 +332,159 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
     JSON.stringify([...allPendingClassIds].sort()) !== JSON.stringify([...assignedClassIds].sort()) ||
     JSON.stringify([...allPendingSubjectIds].sort()) !== JSON.stringify([...assignedSubjectIds].sort());
 
+  const assignedPrograms = displayedPrograms.filter(p => pendingPrograms.has(p.id));
+  const availablePrograms = displayedPrograms.filter(p => !pendingPrograms.has(p.id));
+
+  const renderProgram = (program) => {
+    const isProgramSelected = pendingPrograms.has(program.id);
+    const isExpanded = !!expanded[program.id];
+    const structure = programStructures[program.id];
+    const isStructureLoading = structureLoadingIds.has(program.id);
+    const allProgramClasses = structure?.classes ?? [];
+    const programClasses = getDisplayedClasses(allProgramClasses);
+    const selectedClasses = pendingClasses[program.id] || new Set();
+    const allClassesSelected = programClasses.length > 0 && programClasses.every(c => selectedClasses.has(c.classId));
+
+    return (
+      <div key={program.id} className="border border-border/50 rounded-lg overflow-hidden">
+        <div className={cn(
+          "flex items-center gap-3 p-3 transition-colors",
+          isProgramSelected ? "bg-primary/5" : "bg-card"
+        )}>
+          <Checkbox
+            checked={isProgramSelected}
+            onCheckedChange={() => toggleProgram(program.id, program.programType)}
+            id={`prog-${program.id}`}
+          />
+          <label htmlFor={`prog-${program.id}`} className="flex-1 text-sm font-medium cursor-pointer flex items-center gap-2">
+            {program.categoryName}
+            {program.programType === 'video' ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                <Video className="w-2.5 h-2.5" /> Video
+              </span>
+            ) : program.categoryType ? (
+              <span className="text-xs text-muted-foreground">({program.categoryType})</span>
+            ) : null}
+          </label>
+          <button
+            onClick={() => handleExpand(program.id)}
+            className="text-muted-foreground hover:text-foreground transition-colors p-1"
+          >
+            {isStructureLoading
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+          {programClasses.length > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              <GraduationCap className="w-3 h-3 mr-1" />{programClasses.length}
+            </Badge>
+          )}
+        </div>
+
+        {isExpanded && (
+          <div className="border-t border-border/30 bg-muted/20">
+            {program.programType === 'video' && (
+              <p className="px-6 pt-3 text-xs text-blue-600 dark:text-blue-400">
+                Select the classes and subjects this school can access. Only videos for the selected subjects will be visible to them.
+              </p>
+            )}
+            {isStructureLoading ? (
+              <div className="flex items-center gap-2 px-6 py-3 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading classes…
+              </div>
+            ) : programClasses.length === 0 ? (
+              <p className="px-6 py-3 text-sm text-muted-foreground italic">
+                {program.programType === 'video'
+                  ? 'No videos are assigned to this program yet. Add videos from the Programs page first.'
+                  : isCollege
+                    ? 'No Class 11 or 12 assigned to this program yet.'
+                    : 'No classes assigned to this program yet.'}
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 px-6 py-2 border-b border-border/20">
+                  <button
+                    onClick={() => toggleAllClasses(program.id)}
+                    className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {allClassesSelected ? <CheckSquare className="w-3.5 h-3.5 text-primary" /> : <Square className="w-3.5 h-3.5" />}
+                    Select All Classes
+                  </button>
+                </div>
+                {programClasses.map(cls => {
+                  const isClassSelected = selectedClasses.has(cls.classId);
+                  const classSubjects = cls.subjects || [];
+                  const selectedSubjects = pendingSubjects[cls.classId] || new Set();
+                  const allSubjectsSelected = classSubjects.length > 0 && classSubjects.every(s => selectedSubjects.has(s.subjectId));
+
+                  return (
+                    <div key={cls.classId} className="px-6">
+                      <div className="flex items-center gap-3 py-2.5">
+                        <Checkbox
+                          checked={isClassSelected}
+                          onCheckedChange={() => {
+                            if (!isProgramSelected) toggleProgram(program.id);
+                            toggleClass(program.id, cls.classId);
+                          }}
+                          id={`cls-${cls.classId}`}
+                        />
+                        <label htmlFor={`cls-${cls.classId}`} className="flex-1 text-sm cursor-pointer flex items-center gap-2">
+                          <GraduationCap className="w-3.5 h-3.5 text-muted-foreground" />
+                          {cls.className}
+                          {cls.classCode && <span className="text-xs text-muted-foreground font-mono">({cls.classCode})</span>}
+                        </label>
+                        {classSubjects.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            <BookOpen className="w-3 h-3 inline mr-1" />{classSubjects.length}
+                          </span>
+                        )}
+                      </div>
+
+                      {isClassSelected && classSubjects.length > 0 && (
+                        <div className="pb-2.5 pl-7 space-y-1.5">
+                          <div className="flex items-center gap-2 py-1">
+                            <button
+                              onClick={() => toggleAllSubjects(cls.classId, classSubjects)}
+                              className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              {allSubjectsSelected ? <CheckSquare className="w-3 h-3 text-primary" /> : <Square className="w-3 h-3" />}
+                              Select All Subjects
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {classSubjects.map(subj => {
+                              const isSubjSelected = selectedSubjects.has(subj.subjectId);
+                              return (
+                                <button
+                                  key={subj.subjectId}
+                                  onClick={() => toggleSubject(cls.classId, subj.subjectId)}
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-0.5 border transition-colors",
+                                    isSubjSelected
+                                      ? "bg-primary/10 border-primary/30 text-primary"
+                                      : "bg-background border-border/50 text-muted-foreground hover:border-primary/20"
+                                  )}
+                                >
+                                  {isSubjSelected && <Check className="w-2.5 h-2.5" />}
+                                  {subj.subjectName}
+                                  {subj.subjectCode && <span className="opacity-60">({subj.subjectCode})</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -352,156 +505,25 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
             : 'No programs created yet. Create programs from the Programs section first.'}
         </p>
       ) : (
-        <div className="space-y-2">
-          {displayedPrograms.map(program => {
-            const isProgramSelected = pendingPrograms.has(program.id);
-            const isExpanded = !!expanded[program.id];
-            const structure = programStructures[program.id];
-            const isStructureLoading = structureLoadingIds.has(program.id);
-            const allProgramClasses = structure?.classes ?? [];
-            const programClasses = getDisplayedClasses(allProgramClasses);
-            const selectedClasses = pendingClasses[program.id] || new Set();
-            const allClassesSelected = programClasses.length > 0 && programClasses.every(c => selectedClasses.has(c.classId));
+        <div className="space-y-4">
+          {assignedPrograms.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
+                Assigned Programs ({assignedPrograms.length})
+              </p>
+              {assignedPrograms.map(renderProgram)}
+            </div>
+          )}
 
-            return (
-              <div key={program.id} className="border border-border/50 rounded-lg overflow-hidden">
-                <div className={cn(
-                  "flex items-center gap-3 p-3 transition-colors",
-                  isProgramSelected ? "bg-primary/5" : "bg-card"
-                )}>
-                  <Checkbox
-                    checked={isProgramSelected}
-                    onCheckedChange={() => toggleProgram(program.id, program.programType)}
-                    id={`prog-${program.id}`}
-                  />
-                  <label htmlFor={`prog-${program.id}`} className="flex-1 text-sm font-medium cursor-pointer flex items-center gap-2">
-                    {program.categoryName}
-                    {program.programType === 'video' ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                        <Video className="w-2.5 h-2.5" /> Video
-                      </span>
-                    ) : program.categoryType ? (
-                      <span className="text-xs text-muted-foreground">({program.categoryType})</span>
-                    ) : null}
-                  </label>
-                  <button
-                    onClick={() => handleExpand(program.id)}
-                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                  >
-                    {isStructureLoading
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                  </button>
-                  {programClasses.length > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      <GraduationCap className="w-3 h-3 mr-1" />{programClasses.length}
-                    </Badge>
-                  )}
-                </div>
-
-                {isExpanded && (
-                  <div className="border-t border-border/30 bg-muted/20">
-                    {program.programType === 'video' && (
-                      <p className="px-6 pt-3 text-xs text-blue-600 dark:text-blue-400">
-                        Select the classes and subjects this school can access. Only videos for the selected subjects will be visible to them.
-                      </p>
-                    )}
-                    {isStructureLoading ? (
-                      <div className="flex items-center gap-2 px-6 py-3 text-sm text-muted-foreground">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Loading classes…
-                      </div>
-                    ) : programClasses.length === 0 ? (
-                      <p className="px-6 py-3 text-sm text-muted-foreground italic">
-                        {program.programType === 'video'
-                          ? 'No videos are assigned to this program yet. Add videos from the Programs page first.'
-                          : isCollege
-                            ? 'No Class 11 or 12 assigned to this program yet.'
-                            : 'No classes assigned to this program yet.'}
-                      </p>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-3 px-6 py-2 border-b border-border/20">
-                          <button
-                            onClick={() => toggleAllClasses(program.id)}
-                            className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            {allClassesSelected ? <CheckSquare className="w-3.5 h-3.5 text-primary" /> : <Square className="w-3.5 h-3.5" />}
-                            Select All Classes
-                          </button>
-                        </div>
-                        {programClasses.map(cls => {
-                          const isClassSelected = selectedClasses.has(cls.classId);
-                          const classSubjects = cls.subjects || [];
-                          const selectedSubjects = pendingSubjects[cls.classId] || new Set();
-                          const allSubjectsSelected = classSubjects.length > 0 && classSubjects.every(s => selectedSubjects.has(s.subjectId));
-
-                          return (
-                            <div key={cls.classId} className="px-6">
-                              <div className="flex items-center gap-3 py-2.5">
-                                <Checkbox
-                                  checked={isClassSelected}
-                                  onCheckedChange={() => {
-                                    if (!isProgramSelected) toggleProgram(program.id);
-                                    toggleClass(program.id, cls.classId);
-                                  }}
-                                  id={`cls-${cls.classId}`}
-                                />
-                                <label htmlFor={`cls-${cls.classId}`} className="flex-1 text-sm cursor-pointer flex items-center gap-2">
-                                  <GraduationCap className="w-3.5 h-3.5 text-muted-foreground" />
-                                  {cls.className}
-                                  {cls.classCode && <span className="text-xs text-muted-foreground font-mono">({cls.classCode})</span>}
-                                </label>
-                                {classSubjects.length > 0 && (
-                                  <span className="text-xs text-muted-foreground">
-                                    <BookOpen className="w-3 h-3 inline mr-1" />{classSubjects.length}
-                                  </span>
-                                )}
-                              </div>
-
-                              {isClassSelected && classSubjects.length > 0 && (
-                                <div className="pb-2.5 pl-7 space-y-1.5">
-                                  <div className="flex items-center gap-2 py-1">
-                                    <button
-                                      onClick={() => toggleAllSubjects(cls.classId, classSubjects)}
-                                      className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                                    >
-                                      {allSubjectsSelected ? <CheckSquare className="w-3 h-3 text-primary" /> : <Square className="w-3 h-3" />}
-                                      Select All Subjects
-                                    </button>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {classSubjects.map(subj => {
-                                      const isSubjSelected = selectedSubjects.has(subj.subjectId);
-                                      return (
-                                        <button
-                                          key={subj.subjectId}
-                                          onClick={() => toggleSubject(cls.classId, subj.subjectId)}
-                                          className={cn(
-                                            "inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-0.5 border transition-colors",
-                                            isSubjSelected
-                                              ? "bg-primary/10 border-primary/30 text-primary"
-                                              : "bg-background border-border/50 text-muted-foreground hover:border-primary/20"
-                                          )}
-                                        >
-                                          {isSubjSelected && <Check className="w-2.5 h-2.5" />}
-                                          {subj.subjectName}
-                                          {subj.subjectCode && <span className="opacity-60">({subj.subjectCode})</span>}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {availablePrograms.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                Available Programs ({availablePrograms.length})
+              </p>
+              {availablePrograms.map(renderProgram)}
+            </div>
+          )}
         </div>
       )}
     </div>
