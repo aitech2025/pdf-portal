@@ -38,7 +38,7 @@ const Header = () => {
       className="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-xl border-b border-border/60 supports-[backdrop-filter]:bg-background/60 pt-safe"
       role="banner"
     >
-      <div className="flex h-14 md:h-16 items-center gap-3 px-3 md:px-6">
+      <div className="flex h-16 md:h-[4.5rem] items-center gap-3 px-3 md:px-6">
         {/* Mobile menu (drawer) */}
         <div className="flex items-center lg:hidden">
           <Sheet>
@@ -60,13 +60,12 @@ const Header = () => {
             </SheetContent>
           </Sheet>
 
-          <Link to="/" className="ml-2 flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow-primary">
-              <span className="text-white font-display font-bold text-sm">i</span>
-            </div>
-            <span className="font-display font-bold text-base tracking-tight hidden xs:inline-block">
-              i-icon
-            </span>
+          <Link to="/" className="ml-2 flex items-center">
+            <img
+              src="/logo-mark.png"
+              alt="i-iCON Academy"
+              className="h-[3.25rem] w-auto max-w-[220px] object-contain"
+            />
           </Link>
         </div>
 

@@ -92,25 +92,23 @@ const Sidebar = ({ isMobile = false }) => {
         {/* Brand */}
         <div
           className={cn(
-            'flex items-center border-b border-border/40 shrink-0 h-16',
+            'flex items-center border-b border-border/40 shrink-0 h-[4.5rem]',
             collapsed ? 'justify-center px-2' : 'justify-between px-4'
           )}
         >
           {!collapsed ? (
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow-primary shrink-0">
-                <span className="text-white font-display font-bold text-base">i</span>
-              </div>
-              <div className="min-w-0">
-                <p className="font-display font-bold text-[15px] tracking-tight text-foreground truncate leading-none">
-                  i-icon academy
-                </p>
-                <p className="text-[10.5px] text-muted-foreground font-medium mt-1 truncate">EduShare Platform</p>
-              </div>
-            </div>
+            <img
+              src="/logo-mark.png"
+              alt="i-iCON Academy"
+              className="h-14 w-auto max-w-[210px] object-contain shrink-0"
+            />
           ) : (
-            <div className="w-9 h-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow-primary">
-              <span className="text-white font-display font-bold text-base">i</span>
+            <div className="w-12 h-12 rounded-xl overflow-hidden border border-border/30 shrink-0 bg-white">
+              <img
+                src="/logo-mark.png"
+                alt="i-iCON Academy"
+                style={{ height: '48px', width: 'auto', maxWidth: 'none' }}
+              />
             </div>
           )}
           {!isMobile && (

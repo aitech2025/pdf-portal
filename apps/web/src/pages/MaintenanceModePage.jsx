@@ -29,12 +29,19 @@ const MaintenanceModePage = ({ message }) => {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="max-w-xl w-full space-y-8 relative z-10 p-8 md:p-12 rounded-3xl border border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl"
       >
-        <div className="mx-auto w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-4 ring-8 ring-background">
-          <Construction className="w-12 h-12 text-primary" />
+        <div className="flex flex-col items-center gap-5 mb-2">
+          <img
+            src="/logo-mark.png"
+            alt="i-iCON Academy"
+            className="h-16 w-auto object-contain"
+          />
+          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center ring-8 ring-background">
+            <Construction className="w-8 h-8 text-primary" />
+          </div>
         </div>
 
         <div className="space-y-4">
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">We're upgrading i-icon academy</h1>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">We're upgrading i-iCON Academy</h1>
           <p className="text-lg md:text-xl text-muted-foreground leading-relaxed max-w-lg mx-auto">
             {displayMessage}
           </p>

@@ -253,6 +253,22 @@ export const disconnectWhatsApp = async (): Promise<void> => {
   waState = { status: "disconnected", qrDataUrl: null, phone: null, lastError: null };
 };
 
+/**
+ * Normalise an arbitrary phone string to a digit-only E.164 string (no leading +).
+ * Defaults to India (91) for 10-digit numbers since the platform is India-centric.
+ *   "9550432743"       → "919550432743"
+ *   "09550432743"      → "919550432743"
+ *   "919550432743"     → "919550432743"
+ *   "+919550432743"    → "919550432743"
+ *   "+1 650 555 0100"  → "16505550100"  (already has country code)
+ */
+const toE164Digits = (phone: string): string => {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.length === 11 && digits.startsWith("0")) return `91${digits.slice(1)}`;
+  return digits;
+};
+
 export const sendWhatsAppText = async (
   phone: string,
   text: string
@@ -261,20 +277,40 @@ export const sendWhatsAppText = async (
     console.warn(`[WhatsApp] sendWhatsAppText: not connected (status=${waState.status}, sock=${sock ? "present" : "null"})`);
     return { ok: false, error: "WhatsApp not connected. Link a number in Settings → WhatsApp." };
   }
-  const digits = phone.replace(/[^\d]/g, "");
-  if (!digits) {
+  const e164 = toE164Digits(phone);
+  if (!e164) {
     console.warn(`[WhatsApp] sendWhatsAppText: invalid phone number "${phone}"`);
     return { ok: false, error: "Invalid phone number" };
   }
-  const jid = `${digits}@s.whatsapp.net`;
-  console.log(`[WhatsApp] Sending message to ${jid} (${text.length} chars)`);
+
+  const candidateJid = `${e164}@s.whatsapp.net`;
+
+  // Verify the number is registered on WhatsApp and get the canonical JID.
+  // sendMessage with an unverified JID is silently dropped by WA servers.
+  let resolvedJid = candidateJid;
   try {
-    await sock.sendMessage(jid, { text });
-    console.log(`[WhatsApp] Message delivered to ${jid}`);
+    const currentSock = sock;
+    const results = await currentSock.onWhatsApp(candidateJid);
+    const result = results?.[0];
+    if (!result?.exists) {
+      console.warn(`[WhatsApp] ${phone} → ${candidateJid} is not registered on WhatsApp`);
+      return { ok: false, error: `${phone} is not registered on WhatsApp` };
+    }
+    resolvedJid = result.jid;
+    console.log(`[WhatsApp] Verified JID: ${resolvedJid}`);
+  } catch (err) {
+    // onWhatsApp query failed (network hiccup) — proceed with constructed JID as fallback
+    console.warn(`[WhatsApp] onWhatsApp check failed for ${candidateJid}, proceeding anyway:`, (err as Error).message);
+  }
+
+  console.log(`[WhatsApp] Sending message to ${resolvedJid} (${text.length} chars)`);
+  try {
+    await sock!.sendMessage(resolvedJid, { text });
+    console.log(`[WhatsApp] Message sent to ${resolvedJid}`);
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[WhatsApp] Send failed to ${jid}:`, msg);
+    console.error(`[WhatsApp] Send failed to ${resolvedJid}:`, msg);
     return { ok: false, error: msg };
   }
 };

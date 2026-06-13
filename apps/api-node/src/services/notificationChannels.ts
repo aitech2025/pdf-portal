@@ -25,7 +25,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { Notification, SystemSettings } from "../models/index.js";
 import { pushNotification } from "./realtime.js";
 import { serializeDoc } from "../lib/serialize.js";
-import { sendWhatsAppText, getConnectionStatus } from "./baileysWhatsApp.js";
+import { sendWhatsAppText, sendWhatsAppTemplate, getCloudApiStatus } from "./whatsappCloudApi.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -231,19 +231,49 @@ const escapeHtml = (s: string): string =>
     .replace(/'/g, "&#039;");
 
 // ---------------------------------------------------------------------------
-// WhatsApp delivery — Baileys (WhatsApp Web)
+// WhatsApp delivery — Meta Cloud API
 // ---------------------------------------------------------------------------
 
-const sendWhatsApp = async (to: string, message: string): Promise<{ ok: boolean; error?: string }> => {
-  const { status } = getConnectionStatus();
-  console.log(`[WHATSAPP] Attempting send to="${to}" status=${status}`);
-  if (status !== "connected") {
-    console.log(`[WHATSAPP] Not connected (status: ${status}). To: ${to}`);
-    return { ok: false, error: `WhatsApp not connected (status: ${status})` };
+import { env } from "../config/env.js";
+
+/**
+ * For credential_delivery notifications: use a pre-approved template so the
+ * message reaches users who have never messaged the business number before.
+ * For all other notification types: use free-form text (requires an open
+ * 24-hour service window, i.e. user messaged first within the last 24h).
+ */
+const sendWhatsApp = async (
+  to: string,
+  message: string,
+  notificationType?: string
+): Promise<{ ok: boolean; error?: string }> => {
+  console.log(`[WHATSAPP] Attempting send to="${to}" type=${notificationType ?? "text"}`);
+
+  if (notificationType === "credential_delivery") {
+    // Parse User ID and password out of the message for template parameters.
+    // Template body (school_account_credentials):
+    //   {{1}} = school name, {{2}} = User ID, {{3}} = password
+    const schoolMatch = message.match(/school "([^"]+)"/i) ?? message.match(/school \*([^*]+)\*/i);
+    const userIdMatch = message.match(/User ID:\s*(\S+)/i);
+    const passwordMatch = message.match(/Password:\s*(\S+)/i);
+    const schoolName = schoolMatch?.[1] ?? "your school";
+    const userId = userIdMatch?.[1] ?? "";
+    const password = passwordMatch?.[1] ?? "";
+
+    if (userId && password) {
+      const templateName = env.WHATSAPP_CREDENTIAL_TEMPLATE;
+      const result = await sendWhatsAppTemplate(to, templateName, [schoolName, userId, password]);
+      if (!result.ok) {
+        console.error(`[WHATSAPP] Template delivery failed to "${to}": ${result.error}`);
+      }
+      return result;
+    }
+    // Fall through to text if we couldn't parse the params
   }
+
   const result = await sendWhatsAppText(to, message);
   if (!result.ok) {
-    console.error(`[WHATSAPP] Delivery failed to "${to}": ${result.error}`);
+    console.error(`[WHATSAPP] Text delivery failed to "${to}": ${result.error}`);
   }
   return result;
 };
@@ -281,15 +311,14 @@ export const validateWhatsAppConfiguration = async (): Promise<{
   source: string;
   details: string;
 }> => {
-  const { status, phone } = getConnectionStatus();
-  const connected = status === "connected";
+  const status = await getCloudApiStatus();
   return {
-    configured: connected,
-    provider: "baileys",
-    source: "service",
-    details: connected
-      ? `Baileys connected — company number: ${phone ?? "unknown"}`
-      : `Baileys not connected (status: ${status}). Scan QR in Settings → WhatsApp.`
+    configured: status.configured,
+    provider: "whatsapp_cloud_api",
+    source: status.source,
+    details: status.configured
+      ? `WhatsApp Cloud API configured — Phone Number ID: ${status.phoneNumberId}`
+      : "WhatsApp Cloud API not configured. Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN in environment or System Settings."
   };
 };
 
@@ -343,7 +372,7 @@ export const createAndSendNotification = async (
       results.whatsapp = "failed";
       errors.push("whatsapp: recipient has no mobile number");
     } else {
-      const r = await sendWhatsApp(recipient.mobile_number, message);
+      const r = await sendWhatsApp(recipient.mobile_number, message, type);
       results.whatsapp = r.ok ? "sent" : "failed";
       if (r.error) errors.push(`whatsapp: ${r.error}`);
     }

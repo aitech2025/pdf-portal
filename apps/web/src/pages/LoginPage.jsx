@@ -6,20 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowRight, AtSign, Lock, ShieldCheck, Layers, Sparkles } from 'lucide-react';
+import { ArrowRight, AtSign, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
-
-const Feature = ({ icon: Icon, title, body }) => (
-  <div className="flex items-start gap-3">
-    <div className="mt-0.5 w-9 h-9 rounded-xl bg-white/10 text-white/90 flex items-center justify-center backdrop-blur shrink-0">
-      <Icon className="w-4 h-4" />
-    </div>
-    <div>
-      <p className="font-semibold text-white text-sm">{title}</p>
-      <p className="text-white/70 text-xs mt-0.5 leading-relaxed">{body}</p>
-    </div>
-  </div>
-);
 
 const LoginPage = () => {
   const [identifier, setIdentifier] = useState('');
@@ -60,44 +48,36 @@ const LoginPage = () => {
         <div className="absolute -bottom-32 -left-32 w-[26rem] h-[26rem] rounded-full bg-white/10 blur-3xl" aria-hidden />
 
         <div className="relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
-              <span className="text-white font-display font-bold text-lg">i</span>
-            </div>
-            <div>
-              <p className="font-display font-bold text-xl tracking-tight">i-icon academy</p>
-              <p className="text-white/70 text-xs">EduShare Platform</p>
-            </div>
+          <div className="inline-flex items-center bg-white rounded-2xl px-6 py-4 shadow-xl">
+            <img
+              src="/logo-mark.png"
+              alt="i-iCON Academy"
+              className="h-20 w-auto object-contain"
+            />
           </div>
         </div>
 
         <div className="relative z-10 max-w-md">
           <p className="text-white/70 uppercase text-xs font-semibold tracking-[0.18em] mb-3">
-            Premium edutech platform
+            About I-ICON Academy
           </p>
-          <h1 className="text-white text-[2.25rem] md:text-[2.75rem] font-display font-bold leading-tight">
-            Distribute educational PDFs with enterprise-grade security.
+          <h1 className="text-white text-[2rem] md:text-[2.5rem] font-display font-bold leading-tight">
+            A trusted pioneer in IIT Foundation &amp; JEE preparation.
           </h1>
-          <p className="text-white/80 mt-5 text-base leading-relaxed">
-            Category-driven access, watermarking, audit trails and real-time delivery — built for schools at scale.
+          <p className="text-white/85 mt-6 text-base leading-relaxed">
+            Headquartered in Hyderabad, I-ICON Academy has been a trusted pioneer in delivering a
+            systematic, integrated IIT Foundation and JEE preparation curriculum.
           </p>
-
-          <div className="grid grid-cols-1 gap-4 mt-10">
-            <Feature
-              icon={ShieldCheck}
-              title="Tenant-isolated security"
-              body="Per-school access grants, signed downloads, immutable audit logs."
-            />
-            <Feature
-              icon={Layers}
-              title="Category-driven library"
-              body="Programs → categories → sub-categories with auto-generated codes."
-            />
-            <Feature
-              icon={Sparkles}
-              title="Modern UX, native apps"
-              body="Responsive web + iOS + Android shells with offline-friendly delivery."
-            />
+          <p className="text-white/75 mt-4 text-base leading-relaxed">
+            For over a decade, we have partnered with students, parents, and premier school
+            institutions across India to bridge the gap between school education and competitive
+            excellence.
+          </p>
+          <div className="mt-8 p-4 rounded-2xl bg-white/10 backdrop-blur border border-white/15">
+            <p className="text-white/90 text-sm leading-relaxed">
+              Log in to access your digital learning portal, track exam progress, and unlock your
+              academic potential.
+            </p>
           </div>
         </div>
 
@@ -117,20 +97,21 @@ const LoginPage = () => {
         >
           {/* Mobile brand */}
           <div className="flex flex-col items-center mb-8 lg:hidden">
-            <div className="w-14 h-14 bg-gradient-primary rounded-2xl flex items-center justify-center shadow-glow-primary mb-4">
-              <span className="text-white font-display font-bold text-xl">i</span>
+            <div className="inline-flex items-center bg-white rounded-2xl px-6 py-4 shadow-soft-xl mb-5">
+              <img
+                src="/logo-mark.png"
+                alt="i-iCON Academy"
+                className="h-28 w-auto object-contain"
+              />
             </div>
-            <h2 className="text-2xl font-display font-bold tracking-tight text-foreground">
-              Welcome back
-            </h2>
-            <p className="text-muted-foreground mt-1 text-sm">Sign in to your i-icon account</p>
+            <p className="text-muted-foreground text-sm text-center">Sign in to your learning portal</p>
           </div>
 
           <div className="hidden lg:block mb-8">
             <h2 className="text-3xl font-display font-bold tracking-tight text-foreground">
               Welcome back
             </h2>
-            <p className="text-muted-foreground mt-2">Sign in to your i-icon academy account</p>
+            <p className="text-muted-foreground mt-2">Sign in to your i-iCON Academy portal</p>
           </div>
 
           <Card className="border-border/60 shadow-soft-xl">

@@ -30,7 +30,13 @@ const EnvSchema = z.object({
    * outbound emails (password reset, onboarding credentials, etc.). Falls
    * back to http://localhost in development.
    */
-  APP_BASE_URL: z.string().default("http://localhost")
+  APP_BASE_URL: z.string().default("http://localhost"),
+  // WhatsApp Cloud API (Meta)
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  WHATSAPP_API_VERSION: z.string().default("v20.0"),
+  // Pre-approved template name for credential delivery (category: UTILITY)
+  WHATSAPP_CREDENTIAL_TEMPLATE: z.string().default("school_account_credentials")
 });
 
 export const env = EnvSchema.parse(process.env);

@@ -7,7 +7,6 @@ import { useAuth } from '@/contexts/AuthContext.jsx';
 import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import AppLayout from '@/components/AppLayout.jsx';
 
-import HomePage from '@/pages/HomePage.jsx';
 import LoginPage from '@/pages/LoginPage.jsx';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage.jsx';
 import ResetPasswordPage from '@/pages/ResetPasswordPage.jsx';
@@ -134,8 +133,8 @@ function MaintenanceAwareRoutes({ isMaintenance, maintenanceMessage }) {
   }
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<LoginPage />} />
+      <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
