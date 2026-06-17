@@ -32,7 +32,7 @@ const CreateUserDialog = ({ isOpen, onClose, onSuccess }) => {
       name: '',
       email: '',
       password: '',
-      role: 'teacher',
+      role: 'school_viewer',
       isActive: true,
       sendEmail: true
     }
@@ -45,24 +45,16 @@ const CreateUserDialog = ({ isOpen, onClose, onSuccess }) => {
   const onSubmit = async (values) => {
     setIsSubmitting(true);
     try {
-      // passwordConfirm required for user creation
       const recordData = {
         name: values.name,
         email: values.email,
         password: values.password,
-        passwordConfirm: values.password,
         role: values.role,
         isActive: values.isActive,
-        verified: true, // Auto-verify admin created users
-        emailVisibility: false
+        sendCredentials: values.sendEmail
       };
 
-      const record = await pb.collection('users').create(recordData, { $autoCancel: false });
-
-      // Simulate sending email since actual builder-mailer needs real triggers
-      if (values.sendEmail) {
-        toast.info('Welcome email queued for delivery');
-      }
+      const record = await pb.fetch('/users', 'POST', recordData);
 
       toast.success('User created successfully');
       form.reset();
@@ -142,9 +134,14 @@ const CreateUserDialog = ({ isOpen, onClose, onSuccess }) => {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      <SelectItem value="platform_admin">Platform Admin</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="school">School Admin</SelectItem>
+                      <SelectItem value="moderator">Moderator</SelectItem>
+                      <SelectItem value="platform_viewer">Platform Viewer</SelectItem>
+                      <SelectItem value="school_admin">School Admin</SelectItem>
+                      <SelectItem value="school">School</SelectItem>
                       <SelectItem value="teacher">Teacher</SelectItem>
+                      <SelectItem value="school_viewer">School Viewer</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

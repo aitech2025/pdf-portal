@@ -13,7 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import UserAvatar from './UserAvatar.jsx';
-import { Calendar, Mail, Phone, Shield, ShieldCheck } from 'lucide-react';
+import { Calendar, Mail, Shield, ShieldCheck } from 'lucide-react';
+
+const PLATFORM_ROLES = new Set(['platform_admin', 'admin', 'super_admin', 'moderator', 'platform_viewer']);
 
 const formSchema = z.object({
   name: z.string().min(2, 'Name is required'),
@@ -32,14 +34,17 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
       name: '',
       role: '',
       isActive: true,
-      schoolId: ''
+      schoolId: 'none'
     }
   });
 
+  const selectedRole = form.watch('role');
+  const isPlatformRole = PLATFORM_ROLES.has(selectedRole);
+
   useEffect(() => {
     if (isOpen) {
-      pb.collection('schools').getFullList({ sort: 'schoolName', $autoCancel: false })
-        .then(res => setSchools(res))
+      pb.fetch('/schools', 'GET', null, { per_page: 200 })
+        .then(res => setSchools(res.items ?? []))
         .catch(console.error);
     }
   }, [isOpen]);
@@ -48,8 +53,8 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
     if (user && isOpen) {
       form.reset({
         name: user.name || '',
-        role: user.role || 'teacher',
-        isActive: user.isActive,
+        role: user.role || 'school_viewer',
+        isActive: user.isActive ?? true,
         schoolId: user.schoolId || 'none'
       });
     }
@@ -62,16 +67,16 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
         name: values.name,
         role: values.role,
         isActive: values.isActive,
-        schoolId: values.schoolId === 'none' ? '' : values.schoolId
+        schoolId: isPlatformRole ? null : (values.schoolId === 'none' ? null : values.schoolId)
       };
-      
-      const record = await pb.collection('users').update(user.id, data, { $autoCancel: false });
+
+      const record = await pb.fetch(`/users/${user.id}`, 'PATCH', data);
       toast.success('User updated successfully');
       onSuccess(record);
       onClose();
     } catch (error) {
       console.error(error);
-      toast.error('Failed to update user details');
+      toast.error(error.message || 'Failed to update user details');
     } finally {
       setIsSubmitting(false);
     }
@@ -88,7 +93,7 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
           <div className="flex items-center gap-4">
             <UserAvatar user={user} className="w-16 h-16 text-xl shadow-soft-sm" />
             <div>
-              <DialogTitle className="text-2xl font-poppins">{user.displayName}</DialogTitle>
+              <DialogTitle className="text-2xl font-poppins">{user.displayName || user.name}</DialogTitle>
               <DialogDescription className="flex items-center gap-1.5 mt-1">
                 <Mail className="w-3.5 h-3.5" /> {user.email}
               </DialogDescription>
@@ -120,16 +125,21 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
                     <FormField control={form.control} name="role" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-foreground">Role</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                           <FormControl>
                             <SelectTrigger className="bg-background text-foreground">
                               <SelectValue placeholder="Select role" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
+                            <SelectItem value="platform_admin">Platform Admin</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="moderator">Moderator</SelectItem>
+                            <SelectItem value="platform_viewer">Platform Viewer</SelectItem>
+                            <SelectItem value="school_admin">School Admin</SelectItem>
                             <SelectItem value="school">School</SelectItem>
                             <SelectItem value="teacher">Teacher</SelectItem>
+                            <SelectItem value="school_viewer">School Viewer</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -139,14 +149,18 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
                     <FormField control={form.control} name="schoolId" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-foreground">School Assignment</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value || 'none'} disabled={isSubmitting}>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={isPlatformRole ? 'none' : (field.value || 'none')}
+                          disabled={isSubmitting || isPlatformRole}
+                        >
                           <FormControl>
                             <SelectTrigger className="bg-background text-foreground">
-                              <SelectValue placeholder="Select school" />
+                              <SelectValue placeholder={isPlatformRole ? 'N/A (platform role)' : 'Select school'} />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="none">No School Assigned</SelectItem>
+                            <SelectItem value="none">{isPlatformRole ? 'N/A (platform role)' : 'No School Assigned'}</SelectItem>
                             {schools.map(school => (
                               <SelectItem key={school.id} value={school.id}>{school.schoolName}</SelectItem>
                             ))}
@@ -155,7 +169,7 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
                         <FormMessage />
                       </FormItem>
                     )} />
-                    
+
                     <FormField control={form.control} name="isActive" render={({ field }) => (
                       <FormItem className="col-span-2 mt-2">
                         <FormLabel className="text-foreground">Account Status</FormLabel>
@@ -176,7 +190,7 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
                 </form>
               </Form>
             </TabsContent>
-            
+
             <TabsContent value="security" className="p-6 m-0 border-none outline-none space-y-6">
               <div className="grid gap-4">
                 <div className="flex items-center justify-between p-4 border border-border/50 rounded-lg bg-card">
@@ -193,7 +207,7 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
                     {user.verified ? 'Verified' : 'Resend Link'}
                   </Button>
                 </div>
-                
+
                 <div className="flex items-center justify-between p-4 border border-border/50 rounded-lg bg-card">
                   <div className="flex gap-3">
                     <div className="bg-muted p-2 rounded-md h-10 flex items-center justify-center shrink-0">
@@ -201,18 +215,20 @@ const UserDetailsModal = ({ isOpen, onClose, user, onSuccess }) => {
                     </div>
                     <div>
                       <p className="font-medium text-sm text-foreground">Two-Factor Auth</p>
-                      <p className="text-xs text-muted-foreground">{user.twoFactorEnabled ? 'Enabled' : 'Disabled'}</p>
+                      <p className="text-xs text-muted-foreground">Not configured</p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" className="bg-background">Manage</Button>
+                  <Button variant="outline" size="sm" className="bg-background" disabled>Manage</Button>
                 </div>
 
                 <div className="border-t border-border/50 pt-4 mt-2">
-                  <h4 className="text-sm font-semibold mb-3">Login History</h4>
+                  <h4 className="text-sm font-semibold mb-3">Account Info</h4>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-4 h-4" /> Created</span>
-                      <span className="font-medium">{new Date(user.created).toLocaleDateString()}</span>
+                      <span className="font-medium">
+                        {user.created || user.createdAt ? new Date(user.created || user.createdAt).toLocaleDateString() : 'N/A'}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-4 h-4" /> Last Login</span>
