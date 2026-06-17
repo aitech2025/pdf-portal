@@ -274,7 +274,7 @@ const SchoolManagement = () => {
       />
 
       <CreateSchoolDialog isOpen={createModalOpen} onClose={() => setCreateModalOpen(false)} onSuccess={actions.refresh} />
-      <SchoolDetailsModal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} school={activeSchool} stats={activeSchool ? schoolStats[activeSchool.id] : null} onSuccess={actions.refresh} />
+      <SchoolDetailsModal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} schoolId={activeSchool?.id} onSchoolUpdated={actions.refresh} />
       <SchoolTeamMembersModal isOpen={teamModalOpen} onClose={() => setTeamModalOpen(false)} school={activeSchool} />
       <SchoolAnalyticsModal isOpen={analyticsModalOpen} onClose={() => setAnalyticsModalOpen(false)} school={activeSchool} />
       

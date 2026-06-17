@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../src/context/AuthContext';
 import { initApiClient } from '../src/lib/apiClient';
 import Constants from 'expo-constants';
@@ -17,9 +18,11 @@ export default function RootLayout() {
     }, []);
 
     return (
-        <AuthProvider>
-            <StatusBar style="auto" />
-            <Stack screenOptions={{ headerShown: false }} />
-        </AuthProvider>
+        <SafeAreaProvider>
+            <AuthProvider>
+                <StatusBar style="auto" />
+                <Stack screenOptions={{ headerShown: false }} />
+            </AuthProvider>
+        </SafeAreaProvider>
     );
 }

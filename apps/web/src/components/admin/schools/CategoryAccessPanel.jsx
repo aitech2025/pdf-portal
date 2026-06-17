@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { Loader2, ChevronDown, ChevronRight, CheckSquare, Square, Check, GraduationCap, BookOpen, Video } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +35,9 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
   const [allPrograms, setAllPrograms] = useState([]);
   // programId → { classes: [{classId, className, classCode, subjects: [...]}] }
   const [programStructures, setProgramStructures] = useState({});
+  const programStructuresRef = useRef({});
+  const [savedClasses, setSavedClasses] = useState({});
+  const [savedSubjects, setSavedSubjects] = useState({});
   const [structureLoadingIds, setStructureLoadingIds] = useState(new Set());
   const [preloadingStructures, setPreloadingStructures] = useState(false);
 
@@ -51,7 +54,7 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
   const [pendingSubjects, setPendingSubjects] = useState({});
 
   const loadProgramStructure = useCallback(async (programId) => {
-    setProgramStructures(prev => { if (prev[programId]) return prev; return prev; });
+    if (programStructuresRef.current[programId]) return;
     setStructureLoadingIds(prev => {
       if (prev.has(programId)) return prev;
       const next = new Set(prev); next.add(programId); return next;
@@ -93,14 +96,48 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
 
       setPendingPrograms(new Set(assignedProgIds));
 
+      // Eagerly load structures for all assigned programs so we can resolve legacy
+      // SchoolClassAccess records that have null program_id (stored without a program link).
+      const newStructures = {};
+      await Promise.all([...assignedProgIds].map(async (programId) => {
+        if (programStructuresRef.current[programId]) {
+          newStructures[programId] = programStructuresRef.current[programId];
+          return;
+        }
+        try {
+          const data = await apiFetch(`/api/programs/${programId}/structure`);
+          newStructures[programId] = data;
+        } catch {
+          newStructures[programId] = { classes: [] };
+        }
+      }));
+      if (Object.keys(newStructures).length > 0) {
+        const merged = { ...programStructuresRef.current, ...newStructures };
+        programStructuresRef.current = merged;
+        setProgramStructures(merged);
+      }
+
+      // Build pendingClasses, resolving any legacy null-programId records via the loaded structures.
+      // Without this, unchecked-but-assigned classes cause hasChanges to mis-fire and
+      // toRemoveClassIds to accidentally schedule already-assigned classes for deletion.
       const pendingCls = {};
       for (const item of assignedClsItems) {
-        if (item.programId) {
-          if (!pendingCls[item.programId]) pendingCls[item.programId] = new Set();
-          pendingCls[item.programId].add(item.classId);
+        let programId = item.programId;
+        if (!programId) {
+          for (const progId of assignedProgIds) {
+            if (programStructuresRef.current[progId]?.classes?.some(c => c.classId === item.classId)) {
+              programId = progId;
+              break;
+            }
+          }
+        }
+        if (programId) {
+          if (!pendingCls[programId]) pendingCls[programId] = new Set();
+          pendingCls[programId].add(item.classId);
         }
       }
       setPendingClasses(pendingCls);
+      setSavedClasses(pendingCls);
 
       const pendingSubj = {};
       for (const item of assignedSubjItems) {
@@ -108,26 +145,28 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
         pendingSubj[item.classId].add(item.subjectId);
       }
       setPendingSubjects(pendingSubj);
+      setSavedSubjects(pendingSubj);
 
       if (onCountChange) onCountChange(assignedProgIds.size);
 
-      // Pre-load structures for assigned programs
-      for (const programId of assignedProgIds) {
-        loadProgramStructure(programId);
-      }
-
-      // For colleges, pre-load ALL program structures so we can filter by class code
+      // For colleges, pre-load structures for remaining (unassigned) programs to enable class-code filtering
       if (institutionType === 'college' && programs.length > 0) {
         setPreloadingStructures(true);
-        const unloadedIds = programs.map(p => p.id).filter(id => !assignedProgIds.has(id));
+        const unloadedIds = programs.map(p => p.id).filter(id => !programStructuresRef.current[id]);
+        const collegeStructures = {};
         await Promise.all(unloadedIds.map(async (programId) => {
           try {
             const data = await apiFetch(`/api/programs/${programId}/structure`);
-            setProgramStructures(prev => ({ ...prev, [programId]: data }));
+            collegeStructures[programId] = data;
           } catch {
-            setProgramStructures(prev => ({ ...prev, [programId]: { classes: [] } }));
+            collegeStructures[programId] = { classes: [] };
           }
         }));
+        if (Object.keys(collegeStructures).length > 0) {
+          const merged = { ...programStructuresRef.current, ...collegeStructures };
+          programStructuresRef.current = merged;
+          setProgramStructures(merged);
+        }
         setPreloadingStructures(false);
       }
     } catch (err) {
@@ -135,7 +174,9 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
     } finally {
       setLoading(false);
     }
-  }, [schoolId, institutionType, onCountChange, loadProgramStructure]);
+  }, [schoolId, institutionType, onCountChange]);
+
+  useEffect(() => { programStructuresRef.current = programStructures; }, [programStructures]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -168,7 +209,19 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
       const next = new Set(prev);
       if (next.has(programId)) {
         next.delete(programId);
-        setPendingClasses(pc => { const n = { ...pc }; delete n[programId]; return n; });
+        setPendingClasses(pc => {
+          const removedClassIds = pc[programId] ? [...pc[programId]] : [];
+          const n = { ...pc };
+          delete n[programId];
+          if (removedClassIds.length) {
+            setPendingSubjects(ps => {
+              const ns = { ...ps };
+              for (const classId of removedClassIds) delete ns[classId];
+              return ns;
+            });
+          }
+          return n;
+        });
       } else {
         next.add(programId);
         if (programType === 'video') {
@@ -256,53 +309,57 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
         await apiFetch(`/api/schools/${schoolId}/categories/${id}`, { method: 'DELETE' });
       }
 
-      const allPendingClassIds = new Set(Object.values(pendingClasses).flatMap(s => [...s]));
-      const toAddClassIds = [...allPendingClassIds].filter(id => !assignedClassIds.has(id));
-      const toRemoveClassIds = [...assignedClassIds].filter(id => !allPendingClassIds.has(id));
-
-      if (toAddClassIds.length) {
-        const classAssignments = [];
-        for (const [programId, classIds] of Object.entries(pendingClasses)) {
-          for (const classId of classIds) {
-            if (!assignedClassIds.has(classId)) {
-              classAssignments.push({ programId, classId });
-            }
-          }
-        }
-        if (classAssignments.length) {
-          await apiFetch(`/api/schools/${schoolId}/classes`, {
-            method: 'POST',
-            body: JSON.stringify({ assignments: classAssignments })
-          });
+      // Per-program class adds: compare pending vs saved snapshot to avoid cross-program ID collisions
+      const classAssignments = [];
+      const classIdsToRemove = [];
+      for (const [programId, classIds] of Object.entries(pendingClasses)) {
+        const savedForProgram = savedClasses[programId] || new Set();
+        for (const classId of classIds) {
+          if (!savedForProgram.has(classId)) classAssignments.push({ programId, classId });
         }
       }
-      for (const classId of toRemoveClassIds) {
+      for (const [programId, savedClassIds] of Object.entries(savedClasses)) {
+        const pendingForProgram = pendingClasses[programId] || new Set();
+        for (const classId of savedClassIds) {
+          if (!pendingForProgram.has(classId)) classIdsToRemove.push(classId);
+        }
+      }
+      if (classAssignments.length) {
+        await apiFetch(`/api/schools/${schoolId}/classes`, {
+          method: 'POST',
+          body: JSON.stringify({ assignments: classAssignments })
+        });
+      }
+      for (const classId of classIdsToRemove) {
         await apiFetch(`/api/schools/${schoolId}/classes/${classId}`, { method: 'DELETE' });
       }
 
-      const allPendingSubjectIds = new Set(Object.values(pendingSubjects).flatMap(s => [...s]));
-      const toAddSubjectIds = [...allPendingSubjectIds].filter(id => !assignedSubjectIds.has(id));
-      const toRemoveSubjectIds = [...assignedSubjectIds].filter(id => !allPendingSubjectIds.has(id));
+      // Build classId → programId lookup for subject assignments
+      const classToProgram = {};
+      for (const [programId, classIds] of Object.entries(pendingClasses)) {
+        for (const classId of classIds) classToProgram[classId] = programId;
+      }
 
-      if (toAddSubjectIds.length) {
-        const subjectAssignments = [];
-        for (const [programId, classIds] of Object.entries(pendingClasses)) {
-          for (const classId of classIds) {
-            const subjIds = pendingSubjects[classId] || new Set();
-            for (const subjectId of subjIds) {
-              if (!assignedSubjectIds.has(subjectId)) {
-                subjectAssignments.push({ programId, classId, subjectId });
-              }
-            }
-          }
-        }
-        if (subjectAssignments.length) {
-          await apiFetch(`/api/schools/${schoolId}/subjects`, {
-            method: 'POST',
-            body: JSON.stringify({ assignments: subjectAssignments })
-          });
+      // Per-class subject adds: compare pending vs saved snapshot to avoid cross-class ID collisions
+      const subjectAssignments = [];
+      for (const [classId, subjIds] of Object.entries(pendingSubjects)) {
+        const programId = classToProgram[classId];
+        if (!programId) continue;
+        const savedForClass = savedSubjects[classId] || new Set();
+        for (const subjectId of subjIds) {
+          if (!savedForClass.has(subjectId)) subjectAssignments.push({ programId, classId, subjectId });
         }
       }
+      if (subjectAssignments.length) {
+        await apiFetch(`/api/schools/${schoolId}/subjects`, {
+          method: 'POST',
+          body: JSON.stringify({ assignments: subjectAssignments })
+        });
+      }
+      // Subject removes: DELETE is flat (not class-scoped), so compare flat saved vs flat pending
+      const allPendingSubjectIds = new Set(Object.values(pendingSubjects).flatMap(s => [...s]));
+      const allSavedSubjectIds = new Set(Object.values(savedSubjects).flatMap(s => [...s]));
+      const toRemoveSubjectIds = [...allSavedSubjectIds].filter(id => !allPendingSubjectIds.has(id));
       for (const subjectId of toRemoveSubjectIds) {
         await apiFetch(`/api/schools/${schoolId}/subjects/${subjectId}`, { method: 'DELETE' });
       }
@@ -325,12 +382,15 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
     );
   }
 
-  const allPendingClassIds = new Set(Object.values(pendingClasses).flatMap(s => [...s]));
-  const allPendingSubjectIds = new Set(Object.values(pendingSubjects).flatMap(s => [...s]));
+  // Serialize a {key → Set} map for comparison — filters empty sets so toggling off-then-on is neutral
+  const serializeMap = (map) => {
+    const keys = Object.keys(map).filter(k => map[k] && map[k].size > 0).sort();
+    return JSON.stringify(keys.map(k => [k, [...map[k]].sort()]));
+  };
   const hasChanges =
     JSON.stringify([...pendingPrograms].sort()) !== JSON.stringify([...assignedProgramIds].sort()) ||
-    JSON.stringify([...allPendingClassIds].sort()) !== JSON.stringify([...assignedClassIds].sort()) ||
-    JSON.stringify([...allPendingSubjectIds].sort()) !== JSON.stringify([...assignedSubjectIds].sort());
+    serializeMap(pendingClasses) !== serializeMap(savedClasses) ||
+    serializeMap(pendingSubjects) !== serializeMap(savedSubjects);
 
   const assignedPrograms = displayedPrograms.filter(p => pendingPrograms.has(p.id));
   const availablePrograms = displayedPrograms.filter(p => !pendingPrograms.has(p.id));

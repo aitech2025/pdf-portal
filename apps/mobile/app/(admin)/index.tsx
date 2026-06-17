@@ -1,54 +1,68 @@
-import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    View, Text, ScrollView, TouchableOpacity, RefreshControl,
+    ActivityIndicator, Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { analyticsApi } from '@shared/api/index.js';
 import { useAuth } from '../../src/context/AuthContext';
+import { apiFetch } from '../../src/lib/apiClient';
+
+const BRAND = '#5b5ff1';
 
 interface Metrics { totalUsers: number; totalSchools: number; totalPdfs: number; totalDownloads: number; }
 interface PendingItems { pdfApprovals: number; userRequests: number; schoolRegistrations: number; }
 
-const TILES = [
-    { key: 'totalUsers', label: 'Total Users', icon: 'people', color: '#7c3aed', bg: '#ede9fe' },
-    { key: 'totalSchools', label: 'Total Schools', icon: 'business', color: '#2563eb', bg: '#dbeafe' },
-    { key: 'totalPdfs', label: 'Total PDFs', icon: 'document-text', color: '#059669', bg: '#d1fae5' },
+const METRIC_TILES = [
+    { key: 'totalUsers', label: 'Users', icon: 'people', color: '#7c3aed', bg: '#ede9fe' },
+    { key: 'totalSchools', label: 'Schools', icon: 'business', color: '#2563eb', bg: '#dbeafe' },
+    { key: 'totalPdfs', label: 'PDFs', icon: 'document-text', color: '#059669', bg: '#d1fae5' },
     { key: 'totalDownloads', label: 'Downloads', icon: 'download', color: '#d97706', bg: '#fef3c7' },
-];
+] as const;
 
 const QUICK_ACTIONS = [
-    { label: 'Analytics', icon: 'bar-chart', color: '#7c3aed', route: '/(admin)/analytics' },
-    { label: 'Requests', icon: 'clipboard', color: '#2563eb', route: '/(admin)/requests' },
-    { label: 'Notifications', icon: 'notifications', color: '#d97706', route: '/(admin)/notifications' },
-    { label: 'Audit Logs', icon: 'list', color: '#059669', route: '/(admin)/audit' },
-    { label: 'Upload PDF', icon: 'cloud-upload', color: '#4f46e5', route: '/(admin)/upload' },
-    { label: 'Broadcast', icon: 'megaphone', color: '#db2777', route: '/(admin)/broadcast' },
-    { label: 'Bulk Create', icon: 'layers', color: '#0891b2', route: '/(admin)/bulk' },
-    { label: 'Settings', icon: 'settings', color: '#6b7280', route: '/(admin)/settings' },
-];
+    { label: 'Analytics', icon: 'bar-chart', color: '#7c3aed', bg: '#ede9fe', route: '/(admin)/analytics' },
+    { label: 'Requests', icon: 'clipboard', color: '#2563eb', bg: '#dbeafe', route: '/(admin)/requests' },
+    { label: 'Broadcast', icon: 'megaphone', color: '#db2777', bg: '#fce7f3', route: '/(admin)/broadcast' },
+    { label: 'Upload PDF', icon: 'cloud-upload', color: BRAND, bg: '#eef2ff', route: '/(admin)/upload' },
+    { label: 'Bulk Create', icon: 'layers', color: '#0891b2', bg: '#e0f2fe', route: '/(admin)/bulk' },
+    { label: 'Audit Logs', icon: 'list', color: '#059669', bg: '#d1fae5', route: '/(admin)/audit' },
+    { label: 'Alerts', icon: 'notifications', color: '#d97706', bg: '#fef3c7', route: '/(admin)/notifications' },
+    { label: 'Settings', icon: 'settings', color: '#6b7280', bg: '#f3f4f6', route: '/(admin)/settings' },
+] as const;
 
 export default function AdminDashboard() {
     const { user } = useAuth();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const [metrics, setMetrics] = useState<Metrics | null>(null);
     const [pending, setPending] = useState<PendingItems | null>(null);
+    const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
-            const data = await analyticsApi.getDashboard();
-            setMetrics(data.metrics);
-            setPending(data.pendingItems);
+            const [dashData, notifRes] = await Promise.all([
+                analyticsApi.getDashboard(),
+                apiFetch('/api/notifications?per_page=200').catch(() => ({ items: [] })),
+            ]);
+            setMetrics(dashData.metrics);
+            setPending(dashData.pendingItems);
+            const unread = (notifRes?.items ?? []).filter((n: any) => !n.read).length;
+            setUnreadCount(unread);
         } catch (e) { console.error(e); }
         finally { setLoading(false); setRefreshing(false); }
-    };
+    }, []);
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { fetchData(); }, [fetchData]);
 
     if (loading) {
         return (
-            <View className="flex-1 items-center justify-center bg-background">
-                <ActivityIndicator size="large" color="#4f46e5" />
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9fafb' }}>
+                <ActivityIndicator size="large" color={BRAND} />
             </View>
         );
     }
@@ -57,102 +71,154 @@ export default function AdminDashboard() {
 
     return (
         <ScrollView
-            className="flex-1 bg-background"
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#4f46e5" />}
+            style={{ flex: 1, backgroundColor: '#f9fafb' }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor={BRAND} />}
+            showsVerticalScrollIndicator={false}
         >
-            {/* Header */}
-            <View className="bg-white px-5 pt-14 pb-5 border-b border-border">
-                <View className="flex-row items-center justify-between">
-                    <View>
-                        <Text className="text-2xl font-bold text-foreground">Dashboard</Text>
-                        <Text className="text-muted text-sm mt-0.5">Welcome back, {user?.name}</Text>
+            {/* Branded header */}
+            <View style={{
+                backgroundColor: BRAND,
+                paddingTop: insets.top + 12,
+                paddingBottom: 20,
+                paddingHorizontal: 20,
+            }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                    <View style={{
+                        backgroundColor: 'white', borderRadius: 12,
+                        paddingHorizontal: 12, paddingVertical: 7,
+                        shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
+                    }}>
+                        <Image
+                            source={require('../../assets/logo-mark.png')}
+                            style={{ width: 100, height: 30, resizeMode: 'contain' }}
+                        />
                     </View>
-                    <TouchableOpacity
-                        className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center relative"
-                        onPress={() => router.push('/(admin)/notifications')}
-                    >
-                        <Ionicons name="notifications-outline" size={22} color="#4f46e5" />
-                        {totalPending > 0 && (
-                            <View className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full items-center justify-center">
-                                <Text className="text-white text-[9px] font-bold">{totalPending > 9 ? '9+' : totalPending}</Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                            onPress={() => router.push('/(admin)/notifications')}
+                            style={{
+                                width: 40, height: 40, borderRadius: 20,
+                                backgroundColor: 'rgba(255,255,255,0.2)',
+                                alignItems: 'center', justifyContent: 'center',
+                            }}
+                        >
+                            <Ionicons name="notifications-outline" size={21} color="white" />
+                            {(unreadCount + totalPending) > 0 && (
+                                <View style={{
+                                    position: 'absolute', top: 4, right: 4,
+                                    width: 16, height: 16, borderRadius: 8,
+                                    backgroundColor: '#ef4444', borderWidth: 2, borderColor: BRAND,
+                                    alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                    <Text style={{ color: 'white', fontSize: 9, fontWeight: '700' }}>
+                                        {(unreadCount + totalPending) > 9 ? '9+' : unreadCount + totalPending}
+                                    </Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                    </View>
                 </View>
+                <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>Administration</Text>
+                <Text style={{ color: 'white', fontSize: 20, fontWeight: '700', marginTop: 2 }}>
+                    {user?.name ?? 'Admin'}
+                </Text>
             </View>
 
-            <View className="p-4 space-y-4">
+            <View style={{ padding: 16, gap: 16 }}>
                 {/* Metric tiles */}
-                <View className="flex-row flex-wrap gap-3">
-                    {TILES.map(tile => (
-                        <View key={tile.key} className="flex-1 min-w-[44%] rounded-2xl p-4" style={{ backgroundColor: tile.bg }}>
-                            <View className="w-10 h-10 rounded-xl items-center justify-center mb-3" style={{ backgroundColor: tile.color + '22' }}>
-                                <Ionicons name={tile.icon as any} size={22} color={tile.color} />
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                    {METRIC_TILES.map(tile => (
+                        <View
+                            key={tile.key}
+                            style={{
+                                width: '47%', flexGrow: 1,
+                                borderRadius: 16, padding: 16,
+                                backgroundColor: tile.bg,
+                            }}
+                        >
+                            <View style={{
+                                width: 38, height: 38, borderRadius: 10,
+                                backgroundColor: tile.color + '22',
+                                alignItems: 'center', justifyContent: 'center', marginBottom: 10,
+                            }}>
+                                <Ionicons name={tile.icon as any} size={20} color={tile.color} />
                             </View>
-                            <Text className="text-2xl font-bold" style={{ color: tile.color }}>
+                            <Text style={{ fontSize: 26, fontWeight: '700', color: tile.color }}>
                                 {metrics?.[tile.key as keyof Metrics] ?? 0}
                             </Text>
-                            <Text className="text-sm mt-0.5" style={{ color: tile.color + 'cc' }}>{tile.label}</Text>
+                            <Text style={{ fontSize: 12, color: tile.color + 'cc', marginTop: 2 }}>{tile.label}</Text>
                         </View>
                     ))}
                 </View>
 
-                {/* Quick Actions */}
+                {/* Quick actions */}
                 <View>
-                    <Text className="text-sm font-semibold text-muted mb-2 uppercase tracking-wider">Quick Access</Text>
-                    <View className="flex-row gap-3 mb-3">
-                        {QUICK_ACTIONS.slice(0, 4).map(action => (
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                        Quick Access
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                        {QUICK_ACTIONS.map(action => (
                             <TouchableOpacity
                                 key={action.label}
-                                className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
                                 onPress={() => router.push(action.route as any)}
+                                style={{
+                                    width: '22%', flexGrow: 1,
+                                    backgroundColor: 'white', borderRadius: 14,
+                                    paddingVertical: 14, paddingHorizontal: 8,
+                                    alignItems: 'center',
+                                    borderWidth: 1, borderColor: '#f3f4f6',
+                                    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+                                }}
+                                activeOpacity={0.75}
                             >
-                                <View className="w-10 h-10 rounded-xl items-center justify-center mb-2" style={{ backgroundColor: action.color + '18' }}>
-                                    <Ionicons name={action.icon as any} size={20} color={action.color} />
+                                <View style={{
+                                    width: 38, height: 38, borderRadius: 10,
+                                    backgroundColor: action.bg,
+                                    alignItems: 'center', justifyContent: 'center', marginBottom: 6,
+                                }}>
+                                    <Ionicons name={action.icon as any} size={18} color={action.color} />
                                 </View>
-                                <Text className="text-xs font-medium text-foreground text-center">{action.label}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                    <View className="flex-row gap-3">
-                        {QUICK_ACTIONS.slice(4, 8).map(action => (
-                            <TouchableOpacity
-                                key={action.label}
-                                className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                                onPress={() => router.push(action.route as any)}
-                            >
-                                <View className="w-10 h-10 rounded-xl items-center justify-center mb-2" style={{ backgroundColor: action.color + '18' }}>
-                                    <Ionicons name={action.icon as any} size={20} color={action.color} />
-                                </View>
-                                <Text className="text-xs font-medium text-foreground text-center">{action.label}</Text>
+                                <Text style={{ fontSize: 11, fontWeight: '600', color: '#374151', textAlign: 'center' }}>
+                                    {action.label}
+                                </Text>
                             </TouchableOpacity>
                         ))}
                     </View>
                 </View>
 
-                {/* Pending actions */}
+                {/* Pending actions card */}
                 {pending && (
-                    <View className="bg-white rounded-2xl border border-border overflow-hidden">
-                        <View className="flex-row items-center justify-between px-4 pt-4 pb-2">
-                            <Text className="text-base font-semibold text-foreground">Pending Actions</Text>
-                            <TouchableOpacity onPress={() => router.push('/(admin)/requests')}>
-                                <Text className="text-xs font-semibold text-primary">View All</Text>
-                            </TouchableOpacity>
+                    <View style={{
+                        backgroundColor: 'white', borderRadius: 16,
+                        borderWidth: 1, borderColor: '#f3f4f6',
+                        overflow: 'hidden',
+                    }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#111827' }}>Pending Actions</Text>
+                            {totalPending > 0 && (
+                                <View style={{ backgroundColor: '#fef2f2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 }}>
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#ef4444' }}>{totalPending}</Text>
+                                </View>
+                            )}
                         </View>
                         {[
                             { label: 'PDF Approvals', value: pending.pdfApprovals, color: '#d97706', route: '/(admin)/pdfs' },
-                            { label: 'User Requests', value: pending.userRequests, color: '#4f46e5', route: '/(admin)/requests' },
+                            { label: 'User Requests', value: pending.userRequests, color: BRAND, route: '/(admin)/requests' },
                             { label: 'School Registrations', value: pending.schoolRegistrations, color: '#059669', route: '/(admin)/requests' },
                         ].map((item, idx) => (
                             <TouchableOpacity
                                 key={item.label}
-                                className={`flex-row items-center justify-between px-4 py-3 ${idx < 2 ? 'border-b border-border/50' : ''}`}
                                 onPress={() => router.push(item.route as any)}
+                                style={{
+                                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                    paddingHorizontal: 16, paddingVertical: 12,
+                                    borderTopWidth: 1, borderTopColor: '#f9fafb',
+                                }}
                             >
-                                <Text className="text-sm text-foreground">{item.label}</Text>
-                                <View className="flex-row items-center gap-2">
-                                    <View className="px-2.5 py-0.5 rounded-full" style={{ backgroundColor: item.color + '22' }}>
-                                        <Text className="text-sm font-bold" style={{ color: item.color }}>{item.value}</Text>
+                                <Text style={{ fontSize: 13, color: '#374151' }}>{item.label}</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <View style={{ paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, backgroundColor: item.color + '18' }}>
+                                        <Text style={{ fontSize: 13, fontWeight: '700', color: item.color }}>{item.value}</Text>
                                     </View>
                                     <Ionicons name="chevron-forward" size={14} color="#9ca3af" />
                                 </View>

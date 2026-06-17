@@ -1,126 +1,215 @@
-import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    View, Text, ScrollView, TouchableOpacity, RefreshControl,
+    ActivityIndicator, Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { apiFetch } from '../../src/lib/apiClient';
+
+const BRAND = '#5b5ff1';
+
+interface Stats { totalDownloads: number; totalUsers: number; totalPdfs?: number; }
+
+const QUICK_ACTIONS = [
+    { label: 'Library', icon: 'library-outline', color: BRAND, bg: '#eef2ff', route: '/(school)/portal' },
+    { label: 'Videos', icon: 'play-circle-outline', color: '#0891b2', bg: '#e0f2fe', route: '/(school)/videos' },
+    { label: 'Bookmarks', icon: 'bookmark-outline', color: '#059669', bg: '#d1fae5', route: '/(school)/bookmarks' },
+    { label: 'Analytics', icon: 'bar-chart-outline', color: '#7c3aed', bg: '#ede9fe', route: '/(school)/analytics' },
+    { label: 'Alerts', icon: 'notifications-outline', color: '#d97706', bg: '#fef3c7', route: '/(school)/notifications' },
+    { label: 'Requests', icon: 'clipboard-outline', color: '#be185d', bg: '#fce7f3', route: '/(school)/requests' },
+] as const;
 
 export default function SchoolDashboard() {
     const { user, canWrite } = useAuth();
     const router = useRouter();
-    const [stats, setStats] = useState({ totalDownloads: 0, totalUsers: 0 });
+    const insets = useSafeAreaInsets();
+    const [stats, setStats] = useState<Stats>({ totalDownloads: 0, totalUsers: 0, totalPdfs: 0 });
+    const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    const fetchStats = async () => {
-        if (!user?.schoolId) { setLoading(false); return; }
+    const fetchData = useCallback(async () => {
         try {
-            const res = await apiFetch(`/api/schools/${user.schoolId}/stats`);
-            setStats({ totalDownloads: res.totalDownloads ?? 0, totalUsers: res.totalUsers ?? 0 });
+            const [statsRes, notifRes] = await Promise.all([
+                user?.schoolId ? apiFetch(`/api/schools/${user.schoolId}/stats`) : Promise.resolve({}),
+                apiFetch('/api/notifications?per_page=200').catch(() => ({ items: [] })),
+            ]);
+            setStats({
+                totalDownloads: statsRes?.totalDownloads ?? 0,
+                totalUsers: statsRes?.totalUsers ?? 0,
+                totalPdfs: statsRes?.totalPdfs ?? 0,
+            });
+            const unread = (notifRes?.items ?? []).filter((n: any) => !n.read).length;
+            setUnreadCount(unread);
         } catch (e) { console.error(e); }
         finally { setLoading(false); setRefreshing(false); }
-    };
+    }, [user?.schoolId]);
 
-    useEffect(() => { fetchStats(); }, []);
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    const visibleActions = QUICK_ACTIONS.filter(a => {
+        if (a.route === '/(school)/requests') return canWrite;
+        return true;
+    });
 
     if (loading) {
         return (
-            <View className="flex-1 items-center justify-center bg-background">
-                <ActivityIndicator size="large" color="#4f46e5" />
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9fafb' }}>
+                <ActivityIndicator size="large" color={BRAND} />
             </View>
         );
     }
 
     return (
         <ScrollView
-            className="flex-1 bg-background"
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchStats(); }} tintColor="#4f46e5" />}
+            style={{ flex: 1, backgroundColor: '#f9fafb' }}
+            refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor={BRAND} />
+            }
+            showsVerticalScrollIndicator={false}
         >
-            {/* Header with notification bell */}
-            <View className="bg-white px-5 pt-14 pb-5 border-b border-border">
-                <View className="flex-row items-center justify-between">
-                    <View>
-                        <Text className="text-2xl font-bold text-foreground">School Dashboard</Text>
-                        <Text className="text-muted text-sm mt-0.5">Welcome, {user?.name}</Text>
+            {/* Header with logo */}
+            <View style={{
+                backgroundColor: BRAND,
+                paddingTop: insets.top + 12,
+                paddingBottom: 20,
+                paddingHorizontal: 20,
+            }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                    <View style={{
+                        backgroundColor: 'white', borderRadius: 12,
+                        paddingHorizontal: 12, paddingVertical: 7,
+                        shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
+                    }}>
+                        <Image
+                            source={require('../../assets/logo-mark.png')}
+                            style={{ width: 100, height: 30, resizeMode: 'contain' }}
+                        />
                     </View>
                     <TouchableOpacity
-                        className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center"
                         onPress={() => router.push('/(school)/notifications')}
+                        style={{
+                            width: 40, height: 40, borderRadius: 20,
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            alignItems: 'center', justifyContent: 'center',
+                        }}
                     >
-                        <Ionicons name="notifications-outline" size={22} color="#4f46e5" />
+                        <Ionicons name="notifications-outline" size={22} color="white" />
+                        {unreadCount > 0 && (
+                            <View style={{
+                                position: 'absolute', top: 4, right: 4,
+                                width: 16, height: 16, borderRadius: 8,
+                                backgroundColor: '#ef4444', borderWidth: 2, borderColor: BRAND,
+                                alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <Text style={{ color: 'white', fontSize: 9, fontWeight: '700' }}>
+                                    {unreadCount > 9 ? '9+' : unreadCount}
+                                </Text>
+                            </View>
+                        )}
                     </TouchableOpacity>
                 </View>
+
+                <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>
+                    Welcome back,
+                </Text>
+                <Text style={{ color: 'white', fontSize: 20, fontWeight: '700', marginTop: 2 }}>
+                    {user?.name ?? 'School User'}
+                </Text>
             </View>
 
-            <View className="p-4 space-y-3">
-                {/* Stats tiles */}
-                {[
-                    { label: 'Total Downloads', value: stats.totalDownloads, icon: 'download', color: '#d97706', bg: '#fef3c7' },
-                    { label: 'School Users', value: stats.totalUsers, icon: 'people', color: '#2563eb', bg: '#dbeafe' },
-                ].map(tile => (
-                    <View key={tile.label} className="rounded-2xl p-5 flex-row items-center gap-4" style={{ backgroundColor: tile.bg }}>
-                        <View className="w-12 h-12 rounded-xl items-center justify-center" style={{ backgroundColor: tile.color + '22' }}>
-                            <Ionicons name={tile.icon as any} size={24} color={tile.color} />
+            <View style={{ padding: 16, gap: 16 }}>
+                {/* Stats */}
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                    {[
+                        { label: 'Downloads', value: stats.totalDownloads, icon: 'download', color: '#d97706', bg: '#fef3c7' },
+                        { label: 'Users', value: stats.totalUsers, icon: 'people', color: '#2563eb', bg: '#dbeafe' },
+                        { label: 'PDFs', value: stats.totalPdfs ?? 0, icon: 'document-text', color: '#059669', bg: '#d1fae5' },
+                    ].map(tile => (
+                        <View
+                            key={tile.label}
+                            style={{
+                                flex: 1, borderRadius: 16, padding: 14,
+                                backgroundColor: tile.bg, alignItems: 'center',
+                            }}
+                        >
+                            <View style={{
+                                width: 36, height: 36, borderRadius: 10,
+                                backgroundColor: tile.color + '22',
+                                alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+                            }}>
+                                <Ionicons name={tile.icon as any} size={18} color={tile.color} />
+                            </View>
+                            <Text style={{ fontSize: 22, fontWeight: '700', color: tile.color }}>{tile.value}</Text>
+                            <Text style={{ fontSize: 11, color: tile.color + 'cc', marginTop: 2, textAlign: 'center' }}>{tile.label}</Text>
                         </View>
-                        <View>
-                            <Text className="text-3xl font-bold" style={{ color: tile.color }}>{tile.value}</Text>
-                            <Text className="text-sm" style={{ color: tile.color + 'cc' }}>{tile.label}</Text>
-                        </View>
-                    </View>
-                ))}
+                    ))}
+                </View>
 
-                {/* Quick Actions */}
+                {/* Quick access */}
                 <View>
-                    <Text className="text-sm font-semibold text-muted mb-2 mt-1 uppercase tracking-wider">Quick Access</Text>
-                    <View className="flex-row gap-3">
-                        <TouchableOpacity
-                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                            onPress={() => router.push('/(school)/portal')}
-                        >
-                            <Ionicons name="library-outline" size={22} color="#4f46e5" />
-                            <Text className="text-xs font-medium text-foreground mt-1.5">Library</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                            onPress={() => router.push('/(school)/videos')}
-                        >
-                            <Ionicons name="play-circle-outline" size={22} color="#0891b2" />
-                            <Text className="text-xs font-medium text-foreground mt-1.5">Videos</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                            onPress={() => router.push('/(school)/bookmarks')}
-                        >
-                            <Ionicons name="bookmark-outline" size={22} color="#059669" />
-                            <Text className="text-xs font-medium text-foreground mt-1.5">Bookmarks</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <View className="flex-row gap-3 mt-3">
-                        {canWrite && (
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+                        Quick Access
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                        {visibleActions.map(action => (
                             <TouchableOpacity
-                                className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                                onPress={() => router.push('/(school)/requests')}
+                                key={action.label}
+                                onPress={() => router.push(action.route as any)}
+                                style={{
+                                    width: '30%', flexGrow: 1,
+                                    backgroundColor: 'white', borderRadius: 16,
+                                    padding: 14, alignItems: 'center',
+                                    borderWidth: 1, borderColor: '#f3f4f6',
+                                    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+                                }}
+                                activeOpacity={0.75}
                             >
-                                <Ionicons name="clipboard-outline" size={22} color="#d97706" />
-                                <Text className="text-xs font-medium text-foreground mt-1.5">Requests</Text>
+                                <View style={{
+                                    width: 40, height: 40, borderRadius: 12,
+                                    backgroundColor: action.bg,
+                                    alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+                                }}>
+                                    <Ionicons name={action.icon as any} size={20} color={action.color} />
+                                </View>
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center' }}>
+                                    {action.label}
+                                </Text>
                             </TouchableOpacity>
-                        )}
-                        <TouchableOpacity
-                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                            onPress={() => router.push('/(school)/analytics')}
-                        >
-                            <Ionicons name="bar-chart-outline" size={22} color="#7c3aed" />
-                            <Text className="text-xs font-medium text-foreground mt-1.5">Analytics</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            className="flex-1 bg-white rounded-2xl p-4 items-center border border-border"
-                            onPress={() => router.push('/(school)/notifications')}
-                        >
-                            <Ionicons name="notifications-outline" size={22} color="#6b7280" />
-                            <Text className="text-xs font-medium text-foreground mt-1.5">Alerts</Text>
-                        </TouchableOpacity>
+                        ))}
                     </View>
                 </View>
+
+                {/* School info card */}
+                {user?.schoolId && (
+                    <View style={{
+                        backgroundColor: 'white', borderRadius: 16,
+                        borderWidth: 1, borderColor: '#f3f4f6', padding: 16,
+                    }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#374151', marginBottom: 4 }}>
+                            Your Institution
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                            <View style={{
+                                width: 40, height: 40, borderRadius: 12,
+                                backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <Ionicons name="business-outline" size={20} color={BRAND} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: '#111827' }} numberOfLines={1}>
+                                    {user.name ?? 'Institution'}
+                                </Text>
+                                <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 1 }}>
+                                    {user.email}
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                )}
             </View>
         </ScrollView>
     );

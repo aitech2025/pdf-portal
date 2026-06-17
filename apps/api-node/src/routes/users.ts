@@ -26,9 +26,9 @@ const sendUserCredentialNotifications = async (
   const subject = "Welcome to i-icon Academy — your account is ready";
   const text =
     `Dear ${user.name},\n\n` +
-    `Your account at ${schoolName} on i-icon Academy has been created.\n\n` +
+    `Your account at school "${schoolName}" on i-icon Academy has been created.\n\n` +
     `Login credentials:\n` +
-    `  Email: ${user.email}\n` +
+    `  User ID: ${user.email}\n` +
     `  Password: ${password}\n\n` +
     `Use these credentials to log in to i-icon Academy.\n\n` +
     `— i-icon Academy team`;
@@ -36,9 +36,9 @@ const sendUserCredentialNotifications = async (
     `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0f172a">` +
     `<h2 style="margin:0 0 16px;color:#4338ca">Welcome to i-icon Academy</h2>` +
     `<p>Dear ${user.name},</p>` +
-    `<p>Your account at <strong>${schoolName}</strong> has been created.</p>` +
+    `<p>Your account at <strong>${schoolName}</strong> on i-icon Academy has been created.</p>` +
     `<div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:16px 0">` +
-    `<div><strong>Email:</strong> ${user.email}</div>` +
+    `<div><strong>User ID:</strong> ${user.email}</div>` +
     `<div><strong>Password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${password}</code></div>` +
     `</div>` +
     `<p>Use these credentials to log in to i-icon Academy.</p>` +

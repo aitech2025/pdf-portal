@@ -35,8 +35,12 @@ const EnvSchema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_API_VERSION: z.string().default("v20.0"),
-  // Pre-approved template name for credential delivery (category: UTILITY)
-  WHATSAPP_CREDENTIAL_TEMPLATE: z.string().default("school_account_credentials")
+  // Pre-approved template name for credential delivery (school onboarding)
+  WHATSAPP_CREDENTIAL_TEMPLATE: z.string().default("school_account"),
+  // Pre-approved template name for new content upload notifications
+  WHATSAPP_NEW_CONTENT_TEMPLATE: z.string().default("new_content_notification"),
+  // Pre-approved template name for admin broadcast messages
+  WHATSAPP_BROADCAST_TEMPLATE: z.string().default("broadcast_announcement")
 });
 
 export const env = EnvSchema.parse(process.env);

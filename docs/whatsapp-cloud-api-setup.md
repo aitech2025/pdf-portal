@@ -1,162 +1,401 @@
-# WhatsApp Cloud API — Setup & Deployment Guide
+# WhatsApp Cloud API — Complete Setup & Deployment Guide
 
 **Platform:** i-icon Academy (`iiconacademy.in`)  
-**Provider:** Meta WhatsApp Cloud API (official)  
-**Purpose:** Deliver school credential notifications via WhatsApp
+**Provider:** Meta WhatsApp Cloud API (official, production-grade)  
+**Last validated:** June 2026  
 
 ---
 
 ## Overview
 
-The app uses the **Meta WhatsApp Cloud API** (not Baileys / WhatsApp Web) to send WhatsApp
-notifications. This is the official, production-grade approach — no QR scanning, no session
-management, just HTTP calls with a permanent access token.
+i-icon Academy delivers school credential notifications via the **Meta WhatsApp Cloud API** —
+the official HTTP-based API that requires no QR scanning or session management. All delivery
+is via a permanent system-user access token and pre-approved message templates.
 
-Two message modes are used:
+### Two send modes
 
 | Mode | When used | Requires |
 |---|---|---|
-| **Template message** | Credential delivery to new school admins (first-time outreach) | Pre-approved Meta template |
-| **Text message** | General notifications (broadcasts, alerts) | Open 24-hour service window |
+| **Template message** | Credential delivery to new school admins (proactive, first-time outreach) | Pre-approved Meta template in **Approved** status |
+| **Text message** | General broadcasts and admin alerts | Recipient must have messaged your number within the last **24 hours** |
+
+Credential delivery **always** uses the template path because new school admins have never
+messaged the number before. If the template path fails (wrong language code, template not
+approved, etc.) the code falls through to `sendWhatsAppText()` which will also fail for the
+same users — so template correctness is critical.
 
 ---
 
-## Part 1 — Meta Business Setup
+## Architecture: How the App Sends Messages
 
-### Step 1 — Create a Meta Business Portfolio
+```
+POST /api/schools          ─┐
+POST /api/onboardingRequests─┤ (approval)  → createAndSendNotification({ type: "credential_delivery" })
+POST /api/users            ─┘                       │
+                                                     ▼
+                                          notificationChannels.ts: sendWhatsApp()
+                                                     │
+                                          Parse message text for template params
+                                          (school name, User ID — password goes via email only)
+                                                     │
+                                          sendWhatsAppTemplate(phone, templateName, [school, userId])
+                                                     │
+                                          POST https://graph.facebook.com/v20.0/{phoneNumberId}/messages
+                                                     │
+                                          Meta Cloud API ──► Recipient's WhatsApp
+```
 
-1. Go to [business.facebook.com](https://business.facebook.com)
-2. Click **Create account** if you don't have a Business Portfolio
-3. Fill in business name: **i-icon Academy**, your name, and business email
-4. Complete **Business Verification** (upload GST certificate or incorporation document)
-   - Basic verification is sufficient to start; full verification unlocks higher message limits
+### Message format requirements
 
-### Step 2 — Create a Developer App
+The `sendWhatsApp()` function in `notificationChannels.ts` extracts template parameters
+by parsing the plaintext `message` string. The message **must** contain these exact patterns:
 
-1. Go to [developers.facebook.com/apps](https://developers.facebook.com/apps)
-2. Click **Create App**
-3. Select app type: **Business**
-4. Fill in:
-   - App name: `iicon-academy-whatsapp`
-   - App contact email: your admin email
-   - Business Portfolio: select the one created in Step 1
-5. Click **Create App**
+| Template variable | Regex used | Required text pattern |
+|---|---|---|
+| `{{1}}` school name | `/school "([^"]+)"/i` or `/school \*([^*]+)\*/i` | `school "ABC School"` or `school *ABC School*` |
+| `{{2}}` User ID | `/User ID:\s*(\S+)/i` | `User ID: admin@school.in` |
+| `{{3}}` password | `/Password:\s*(\S+)/i` | `Password: abc123` |
 
-### Step 3 — Add WhatsApp to the App
-
-1. On the app dashboard, find the **Add Products** section
-2. Click **Set up** next to **WhatsApp**
-3. You will be taken to the WhatsApp **API Setup** page
-
-### Step 4 — Set Up a Phone Number
-
-> **Important:** A phone number used with the Cloud API **cannot** be simultaneously active
-> on the regular WhatsApp app or WhatsApp Business app. You must deregister it from the app
-> first (Settings → Account → Delete My Account or deregister from WA Business app).
-
-**Option A — Use the free test number (development only)**
-
-Meta provides a shared test number in the API Setup page. It can only send messages to up to
-5 manually added recipient numbers. Good for testing before going live.
-
-**Option B — Add your own business number (production)**
-
-1. In the WhatsApp API Setup page, click **Add phone number**
-2. Fill in:
-   - Display name: `i-icon Academy`
-   - Category: **Education**
-   - Description: `EduTech platform for schools`
-3. Enter the phone number and verify via OTP (SMS or voice call)
-4. Once verified, the number appears in your Phone Numbers list
-
-**Note down the Phone Number ID** — it looks like `123456789012345`. This is different from
-the actual phone number and is what the API uses.
-
-### Step 5 — Create a Permanent System User Token
-
-The temporary token shown in the API Setup dashboard expires in **24 hours**. For production,
-create a permanent token:
-
-1. Go to [business.facebook.com/settings](https://business.facebook.com/settings)
-2. In the left sidebar, click **Users → System Users**
-3. Click **Add** → name it `iicon-api-user`, set role to **Admin**
-4. Click **Add Assets**:
-   - Asset type: **Apps**
-   - Select your app (`iicon-academy-whatsapp`)
-   - Enable **Full control**
-   - Click **Save Changes**
-5. Click **Generate New Token** on the system user:
-   - Select your app
-   - Token expiration: **Never**
-   - Permissions to enable:
-     - `whatsapp_business_messaging` (required — send messages)
-     - `whatsapp_business_management` (required — manage templates/numbers)
-   - Click **Generate Token**
-6. **Copy and save the token immediately** — it is shown only once
-
-**Note down:**
-- The **Access Token** (long string starting with `EAAA...`)
-- The **WhatsApp Business Account ID** (WABA ID) — visible on the WhatsApp API Setup page
+If `{{2}}` or `{{3}}` cannot be parsed, the code silently falls back to `sendWhatsAppText()`,
+which fails for new users. Check server logs for `[WHATSAPP] Template delivery failed` to
+detect this.
 
 ---
 
-## Part 2 — Message Template Setup
+## Part 1 — Meta Business Account Setup
 
-Template messages are required for **proactive outreach** (sending to users who have not
-previously messaged your number). Credential delivery to new school admins falls into this
-category and must use a template.
+### Step 1.1 — Create a Meta Business Portfolio
 
-### Create the Credential Delivery Template
-
-1. Go to [business.facebook.com/wa/manage/message-templates](https://business.facebook.com/wa/manage/message-templates)
-   - Or: Meta Business Suite → WhatsApp Manager → Message Templates
-2. Click **Create Template**
+1. Go to **[business.facebook.com](https://business.facebook.com)**
+2. Click **Create account** (top right)
 3. Fill in:
-   - **Category:** `Utility`
-   - **Name:** `school_account_credentials` *(lowercase, underscores only — must match env var exactly)*
-   - **Language:** `English`
-4. In the **Body** section, paste exactly:
+   - **Business name:** `i-icon Academy`
+   - **Your name:** your full name
+   - **Business email:** your official email (e.g. `admin@iiconacademy.in`)
+4. Follow the email verification prompt
+5. Complete your **Business Portfolio settings** — add an address, website (`iiconacademy.in`), and phone number. This is required for Business Verification.
 
-```
-Welcome to i-icon Academy! Your school *{{1}}* is now active.
+### Step 1.2 — Submit Business Verification (Important)
 
-Login credentials:
-User ID: {{2}}
-Password: {{3}}
+Without verification your account is limited to **250 conversations / 24 hours** and
+cannot send to numbers outside your test recipients list.
 
-You can also log in with your registered mobile number. Visit iiconacademy.in to get started.
-```
+1. In Business Portfolio → **Settings** → left sidebar → **Business info**
+2. Scroll to **Business verification** → click **Start verification**
+3. Upload one of:
+   - GST registration certificate
+   - Certificate of Incorporation
+   - Business PAN card
+4. Verification usually completes within **1–3 business days**
 
-Template variable mapping used by the app:
-| Variable | Value |
-|---|---|
-| `{{1}}` | School name |
-| `{{2}}` | Generated User ID (e.g. `naveen@iiconacademy.in`) |
-| `{{3}}` | Generated password (e.g. `iicon2743`) |
-
-5. Click **Submit** — Utility templates are typically approved within **a few minutes to a few hours**
-6. Status changes from **Pending** → **Approved** when ready
-
-> **Template name must exactly match** the `WHATSAPP_CREDENTIAL_TEMPLATE` environment variable.
-> Default value in the app is `school_account_credentials`.
+> **You can proceed with setup before verification is complete**, but WhatsApp messages
+> won't reach real recipients until verification passes.
 
 ---
 
-## Part 3 — Environment Variable Configuration
+## Part 2 — Create the Developer App
 
-Add the following variables to your production `.env` file or Docker Compose environment:
+### Step 2.1 — Create a New App
+
+1. Go to **[developers.facebook.com/apps](https://developers.facebook.com/apps)**
+2. Click **Create App** (top right)
+3. On the "What do you want your app to do?" screen → select **Other** → click **Next**
+4. Select app type → **Business** → click **Next**
+5. Fill in:
+   - **App name:** `iicon-academy-whatsapp`
+   - **App contact email:** your admin email
+   - **Business Portfolio:** select the portfolio created in Step 1.1
+6. Click **Create App** — you may be prompted for your Facebook password
+
+### Step 2.2 — Add the WhatsApp Product
+
+1. On the App Dashboard, scroll down to **Add products to your app**
+2. Find **WhatsApp** → click **Set up**
+3. You are now on the **WhatsApp** → **API Setup** page
+4. Under **Step 1: Select a recipient phone number**, Meta shows a **test phone number** and lets you add up to 5 test recipients. Use this for development.
+
+---
+
+## Part 3 — Register a Production Phone Number
+
+> **Critical:** A phone number registered with the Cloud API **cannot** be simultaneously
+> active on the regular WhatsApp app or WhatsApp Business app. You must fully deregister
+> it from any device first.
+>
+> **To deregister from WhatsApp Business App:**
+> Open the app → Settings → Account → Delete My Account
+> (or: Settings → Account → Request Account Info, wait, then delete)
+>
+> After deregistration, the SIM can be used with the Cloud API.
+
+### Step 3.1 — Add Your Business Number
+
+1. On the **WhatsApp → API Setup** page, click **Add phone number** (under Step 5)
+2. Fill in:
+   - **Display name:** `i-icon Academy` *(this appears in the recipient's chat header)*
+   - **Category:** `Education`
+   - **Description:** `IIT Foundation and JEE preparation platform for schools`
+3. Click **Next**
+4. Enter your phone number (with country code, e.g. `+91 9550432743`)
+5. Choose verification method: **SMS** or **Voice call**
+6. Enter the OTP received — number is now registered
+
+### Step 3.2 — Note the Phone Number ID
+
+After registration:
+1. Go to **WhatsApp → API Setup** → scroll to **Step 5**
+2. Under the phone number dropdown, you will see a **Phone Number ID** — it looks like `123456789012345`
+3. **This is NOT the phone number itself** — it is the internal Meta identifier used in all API calls
+4. Copy and save this ID
+
+---
+
+## Part 4 — Generate a Permanent System User Access Token
+
+The **temporary token** shown on the API Setup page expires in **24 hours**. For production
+you must create a permanent token via a System User. This is a service account — not a real
+Meta user — that the API calls authenticate as.
+
+### Step 4.1 — Create the System User
+
+1. Go to **[business.facebook.com/settings](https://business.facebook.com/settings)**
+2. In the left sidebar, under **Users**, click **System users**
+3. Click **Add** (top right)
+4. Fill in:
+   - **System username:** `iicon-api-user`
+   - **System user role:** **Admin**
+5. Click **Create system user**
+
+### Step 4.2 — Assign Assets to the System User
+
+1. On the System Users page, click the `iicon-api-user` row
+2. Click **Add assets** button (top right)
+3. In the dialog:
+   - **Asset type:** Apps
+   - Select your app `iicon-academy-whatsapp`
+   - Toggle **Full control** to ON
+4. Click **Save changes**
+
+Also assign the WhatsApp Business Account:
+1. Click **Add assets** again
+2. **Asset type:** WhatsApp accounts
+3. Select your WhatsApp Business Account (WABA)
+4. Toggle **Full control** to ON
+5. Click **Save changes**
+
+### Step 4.3 — Generate the Token
+
+1. Still on `iicon-api-user`, click **Generate new token** button
+2. In the dialog:
+   - **Select app:** `iicon-academy-whatsapp`
+   - **Token expiration:** **Never** ← must be this for production
+   - Permissions — enable **all of the following** (scroll through the list):
+     - ✅ `whatsapp_business_messaging` — send and receive messages
+     - ✅ `whatsapp_business_management` — manage templates, phone numbers
+     - ✅ `business_management` — required for WABA access
+3. Click **Generate token**
+4. **IMPORTANT: Copy the token immediately.** It will NOT be shown again.
+   - The token starts with `EAAA...` and is ~250 characters long
+   - Store it in your password manager or secrets vault
+
+### Step 4.4 — Note the WhatsApp Business Account ID
+
+On the **WhatsApp → API Setup** page, under Step 2, you will see the **WhatsApp Business
+Account ID** (WABA ID). This is used when creating templates. It looks like `123456789012345`
+(different from the Phone Number ID).
+
+---
+
+## Part 5 — Create the Credential Delivery Message Template
+
+Templates must be pre-approved by Meta before they can be sent. The credential delivery
+template is a **Utility** category template used to send login credentials to new school
+admins.
+
+### Step 5.1 — Open the Template Manager
+
+1. Go to **[business.facebook.com/wa/manage/message-templates](https://business.facebook.com/wa/manage/message-templates)**
+   - Alternative path: Meta Business Suite → left sidebar → **WhatsApp Manager** → **Message Templates**
+2. Make sure the correct **WhatsApp Business Account** is selected in the top dropdown
+
+### Step 5.2 — Create the Template
+
+1. Click **Create template** (top right, blue button)
+2. On the first screen:
+   - **Category:** `Utility`
+   - **Name:** `school_account` ← must be lowercase, underscores only, no spaces
+   - **Language:** `English (en_US)` ← see note below
+3. Click **Continue**
+
+> **Language code critical note:**
+> When you select **"English"** in the dropdown, Meta internally registers this as `en_US`.
+> The app's API calls send `languageCode = "en_US"`. These **must match exactly**.
+> If you see error `132000: Template name does not exist in the language` in server logs,
+> the language codes do not match — check what code Meta shows on the template detail page
+> and update `WHATSAPP_LANGUAGE_CODE` env var (or the default in `whatsappCloudApi.ts`).
+
+### Step 5.3 — Write the Template Body
+
+On the template editor screen, you will see sections: Header (optional), Body, Footer (optional), Buttons (optional).
+
+**Leave Header and Footer empty** for this template.
+
+In the **Body** text area, paste the template body exactly as registered in Meta:
+
+```
+iicon academy
+Hello {{1}},
+
+Your account has been created successfully at iicon academy.
+
+{{2}}
+{{3}}
+
+Regards, 
+iicon academy
+```
+
+Three variables:
+- `{{1}}` = school name
+- `{{2}}` = user ID (generated login email)
+- `{{3}}` = password/access (generated password)
+
+Under the body text, click **Add sample** — Meta requires sample content for each variable:
+
+| Variable | Sample value |
+|---|---|
+| `{{1}}` | `Delhi Public School` |
+| `{{2}}` | `admin@dps.iiconacademy.in` |
+| `{{3}}` | `DPS@iicon2024` |
+
+### Step 5.4 — Submit for Review
+
+1. Click **Submit** (bottom right)
+2. Status will show as **Pending** — Utility templates are typically reviewed in minutes to a few hours
+3. Refresh the template list; when status changes to **Approved** ✅ the template is live
+4. If status shows **Rejected**, see troubleshooting section below
+
+### Template variable mapping (what the app sends)
+
+| Variable | Source | Regex used to extract |
+|---|---|---|
+| `{{1}}` school name | School name from notification message | `school "([^"]+)"` |
+| `{{2}}` User ID | Generated login email | `User ID:\s*(\S+)` |
+| `{{3}}` password | Generated password | `Password:\s*(\S+)` |
+
+---
+
+## Part 5B — Content Upload Notification Template
+
+Whenever a PDF is uploaded and approved, all school admins whose school has access to that program receive a WhatsApp notification. This requires a second pre-approved template.
+
+### Template details
+
+| Field | Value |
+|---|---|
+| Category | `Utility` |
+| Name | `new_content_notification` |
+| Language | `English (en_US)` |
+
+**Body:**
+```
+New content has been added to i-icon Academy.
+
+Content: {{1}}
+Program: {{2}}
+
+Log in to view the latest material.
+```
+
+**Button:**
+| Field | Value |
+|---|---|
+| Button type | `Visit website` |
+| Button text | `View Content` |
+| URL type | `Static` |
+| Website URL | `https://iiconacademy.in` |
+
+**Sample values:**
+| Variable | Sample |
+|---|---|
+| `{{1}}` | `Physics Chapter 5 - Laws of Motion` |
+| `{{2}}` | `CBSE` |
+
+### Variable mapping
+
+| Variable | Source |
+|---|---|
+| `{{1}}` content title | PDF file name from the upload |
+| `{{2}}` program name | Program the PDF was uploaded to |
+
+The app (`notificationChannels.ts`) parses these from the notification message using:
+- `{{1}}`: regex `/PDF "([^"]+)"/i`
+- `{{2}}`: regex `/to the (.+?) program/i`
+
+### When this fires
+
+Automatically triggered when:
+- A PDF is uploaded with `status: "approved"` (platform admins upload as approved by default)
+- The program (`category_id`) has at least one school assigned via `SchoolCategoryAccess`
+
+School admins with `school_admin` or `school` role, who are active, and whose school has access to that program all receive the notification simultaneously via WhatsApp + email + in-app.
+
+---
+
+## Part 5C — Broadcast Announcement Template
+
+Used when a platform admin sends a broadcast via **Broadcast → WhatsApp** from the admin panel. Because school admins have not initiated a conversation with the business number, free-text messages cannot be sent to them. A single-variable template wraps the admin's composed message.
+
+### Template details
+
+| Field | Value |
+|---|---|
+| Category | `Utility` |
+| Name | `broadcast_announcement` |
+| Language | `English (en_US)` |
+
+**Body:**
+```
+Message from i-icon Academy:
+
+{{1}}
+
+— i-icon Academy team
+```
+
+**Sample for `{{1}}`:** `Scheduled maintenance on 20th June from 11 PM to 1 AM. The portal will be unavailable during this time.`
+
+No button needed (broadcast messages are informational).
+
+### How it works
+
+The admin composes the message in the Broadcast screen. When WhatsApp is selected as a channel, the app passes the full composed message as `{{1}}` to this template. Recipients receive it formatted as above.
+
+---
+
+## Part 6 — Environment Variable Configuration
+
+### In `.env` / `.env.production`
 
 ```env
 # WhatsApp Cloud API — Meta
 WHATSAPP_PHONE_NUMBER_ID=123456789012345
 WHATSAPP_ACCESS_TOKEN=EAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 WHATSAPP_API_VERSION=v20.0
-WHATSAPP_CREDENTIAL_TEMPLATE=school_account_credentials
+WHATSAPP_CREDENTIAL_TEMPLATE=school_account
+WHATSAPP_NEW_CONTENT_TEMPLATE=new_content_notification
+WHATSAPP_BROADCAST_TEMPLATE=broadcast_announcement
 ```
 
-### Docker Compose example
+Replace the placeholder values:
+- `WHATSAPP_PHONE_NUMBER_ID` — the Phone Number ID from Step 3.2 (not the phone number itself)
+- `WHATSAPP_ACCESS_TOKEN` — the permanent system user token from Step 4.3
+- `WHATSAPP_API_VERSION` — keep as `v20.0` unless Meta releases a newer required version
+- `WHATSAPP_CREDENTIAL_TEMPLATE` — template name from Part 5 (registered as `school_account`)
+- `WHATSAPP_NEW_CONTENT_TEMPLATE` — template name from Part 5B (registered as `new_content_notification`)
+- `WHATSAPP_BROADCAST_TEMPLATE` — template name from Part 5C (registered as `broadcast_announcement`)
 
-In your `docker-compose.yml` under the `api` service:
+### Docker Compose
 
 ```yaml
 services:
@@ -168,7 +407,7 @@ services:
       WHATSAPP_CREDENTIAL_TEMPLATE: "school_account_credentials"
 ```
 
-Or reference a secrets file:
+Or using a secrets file:
 
 ```yaml
 services:
@@ -177,107 +416,28 @@ services:
       - .env.production
 ```
 
-### Alternative — System Settings (admin UI)
+### Alternative — Admin UI System Settings
 
-If you prefer not to use environment variables, the same credentials can be stored in the
-database via the admin panel under **Settings → WhatsApp**. The fields expected are:
+The same credentials can be configured from the admin panel (**Settings → WhatsApp**) and
+are stored in MongoDB `system_settings`. The DB fields are:
 - `whatsapp_phone_number_id`
 - `whatsapp_access_token`
 - `whatsapp_api_version` (optional, defaults to `v20.0`)
 
-Environment variables take priority over System Settings if both are set.
+Environment variables take priority over database settings when both are present.
 
 ---
 
-## Part 4 — Verification Checklist Before Go-Live
+## Part 7 — Verification and Testing
 
-Work through each item before sending live messages:
-
-- [ ] Business Portfolio created and basic verification complete
-- [ ] Developer app created with WhatsApp product added
-- [ ] Production phone number added and verified via OTP
-- [ ] Permanent system user token generated (never-expiring)
-- [ ] `school_account_credentials` template approved (status = **Approved** in Meta)
-- [ ] Environment variables set in production deployment
-- [ ] Test send via admin panel → Settings → WhatsApp → Test WhatsApp succeeds
-- [ ] Test onboarding approval end-to-end — school admin receives WhatsApp with credentials
-
----
-
-## Part 5 — Message Flow Reference
-
-### Credential delivery (template message)
-
-Triggered when:
-- An onboarding request is approved (`PATCH /api/onboardingRequests/:id`)
-- A school is created directly (`POST /api/schools`)
-- A school is bulk-created (`POST /api/schools/bulk`)
-
-WhatsApp is sent if the school has a `mobile_number` on record. The app automatically
-selects the template path when `notification_type = credential_delivery`.
-
-Log output on success:
-```
-[WA Cloud] Sending template "school_account_credentials" to 919550432743
-[WA Cloud] Template "school_account_credentials" sent to 919550432743
-```
-
-### General notifications (text message)
-
-Used for admin broadcasts and other in-app notifications. Requires the recipient to have
-sent a message to your WhatsApp number within the last 24 hours (Meta's service window rule).
-
----
-
-## Part 6 — Limits and Pricing
-
-| Tier | Limit | How to unlock |
-|---|---|---|
-| Unverified business | 250 conversations / 24h | Submit business verification |
-| Verified business | 1,000 conversations / 24h | Automatic after verification |
-| Higher tiers | Up to unlimited | Automatic based on quality rating |
-
-**Pricing (as of 2024):**
-- Utility conversations (credential delivery): ~₹0.30–₹0.40 per conversation
-- A "conversation" = all messages exchanged within a 24-hour window
-- First 1,000 conversations per month are free for new accounts
-
-Full pricing: [developers.facebook.com/docs/whatsapp/pricing](https://developers.facebook.com/docs/whatsapp/pricing)
-
----
-
-## Part 7 — Troubleshooting
-
-### Message not received
-
-1. Check logs for `[WA Cloud] API error:` — the Meta error message will explain the issue
-2. Common errors:
-
-| Error | Cause | Fix |
-|---|---|---|
-| `131030` — Template not approved | Template still pending or rejected | Wait for approval or fix template content |
-| `131047` — Re-engagement message | Sending text to user outside 24h window | Use template instead |
-| `131026` — Recipient not on WhatsApp | Phone number has no WhatsApp account | Verify the number |
-| `190` — Invalid access token | Token expired or revoked | Re-generate system user token |
-| `100` — Invalid phone number ID | Wrong `WHATSAPP_PHONE_NUMBER_ID` | Double-check the ID in Meta dashboard |
-
-### Template rejected by Meta
-
-Common rejection reasons:
-- Variable placeholders not matching actual content (e.g. using `{{1}}` for a URL)
-- Template category mismatch (credential delivery = Utility, not Marketing)
-- Content that looks promotional — keep the template factual and functional
-
-Resubmit after editing. Template names cannot be reused after rejection — append a version
-suffix (e.g. `school_account_credentials_v2`), update `WHATSAPP_CREDENTIAL_TEMPLATE` accordingly.
-
-### Check configuration status
+### Step 7.1 — Check Configuration Status
 
 ```
 GET /api/whatsapp/status
+Authorization: Bearer <admin_token>
 ```
 
-Returns:
+Expected response when configured:
 ```json
 {
   "provider": "whatsapp_cloud_api",
@@ -287,15 +447,181 @@ Returns:
 }
 ```
 
-If `configured: false`, credentials are missing from both env and System Settings.
+If `"configured": false`, credentials are missing from both env and System Settings.
+
+### Step 7.2 — Send a Test Message via Admin UI
+
+1. Log in as platform admin
+2. Go to **Settings → WhatsApp**
+3. Enter a test phone number (must be registered on WhatsApp, e.g. your own number)
+4. Click **Test WhatsApp** — this sends a text message (not a template)
+5. If successful, you receive a test message on WhatsApp
+
+### Step 7.3 — Test the Credential Template End-to-End
+
+The most reliable test is to create a school with a valid mobile number:
+
+1. Go to **Schools → Create School**
+2. Fill in all fields including a **Mobile Number** (your personal WhatsApp number for testing)
+3. Click **Create**
+4. Within seconds, check the server logs for:
+   ```
+   [WHATSAPP] Attempting send to="91XXXXXXXXXX" type=credential_delivery
+   [WA Cloud] Sending template "school_account_credentials" to 91XXXXXXXXXX
+   [WA Cloud] Template "school_account_credentials" sent to 91XXXXXXXXXX
+   ```
+5. Check your WhatsApp — you should receive the credential message within 30 seconds
+
+### Step 7.4 — What the Successful Template Looks Like on the Recipient's Device
+
+```
+Your school *Delhi Public School* has been set up on i-icon Academy.
+
+Your administrator login ID is *dps.admin@iiconacademy.in*
+
+Your password has been sent to your registered email address. Please
+check your inbox to complete your first login.
+
+[ Log In ]   ← tappable button → https://iiconacademy.in
+```
+
+---
+
+## Part 8 — Credential Delivery Triggers
+
+The template is sent automatically in these three flows:
+
+| Event | Route | Condition |
+|---|---|---|
+| School created directly | `POST /api/schools` | School has a `mobile_number` |
+| Onboarding request approved | `PATCH /api/onboardingRequests/:id` | Request has a `mobile_number` |
+| School user created | `POST /api/users` | User has a `mobile_number` |
+
+All three flows call `createAndSendNotification({ type: "credential_delivery", ... })` which
+routes through `sendWhatsApp()` in `notificationChannels.ts` to the template path.
+
+---
+
+## Part 9 — Message Limits and Pricing
+
+### Conversation limits
+
+| Account state | Conversations per 24h | How to increase |
+|---|---|---|
+| Unverified business | 250 | Complete Business Verification (Part 1.2) |
+| Verified business | 1,000 | Automatic after verification |
+| Scale tier 1 | 10,000 | Automatic — Meta promotes based on quality rating |
+| Scale tier 2 | 100,000 | Automatic |
+| Unlimited | Unlimited | Automatic for high-volume, high-quality accounts |
+
+A "conversation" = all messages exchanged with a single recipient within a 24-hour window
+(not per-message).
+
+### Pricing (India, as of 2026)
+
+| Category | Per conversation |
+|---|---|
+| Authentication (credential delivery) | ~₹0.15–₹0.25 |
+| Utility | ~₹0.30–₹0.40 |
+| Marketing | ~₹0.80–₹1.00 |
+| Service (user-initiated) | Free |
+
+Full current pricing: https://developers.facebook.com/docs/whatsapp/pricing
+
+---
+
+## Part 10 — Error Reference
+
+### Error codes in server logs
+
+| Error code | Message | Cause | Fix |
+|---|---|---|---|
+| `132000` | Template name does not exist in the language | Language code mismatch between API call and template | Check the language code on the template detail page. The app sends `en_US` by default. If your template was created with a different language, either recreate the template with `en_US` or update the language code in code. |
+| `131030` | Template not approved | Template status is Pending or Rejected | Wait for approval, or check rejection reason in Meta and fix template content before re-submitting |
+| `131047` | Re-engagement message | Sending a text message to user outside the 24h service window | Use template instead of text. The credential delivery flow always uses a template — this error means the code fell through to `sendWhatsAppText()`, which means template param parsing failed. Check logs for parsing failures. |
+| `131026` | Recipient not on WhatsApp | Phone number does not have a WhatsApp account | Verify the recipient's number has WhatsApp installed and active |
+| `190` | Invalid access token | Token has expired or been revoked | Re-generate the system user token (Part 4.3). Permanent tokens can still be revoked if the system user's permissions change. |
+| `100` | Invalid parameter: phone_number_id | `WHATSAPP_PHONE_NUMBER_ID` is wrong | Open Meta → App → WhatsApp → API Setup and verify the Phone Number ID shown there matches your env var |
+| `200` | Permission denied | System user lacks required permissions | Re-add permissions `whatsapp_business_messaging` and `whatsapp_business_management` to the system user token (Step 4.3) |
+
+### Checking detailed error responses
+
+When an API call fails, the full error payload is logged:
+```
+[WA Cloud] API error: <message> <full_json_response>
+```
+
+Look for the `error.error_data.details` field in the JSON — it often contains a more specific
+explanation than the top-level message.
+
+---
+
+## Part 11 — Troubleshooting
+
+### Template delivery falls back to text silently
+
+**Symptom:** Server logs show `sendWhatsAppText` being called for `credential_delivery`,
+or you see `131047` errors when creating schools.
+
+**Cause:** The message text could not be parsed for template parameters. The regex in
+`notificationChannels.ts` looks for:
+- `school "NAME"` (with double quotes) or `school *NAME*` (with asterisks)
+- `User ID: value`
+- `Password: value`
+
+If the message format from any route deviates from this, `userId` will be `""` and
+the template path is skipped.
+
+**How to debug:** Add a temporary log before the regex in `notificationChannels.ts`:
+```typescript
+console.log("[WHATSAPP DEBUG] message:", message);
+```
+Trigger a school creation and examine the logged message to verify the patterns match.
+
+### Template rejected by Meta
+
+Common rejection reasons and fixes:
+
+| Rejection reason | Fix |
+|---|---|
+| "Marketing-like content detected" | Remove any promotional language. Credential messages should be purely functional. Remove phrases like "discover our platform", "get started today", etc. |
+| "Variable parameter mismatch" | The sample values you provided for `{{1}}`, `{{2}}`, `{{3}}` must be plausible real values matching the variable's purpose |
+| "Template category is incorrect" | If Meta re-categorizes your Utility template as Marketing, you can appeal via the Meta Business Help Center. Credential delivery is explicitly Utility. |
+| "Template name already exists" | If the previous template with this name was rejected, you cannot reuse the name. Append `_v2` and update `WHATSAPP_CREDENTIAL_TEMPLATE` env var. |
+
+### Token stops working after working correctly
+
+Permanent system user tokens can be invalidated when:
+- The system user's app asset permissions are removed or changed
+- The associated app is put in Development mode
+- Meta detects suspicious activity on the Business Portfolio
+
+Re-generate via Step 4.3. The new token should work immediately.
+
+### Test number receives messages but production number does not
+
+Check:
+1. The production number has been verified in Meta (Step 3.1) and is in **Connected** status
+2. The `WHATSAPP_PHONE_NUMBER_ID` in env matches the production number's ID (not the test number's ID)
+3. The production number's **Quality Rating** in WhatsApp Manager is not **Low** (Low rating blocks outbound template messages)
+
+---
+
+## Part 12 — Security Notes
+
+- **Never commit the access token to git.** Use `.env` (gitignored) or Docker secrets.
+- The access token provides full messaging access on behalf of your business number. Treat it as a master credential.
+- Rotate the token periodically (annually minimum) via Step 4.3.
+- The template body (including school name, User ID, password) is transmitted in plaintext to Meta's servers. This is inherent to the WhatsApp Cloud API — Meta stores and routes the message content. Passwords sent via WhatsApp should be treated as first-login temporary passwords and users should be encouraged to change them on first login.
 
 ---
 
 ## Useful Links
 
-- Meta for Developers — WhatsApp: https://developers.facebook.com/docs/whatsapp
-- Cloud API reference: https://developers.facebook.com/docs/whatsapp/cloud-api
+- Meta WhatsApp Cloud API docs: https://developers.facebook.com/docs/whatsapp/cloud-api
 - Message Templates guide: https://developers.facebook.com/docs/whatsapp/message-templates
+- Template category guidelines: https://developers.facebook.com/docs/whatsapp/updates-to-pricing/new-template-guidelines
+- Error codes: https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes
 - Business Manager: https://business.facebook.com/settings
 - WhatsApp Manager (templates): https://business.facebook.com/wa/manage/message-templates
 - Pricing: https://developers.facebook.com/docs/whatsapp/pricing

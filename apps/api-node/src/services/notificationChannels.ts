@@ -250,9 +250,7 @@ const sendWhatsApp = async (
   console.log(`[WHATSAPP] Attempting send to="${to}" type=${notificationType ?? "text"}`);
 
   if (notificationType === "credential_delivery") {
-    // Parse User ID and password out of the message for template parameters.
-    // Template body (school_account_credentials):
-    //   {{1}} = school name, {{2}} = User ID, {{3}} = password
+    // Template: school_account  ({{1}} school name, {{2}} user ID, {{3}} password/access)
     const schoolMatch = message.match(/school "([^"]+)"/i) ?? message.match(/school \*([^*]+)\*/i);
     const userIdMatch = message.match(/User ID:\s*(\S+)/i);
     const passwordMatch = message.match(/Password:\s*(\S+)/i);
@@ -261,14 +259,32 @@ const sendWhatsApp = async (
     const password = passwordMatch?.[1] ?? "";
 
     if (userId && password) {
-      const templateName = env.WHATSAPP_CREDENTIAL_TEMPLATE;
-      const result = await sendWhatsAppTemplate(to, templateName, [schoolName, userId, password]);
-      if (!result.ok) {
-        console.error(`[WHATSAPP] Template delivery failed to "${to}": ${result.error}`);
-      }
+      const result = await sendWhatsAppTemplate(to, env.WHATSAPP_CREDENTIAL_TEMPLATE, [schoolName, userId, password]);
+      if (!result.ok) console.error(`[WHATSAPP] Credential template failed to "${to}": ${result.error}`);
       return result;
     }
-    // Fall through to text if we couldn't parse the params
+    // Fall through to text if params could not be parsed
+  }
+
+  if (notificationType === "new_content") {
+    // Template: new_content_notification  ({{1}} content title, {{2}} program name)
+    const titleMatch = message.match(/PDF "([^"]+)"/i);
+    const programMatch = message.match(/to the (.+?) program/i);
+    const pdfTitle = titleMatch?.[1] ?? "New Content";
+    const programName = programMatch?.[1] ?? "your program";
+
+    const result = await sendWhatsAppTemplate(to, env.WHATSAPP_NEW_CONTENT_TEMPLATE, [pdfTitle, programName]);
+    if (!result.ok) console.error(`[WHATSAPP] Content template failed to "${to}": ${result.error}`);
+    return result;
+  }
+
+  if (notificationType === "bulk_announcement") {
+    // Template: broadcast_announcement  ({{1}} = full message body composed by admin)
+    // Free-text messages require a 24-hour service window opened by the recipient,
+    // which school admins will not have. A single-variable template is used instead.
+    const result = await sendWhatsAppTemplate(to, env.WHATSAPP_BROADCAST_TEMPLATE, [message]);
+    if (!result.ok) console.error(`[WHATSAPP] Broadcast template failed to "${to}": ${result.error}`);
+    return result;
   }
 
   const result = await sendWhatsAppText(to, message);

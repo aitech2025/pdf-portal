@@ -151,13 +151,16 @@ export const sendWhatsAppText = async (
  * @param phone        Recipient phone (any format — normalised to E.164 internally)
  * @param templateName Approved template name in Meta (e.g. "school_account_credentials")
  * @param bodyParams   Ordered array of {{1}}, {{2}}, … substitution strings for the body
- * @param languageCode Template language code (default "en")
+ * @param languageCode Template language code (default "en_US" — must match exactly what was
+ *                    selected when the template was created in Meta Business Manager.
+ *                    Meta registers "English" templates as "en_US", not "en". Using "en"
+ *                    causes error 132000 "Template name does not exist in the language".)
  */
 export const sendWhatsAppTemplate = async (
   phone: string,
   templateName: string,
   bodyParams: string[],
-  languageCode = "en"
+  languageCode = "en_US"
 ): Promise<{ ok: boolean; error?: string }> => {
   const cfg = await loadCloudConfig();
   if (!cfg) {

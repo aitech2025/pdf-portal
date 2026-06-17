@@ -228,8 +228,8 @@ const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
                 </div>
               </DialogHeader>
 
-              <div className="flex-1 overflow-hidden flex flex-col">
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col h-full">
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
                   <div className="px-6 pt-2 border-b border-border/50 shrink-0">
                     <TabsList className="bg-transparent h-auto p-0">
                       <TabsTrigger value="overview" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-4 pb-3 pt-2">Overview</TabsTrigger>
@@ -242,7 +242,7 @@ const SchoolDetailsModal = ({ isOpen, onClose, schoolId, onSchoolUpdated }) => {
                     </TabsList>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                  <div className="flex-1 min-h-0 overflow-y-auto p-6 custom-scrollbar">
                     <TabsContent value="overview" className="m-0 space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">

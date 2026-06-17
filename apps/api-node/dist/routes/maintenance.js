@@ -4,6 +4,8 @@ import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
 import { createAndSendNotification, validateEmailConfiguration, validateWhatsAppConfiguration } from "../services/notificationChannels.js";
+import { sendWhatsAppTemplate } from "../services/whatsappCloudApi.js";
+import { env } from "../config/env.js";
 // Fields that must never appear in a $set — they are either immutable identifiers
 // or Mongoose-managed timestamps.
 const SKIP_FROM_SET = new Set(["id", "_id", "created", "updated"]);
@@ -127,18 +129,16 @@ export const registerMaintenanceRoutes = async (app) => {
     app.post("/api/systemSettings/:ss_id/test-whatsapp", { preHandler: requirePermission(PERMISSIONS.SETTINGS_MANAGE) }, async (request) => {
         const body = z.object({ to: z.string().min(6) }).parse(request.body);
         const validation = await validateWhatsAppConfiguration();
-        const notif = await createAndSendNotification({
-            recipient: { id: request.authUser?.sub ?? "system", mobile_number: body.to },
-            method: "whatsapp",
-            type: "configuration_test",
-            subject: "i-icon Academy WhatsApp test",
-            message: "This is a test WhatsApp message from your i-icon Academy notification configuration."
-        });
+        // Send the school_account template with placeholder values so the test
+        // works even without an open 24-hour service window on the recipient's number.
+        const result = await sendWhatsAppTemplate(body.to, env.WHATSAPP_CREDENTIAL_TEMPLATE, ["Test School", "test@iiconacademy.in", "TestPass@123"]);
         return {
-            ok: notif.status === "sent",
-            status: notif.status,
+            ok: result.ok,
+            status: result.ok ? "sent" : "failed",
             validation,
-            message: notif.status === "sent" ? "Test WhatsApp sent" : "WhatsApp configuration saved but delivery is pending/failed"
+            message: result.ok
+                ? "Test WhatsApp sent via template (school_account)"
+                : `WhatsApp delivery failed: ${result.error ?? "unknown error"}`
         };
     });
     app.get("/api/userPreferences", { preHandler: requireAuth }, async (request, reply) => {

@@ -5,7 +5,7 @@ module.exports = {
     theme: {
         extend: {
             colors: {
-                primary: '#4f46e5',
+                primary: '#5b5ff1',
                 'primary-foreground': '#ffffff',
                 secondary: '#10b981',
                 destructive: '#ef4444',
@@ -14,6 +14,7 @@ module.exports = {
                 card: '#ffffff',
                 border: '#e5e7eb',
                 foreground: '#111827',
+                success: '#22c55e',
             },
             fontFamily: {
                 sans: ['Inter', 'System'],

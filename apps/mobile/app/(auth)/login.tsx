@@ -1,50 +1,43 @@
 import { useState } from 'react';
 import {
     View, Text, TextInput, TouchableOpacity,
-    KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+    KeyboardAvoidingView, Platform, ActivityIndicator,
+    Image, ScrollView, StatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 
-type LoginMode = 'school' | 'teacher';
+const BRAND = '#5b5ff1';
 
 export default function LoginScreen() {
-    const { login, logout } = useAuth();
+    const { login } = useAuth();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPwd, setShowPwd] = useState(false);
-    const [mode, setMode] = useState<LoginMode>('school');
+    const [error, setError] = useState('');
 
     const handleLogin = async () => {
-        if (!email || !password) {
-            Alert.alert('Error', 'Please enter email and password.');
+        if (!email.trim() || !password) {
+            setError('Please enter your email and password.');
             return;
         }
+        setError('');
         setLoading(true);
         try {
             const user = await login(email.trim(), password);
             const platformRoles = ['platform_admin', 'admin', 'moderator', 'platform_viewer'];
-
-            if (mode === 'teacher' && user.role !== 'teacher') {
-                await logout();
-                Alert.alert('Role mismatch', 'This account is not a teacher account. Switch to School login.');
-                return;
-            }
-            if (mode === 'school' && user.role === 'teacher') {
-                await logout();
-                Alert.alert('Role mismatch', 'This account is a teacher account. Switch to Teacher login.');
-                return;
-            }
-
             if (platformRoles.includes(user.role)) {
                 router.replace('/(admin)');
             } else {
                 router.replace('/(school)');
             }
         } catch (err: any) {
-            Alert.alert('Login Failed', err.message || 'Invalid email or password.');
+            setError(err.message || 'Invalid credentials. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -52,91 +45,154 @@ export default function LoginScreen() {
 
     return (
         <KeyboardAvoidingView
-            className="flex-1 bg-background"
+            style={{ flex: 1, backgroundColor: '#f9fafb' }}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-            <View className="flex-1 justify-center px-6">
-                {/* Logo */}
-                <View className="items-center mb-8">
-                    <View className="w-16 h-16 rounded-2xl bg-primary items-center justify-center mb-4">
-                        <Text className="text-white text-xl font-bold">I</Text>
-                    </View>
-                    <Text className="text-3xl font-bold text-foreground">I-ICON EduShare</Text>
-                    <Text className="text-muted mt-1 text-base">
-                        {mode === 'school' ? 'School Login Portal' : 'Teacher Login Portal'}
-                    </Text>
+            <StatusBar barStyle="light-content" backgroundColor={BRAND} />
+
+            {/* Brand header */}
+            <View style={{
+                backgroundColor: BRAND,
+                paddingTop: insets.top + 28,
+                paddingBottom: 36,
+                paddingHorizontal: 24,
+                alignItems: 'center',
+            }}>
+                <View style={{
+                    backgroundColor: 'white',
+                    borderRadius: 18,
+                    paddingHorizontal: 22,
+                    paddingVertical: 14,
+                    shadowColor: '#000',
+                    shadowOpacity: 0.15,
+                    shadowRadius: 16,
+                    shadowOffset: { width: 0, height: 4 },
+                    elevation: 8,
+                }}>
+                    <Image
+                        source={require('../../assets/logo-mark.png')}
+                        style={{ width: 168, height: 52, resizeMode: 'contain' }}
+                    />
                 </View>
+                <Text style={{
+                    color: 'rgba(255,255,255,0.85)',
+                    fontSize: 13,
+                    marginTop: 18,
+                    textAlign: 'center',
+                    lineHeight: 19,
+                    maxWidth: 280,
+                }}>
+                    A trusted pioneer in IIT Foundation &amp; JEE preparation
+                </Text>
+            </View>
 
-                {/* Form */}
-                <View className="space-y-4">
-                    <View className="bg-card border border-border rounded-xl p-1 flex-row">
-                        <TouchableOpacity
-                            className={`flex-1 rounded-lg py-2.5 items-center ${mode === 'school' ? 'bg-primary' : 'bg-transparent'}`}
-                            onPress={() => setMode('school')}
-                        >
-                            <Text className={`font-semibold ${mode === 'school' ? 'text-white' : 'text-foreground'}`}>
-                                School
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            className={`flex-1 rounded-lg py-2.5 items-center ${mode === 'teacher' ? 'bg-primary' : 'bg-transparent'}`}
-                            onPress={() => setMode('teacher')}
-                        >
-                            <Text className={`font-semibold ${mode === 'teacher' ? 'text-white' : 'text-foreground'}`}>
-                                Teacher
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
+            <ScrollView
+                contentContainerStyle={{ flexGrow: 1 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={{ paddingHorizontal: 24, paddingTop: 32, paddingBottom: 40 }}>
+                    <Text style={{ fontSize: 24, fontWeight: '700', color: '#111827', marginBottom: 4 }}>
+                        Welcome back
+                    </Text>
+                    <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 28 }}>
+                        Sign in to your i-iCON Academy portal
+                    </Text>
 
-                    <View>
-                        <Text className="text-sm font-medium text-foreground mb-1.5">Email Address</Text>
-                        <TextInput
-                            className="bg-card border border-border rounded-xl px-4 py-3.5 text-foreground text-base"
-                            placeholder={mode === 'school' ? 'school-admin@domain.com' : 'teacher@domain.com'}
-                            placeholderTextColor="#9ca3af"
-                            value={email}
-                            onChangeText={setEmail}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                        />
-                    </View>
+                    {error ? (
+                        <View style={{
+                            backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca',
+                            borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+                            marginBottom: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+                        }}>
+                            <Ionicons name="alert-circle" size={16} color="#ef4444" style={{ marginTop: 1 }} />
+                            <Text style={{ color: '#dc2626', fontSize: 13, flex: 1, lineHeight: 18 }}>{error}</Text>
+                        </View>
+                    ) : null}
 
-                    <View>
-                        <Text className="text-sm font-medium text-foreground mb-1.5">Password</Text>
-                        <View className="flex-row items-center bg-card border border-border rounded-xl px-4">
+                    {/* Email */}
+                    <View style={{ marginBottom: 16 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 6 }}>
+                            Email or Mobile Number
+                        </Text>
+                        <View style={{
+                            flexDirection: 'row', alignItems: 'center',
+                            backgroundColor: 'white', borderWidth: 1, borderColor: '#e5e7eb',
+                            borderRadius: 12, paddingHorizontal: 14,
+                        }}>
+                            <Ionicons name="mail-outline" size={18} color="#9ca3af" />
                             <TextInput
-                                className="flex-1 py-3.5 text-foreground text-base"
-                                placeholder="Enter password"
+                                style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 10, fontSize: 15, color: '#111827' }}
+                                placeholder="name@iiconacademy.in"
+                                placeholderTextColor="#9ca3af"
+                                value={email}
+                                onChangeText={setEmail}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                            />
+                        </View>
+                    </View>
+
+                    {/* Password */}
+                    <View style={{ marginBottom: 8 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 6 }}>
+                            Password
+                        </Text>
+                        <View style={{
+                            flexDirection: 'row', alignItems: 'center',
+                            backgroundColor: 'white', borderWidth: 1, borderColor: '#e5e7eb',
+                            borderRadius: 12, paddingHorizontal: 14,
+                        }}>
+                            <Ionicons name="lock-closed-outline" size={18} color="#9ca3af" />
+                            <TextInput
+                                style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 10, fontSize: 15, color: '#111827' }}
+                                placeholder="••••••••"
                                 placeholderTextColor="#9ca3af"
                                 value={password}
                                 onChangeText={setPassword}
                                 secureTextEntry={!showPwd}
                                 autoCapitalize="none"
                             />
-                            <TouchableOpacity onPress={() => setShowPwd(!showPwd)} className="p-1">
-                                <Text className="text-muted text-sm">{showPwd ? 'Hide' : 'Show'}</Text>
+                            <TouchableOpacity onPress={() => setShowPwd(!showPwd)} style={{ padding: 4 }}>
+                                <Ionicons name={showPwd ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9ca3af" />
                             </TouchableOpacity>
                         </View>
                     </View>
 
+                    {/* Forgot password */}
                     <TouchableOpacity
-                        className={`mt-2 rounded-xl py-4 items-center ${loading ? 'bg-primary/60' : 'bg-primary'}`}
-                        onPress={handleLogin}
-                        disabled={loading}
+                        style={{ alignSelf: 'flex-end', marginBottom: 24, paddingVertical: 4 }}
+                        onPress={() => router.push('/(auth)/forgot-password')}
                     >
-                        {loading
-                            ? <ActivityIndicator color="#fff" />
-                            : <Text className="text-white font-semibold text-base">
-                                {mode === 'school' ? 'Sign In as School User' : 'Sign In as Teacher'}
-                            </Text>}
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: BRAND }}>Forgot password?</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity className="mt-2 items-center" onPress={() => router.push('/(auth)/forgot-password')}>
-                        <Text className="text-xs text-primary font-medium">Forgot password?</Text>
+                    {/* Sign in button */}
+                    <TouchableOpacity
+                        style={{
+                            backgroundColor: loading ? '#8b8ef5' : BRAND,
+                            borderRadius: 14, paddingVertical: 16,
+                            alignItems: 'center', shadowColor: BRAND,
+                            shadowOpacity: 0.35, shadowRadius: 10,
+                            shadowOffset: { width: 0, height: 4 }, elevation: 4,
+                        }}
+                        onPress={handleLogin}
+                        disabled={loading}
+                        activeOpacity={0.85}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Sign In</Text>
+                        )}
                     </TouchableOpacity>
+
+                    <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 11, marginTop: 36 }}>
+                        © {new Date().getFullYear()} i-iCON Academy. All rights reserved.
+                    </Text>
                 </View>
-            </View>
+            </ScrollView>
         </KeyboardAvoidingView>
     );
 }
