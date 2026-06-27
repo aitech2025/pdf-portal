@@ -60,9 +60,11 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
       if (!id) { toast.error('Save system settings first'); return; }
       const res = await pb.fetch(`/systemSettings/${id}/test-whatsapp`, 'POST', { to: testNumber });
       if (res?.ok) {
-        toast.success(`Test WhatsApp sent to ${testNumber}`);
+        toast.success(`Test WhatsApp sent to ${testNumber} via template "${res.template_name}"`);
       } else {
-        toast.error(res?.message || 'Delivery failed — check server logs for details');
+        const description = res?.hint || 'Check server logs for full details.';
+        toast.error(res?.message || 'Delivery failed', { description, duration: 10000 });
+        console.error('[WhatsApp Test]', res);
       }
     } catch (err) {
       toast.error(err.message || 'Failed to send test message');

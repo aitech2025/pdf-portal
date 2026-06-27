@@ -88,7 +88,7 @@ const toE164 = (phone: string): string => {
 const postToCloudApi = async (
   cfg: WACloudConfig,
   payload: Record<string, unknown>
-): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> => {
+): Promise<{ ok: boolean; error?: string; errorCode?: number; data?: Record<string, unknown> }> => {
   const url = `https://graph.facebook.com/${cfg.apiVersion}/${cfg.phoneNumberId}/messages`;
   try {
     const res = await fetch(url, {
@@ -103,8 +103,9 @@ const postToCloudApi = async (
     if (!res.ok) {
       const errObj = data.error as Record<string, unknown> | undefined;
       const msg = (errObj?.message as string) ?? `HTTP ${res.status}`;
-      console.error("[WA Cloud] API error:", msg, JSON.stringify(data));
-      return { ok: false, error: msg, data };
+      const code = (errObj?.code as number) ?? res.status;
+      console.error(`[WA Cloud] API error ${code}: ${msg}`, JSON.stringify(data));
+      return { ok: false, error: msg, errorCode: code, data };
     }
     return { ok: true, data };
   } catch (err) {
@@ -166,7 +167,7 @@ export const sendWhatsAppTemplate = async (
   templateName: string,
   bodyParams: string[],
   languageCode = "en_US"
-): Promise<{ ok: boolean; error?: string }> => {
+): Promise<{ ok: boolean; error?: string; errorCode?: number }> => {
   const cfg = await loadCloudConfig();
   if (!cfg) {
     console.warn("[WA Cloud] Not configured — skipping WhatsApp template send");
@@ -183,7 +184,7 @@ export const sendWhatsAppTemplate = async (
     });
   }
 
-  console.log(`[WA Cloud] Sending template "${templateName}" to ${to}`);
+  console.log(`[WA Cloud] Sending template "${templateName}" (lang=${languageCode}, params=${bodyParams.length}) to ${to}`);
   const result = await postToCloudApi(cfg, {
     messaging_product: "whatsapp",
     to,
@@ -194,8 +195,10 @@ export const sendWhatsAppTemplate = async (
       components
     }
   });
-  if (result.ok) console.log(`[WA Cloud] Template "${templateName}" sent to ${to}`);
-  return result;
+  if (result.ok) {
+    console.log(`[WA Cloud] Template "${templateName}" sent successfully to ${to}`);
+  }
+  return { ok: result.ok, error: result.error, errorCode: result.errorCode };
 };
 
 /**

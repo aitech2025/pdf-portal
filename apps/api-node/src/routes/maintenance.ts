@@ -173,18 +173,35 @@ export const registerMaintenanceRoutes = async (app: FastifyInstance): Promise<v
       const validation = await validateWhatsAppConfiguration();
       // Send the school_account template with placeholder values so the test
       // works even without an open 24-hour service window on the recipient's number.
+      const templateName = env.WHATSAPP_CREDENTIAL_TEMPLATE;
       const result = await sendWhatsAppTemplate(
         body.to,
-        env.WHATSAPP_CREDENTIAL_TEMPLATE,
+        templateName,
         ["Test School", "test@iiconacademy.in", "TestPass@123"]
       );
+
+      const CODE_HINTS: Record<number, string> = {
+        190: "Access token is invalid or expired. Generate a new permanent System User token in Meta Business Suite → System Users.",
+        132000: `Template "${templateName}" was not found with language "en_US". Check the template name and language code in Meta Business Manager → Account Tools → Message Templates.`,
+        132001: `Template "${templateName}" does not exist. Create it in Meta Business Manager → Account Tools → Message Templates with 3 body variables {{1}}, {{2}}, {{3}}.`,
+        132012: `Template "${templateName}" parameter count mismatch. The template body must have exactly 3 variables: {{1}} (school name), {{2}} (user ID), {{3}} (password).`,
+        132015: `Template "${templateName}" is not yet approved by Meta. Wait for approval or check Meta Business Manager → Account Tools → Message Templates.`,
+        100: "Invalid Phone Number ID. Verify the Phone Number ID in Meta Developer Portal → WhatsApp → API Setup.",
+        200: "Permission denied. Ensure the System User token has 'whatsapp_business_messaging' permission and the WABA is assigned to the System User.",
+      };
+
+      const hint = result.errorCode ? (CODE_HINTS[result.errorCode] ?? null) : null;
+
       return {
         ok: result.ok,
         status: result.ok ? "sent" : "failed",
         validation,
+        template_name: templateName,
+        error_code: result.errorCode,
         message: result.ok
-          ? "Test WhatsApp sent via template (school_account)"
-          : `WhatsApp delivery failed: ${result.error ?? "unknown error"}`
+          ? `Test WhatsApp sent via template "${templateName}"`
+          : `WhatsApp delivery failed (code ${result.errorCode ?? "?"}): ${result.error ?? "unknown error"}`,
+        hint
       };
     }
   );
