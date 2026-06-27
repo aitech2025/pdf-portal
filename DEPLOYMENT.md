@@ -29,7 +29,7 @@ web container (Nginx :80)
 ```
 
 PDFs are stored as binary (`Buffer`) in MongoDB — no shared filesystem volume between containers.
-The only persistent Docker volume on the app side is `whatsapp_auth` for the WhatsApp session.
+WhatsApp uses the Meta Cloud API (HTTP-based) — no persistent session volume is needed.
 
 ---
 
@@ -157,7 +157,7 @@ docker build -t iiconacademy/api:latest apps/api-node/
 docker build -t iiconacademy/web:latest -f apps/web/Dockerfile .
 ```
 
-Building the first time takes 3–8 minutes (compiling native Node addons for Baileys, Vite build).
+Building the first time takes 2–5 minutes (Vite build, TypeScript compilation).
 
 ---
 
@@ -227,18 +227,18 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d --no-deps api we
 
 ## WhatsApp Setup (Post-Deploy)
 
-WhatsApp credentials survive container restarts via the `whatsapp_auth` Docker volume.
+WhatsApp uses the **Meta Cloud API** — no QR code or phone linking required. Credentials are stored as environment variables or saved through the admin panel.
 
-1. Log in to the admin panel → **Settings → WhatsApp**.
-2. Click **Connect WhatsApp** — a QR code appears.
-3. Open WhatsApp on the company phone → **Linked Devices → Link a Device** → scan the QR.
-4. The status changes to **Connected**. The session is persisted in the `whatsapp_auth` volume.
-
-To reset the WhatsApp session:
-```bash
-docker compose -f docker-compose.prod.yml exec api sh -c "rm -f /app/baileys_auth/*"
-docker compose -f docker-compose.prod.yml restart api
+**Option A — Environment variables** (set in `.env` before deploying):
 ```
+WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id
+WHATSAPP_ACCESS_TOKEN=your_permanent_access_token
+WHATSAPP_API_VERSION=v20.0
+```
+
+**Option B — Admin panel**: Log in → **Settings → WhatsApp** → enter Phone Number ID and Access Token → Save.
+
+Either option enables WhatsApp notifications immediately. No container restart needed for Option B.
 
 ---
 
@@ -271,22 +271,6 @@ DO Managed MongoDB has automatic daily backups built in. For manual backups:
 ```bash
 docker run --rm -v $(pwd)/backup:/backup mongo:8 \
   mongodump --uri="$MONGODB_URI" --out=/backup/$(date +%Y%m%d)
-```
-
-### WhatsApp session backup
-
-```bash
-# Backup
-docker run --rm \
-  -v iiconacademy_whatsapp_auth:/data \
-  -v $(pwd):/backup alpine \
-  tar czf /backup/whatsapp_auth_$(date +%Y%m%d).tar.gz -C /data .
-
-# Restore
-docker run --rm \
-  -v iiconacademy_whatsapp_auth:/data \
-  -v $(pwd):/backup alpine \
-  tar xzf /backup/whatsapp_auth_YYYYMMDD.tar.gz -C /data
 ```
 
 ---

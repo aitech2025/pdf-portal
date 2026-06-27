@@ -45,11 +45,6 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.in}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-i-icon academy}
-      # WhatsApp via Baileys — auth credentials are stored in /app/baileys_auth.
-      # Mount the whatsapp_auth volume so the QR session persists across restarts.
-      WHATSAPP_AUTH_DIR: /app/baileys_auth
-    volumes:
-      - whatsapp_auth:/app/baileys_auth
     ports:
       - "8000:8000"
 
@@ -65,4 +60,3 @@ services:
 
 volumes:
   mongo_data:
-  whatsapp_auth:

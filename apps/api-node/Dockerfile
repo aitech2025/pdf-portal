@@ -1,8 +1,5 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
-# git  — required by Baileys transitive deps that are installed from GitHub URLs
-# python3 / make / g++ — required to compile native Node addons (e.g. libsignal-client)
-RUN apk add --no-cache git python3 make g++
 COPY package.json ./
 RUN npm install
 
@@ -19,8 +16,6 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
-# WhatsApp session credentials — must persist across restarts via named volume
-VOLUME ["/app/baileys_auth"]
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD wget -qO- http://localhost:8000/api/health || exit 1

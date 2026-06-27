@@ -20,14 +20,6 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@iiconacademy.in}
       SMTP_FROM_NAME: ${SMTP_FROM_NAME:-i-icon academy}
-      WHATSAPP_PHONE_NUMBER_ID=1185219464669473
-      WHATSAPP_ACCESS_TOKEN=EAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-      WHATSAPP_API_VERSION=v20.0
-      WHATSAPP_CREDENTIAL_TEMPLATE=school_account
-      WHATSAPP_NEW_CONTENT_TEMPLATE=new_content_notification
-      WHATSAPP_BROADCAST_TEMPLATE=broadcast_announcement
-    volumes:
-      - whatsapp_auth:/app/baileys_auth
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/api/health || exit 1"]
       interval: 30s
@@ -61,6 +53,5 @@ services:
       ACME_AGREE: "true"
 
 volumes:
-  whatsapp_auth:
   caddy_data:
   caddy_config:
