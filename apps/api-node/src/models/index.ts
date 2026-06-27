@@ -267,7 +267,12 @@ const SystemSettingsSchema = new Schema(
     active_email_provider: { type: String, default: "primary" },
     integrations: Schema.Types.Mixed,
     feature_flags: Schema.Types.Mixed,
-    security_settings: Schema.Types.Mixed
+    security_settings: Schema.Types.Mixed,
+    // WhatsApp Cloud API
+    whatsapp_enabled: { type: Boolean, default: false },
+    whatsapp_phone_number_id: String,
+    whatsapp_access_token: String,
+    whatsapp_api_version: { type: String, default: "v20.0" }
   },
   commonOptions
 );

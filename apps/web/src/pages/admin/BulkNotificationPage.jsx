@@ -12,8 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import PageTransition from '@/components/PageTransition.jsx';
 import PageHeader from '@/components/PageHeader.jsx';
-import { Send, Mail, MessageSquare, AlertCircle, BellRing, ChevronDown } from 'lucide-react';
+import { Send, Mail, MessageSquare, AlertCircle, BellRing, ChevronDown, CheckCircle2, XCircle, Settings, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 const EMAIL_TEMPLATES = [
   {
@@ -71,31 +72,25 @@ i-icon Academy Team`,
 const WHATSAPP_TEMPLATES = [
   {
     name: 'General Announcement',
-    message: `Dear {SchoolName},
-
-We have an important update from i-icon Academy. Please log in to the portal or check your email for full details.
-
-— i-icon Academy Team`,
+    message: `Dear {SchoolName}, we have an important update from i-icon Academy. Please log in to the portal or check your email for full details. — i-icon Academy Team`,
   },
   {
     name: 'New Content',
-    message: `Dear {SchoolName},
-
-New educational content is now available on i-icon Academy for your program. Log in to explore!
-
-— i-icon Academy Team`,
+    message: `Dear {SchoolName}, new educational content is now available on i-icon Academy for your program. Log in to explore the latest materials! — i-icon Academy Team`,
   },
   {
     name: 'Maintenance Notice',
-    message: `Dear {SchoolName}, i-icon Academy will be undergoing maintenance on [Date] from [Time] to [Time]. We apologise for any inconvenience. — i-icon Academy Team`,
+    message: `Dear {SchoolName}, i-icon Academy will undergo scheduled maintenance on [Date] from [Time] to [Time]. Access may be temporarily unavailable. We apologise for any inconvenience. — i-icon Academy Team`,
   },
   {
     name: 'Renewal Reminder',
-    message: `Dear {SchoolName}, your i-icon Academy subscription is due for renewal on [Date]. Please contact us to continue accessing your content. — i-icon Academy Team`,
+    message: `Dear {SchoolName}, your i-icon Academy subscription is due for renewal on [Date]. Please contact us at support@iiconacademy.in to ensure uninterrupted access. — i-icon Academy Team`,
   },
 ];
 
 const BulkNotificationPage = () => {
+  const navigate = useNavigate();
+
   // Compose state per channel
   const [emailSubject, setEmailSubject] = useState('');
   const [emailMessage, setEmailMessage] = useState('');
@@ -113,6 +108,10 @@ const BulkNotificationPage = () => {
   const [showEmailTemplates, setShowEmailTemplates] = useState(false);
   const [showWaTemplates, setShowWaTemplates] = useState(false);
 
+  // WhatsApp Cloud API status
+  const [waStatus, setWaStatus] = useState(null);
+  const [waStatusLoading, setWaStatusLoading] = useState(true);
+
   useEffect(() => {
     const loadSchools = async () => {
       try {
@@ -125,10 +124,26 @@ const BulkNotificationPage = () => {
         setLoadingSchools(false);
       }
     };
+    const loadWaStatus = async () => {
+      try {
+        const res = await client.fetch('/whatsapp/status', 'GET');
+        setWaStatus(res);
+      } catch {
+        setWaStatus(null);
+      } finally {
+        setWaStatusLoading(false);
+      }
+    };
     loadSchools();
+    loadWaStatus();
   }, []);
 
   const selectedSchoolsCount = useMemo(() => selectedSchoolIds.length, [selectedSchoolIds]);
+
+  const waConfigured = waStatus?.configured === true;
+  const waEnabled = waStatus?.enabled === true || waStatus?.source === 'env';
+  const waReady = waConfigured && waEnabled;
+  const waFromEnv = waStatus?.source === 'env';
 
   const toggleSchool = (id) => {
     setSelectedSchoolIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -371,6 +386,44 @@ const BulkNotificationPage = () => {
 
         {/* ── WHATSAPP TAB ───────────────────────────────────── */}
         <TabsContent value="whatsapp" className="space-y-0">
+          {/* Cloud API status banner */}
+          {waStatusLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 p-3 rounded-lg border border-border/50 bg-muted/20">
+              <Loader2 className="w-4 h-4 animate-spin" /> Checking WhatsApp configuration…
+            </div>
+          ) : !waReady ? (
+            <div className="flex items-start gap-3 mb-4 p-4 rounded-lg border border-destructive/30 bg-destructive/5">
+              <XCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-sm text-destructive">
+                  {!waConfigured ? 'WhatsApp Cloud API not configured' : 'WhatsApp messaging is disabled'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {!waConfigured
+                    ? 'Set your Phone Number ID and Access Token in Settings → WhatsApp before sending broadcasts.'
+                    : 'Enable WhatsApp messaging in Settings → WhatsApp to send broadcasts.'}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/admin/settings?tab=whatsapp')}
+                className="shrink-0 text-xs"
+              >
+                <Settings className="w-3 h-3 mr-1" /> Configure
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 mb-4 p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+              <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                WhatsApp Cloud API is active
+                {waFromEnv ? ' (credentials from environment variables)' : ` · Phone ID: ${waStatus?.phoneNumberId}`}.
+                Broadcasts use the <code className="font-mono text-xs bg-emerald-500/10 px-1 rounded">broadcast_announcement</code> template.
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               <Card className="shadow-soft border-border/50">
@@ -378,7 +431,10 @@ const BulkNotificationPage = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle>Compose WhatsApp Message</CardTitle>
-                      <CardDescription>Use {'{SchoolName}'} to personalise for each recipient. Keep messages concise.</CardDescription>
+                      <CardDescription>
+                        Use <code className="font-mono text-xs bg-muted px-1 rounded">{'{SchoolName}'}</code> to personalise.
+                        Your message is sent as the <code className="font-mono text-xs bg-muted px-1 rounded">broadcast_announcement</code> template parameter.
+                      </CardDescription>
                     </div>
                     <div className="relative">
                       <Button
@@ -414,8 +470,11 @@ const BulkNotificationPage = () => {
                       value={waMessage}
                       onChange={e => setWaMessage(e.target.value)}
                       className="bg-background resize-none text-sm"
+                      disabled={!waReady}
                     />
-                    <p className="text-xs text-muted-foreground text-right">{waMessage.length} characters</p>
+                    <p className={cn("text-xs text-right", waMessage.length > 900 ? "text-amber-500 font-medium" : "text-muted-foreground")}>
+                      {waMessage.length} / 1024 characters
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -424,7 +483,7 @@ const BulkNotificationPage = () => {
 
               <Button
                 onClick={() => handleSend('whatsapp')}
-                disabled={loading || !waMessage}
+                disabled={loading || !waMessage || !waReady}
                 className="w-full h-12 text-base bg-green-600 hover:bg-green-700 text-white"
               >
                 {loading ? 'Sending…' : <><MessageSquare className="w-4 h-4 mr-2" /> Send WhatsApp Broadcast</>}
@@ -456,9 +515,11 @@ const BulkNotificationPage = () => {
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground space-y-2">
                   <p>• Use <Badge variant="secondary" className="text-xs font-mono">{'{SchoolName}'}</Badge> for personalisation</p>
-                  <p>• WhatsApp messages are sent to the school's registered mobile number</p>
-                  <p>• Ensure WhatsApp is connected in Settings before sending</p>
-                  <p>• Keep messages under 1000 characters for best delivery</p>
+                  <p>• Sent via Meta Cloud API using the <code className="text-xs font-mono bg-muted px-1 rounded">broadcast_announcement</code> template</p>
+                  <p>• Messages reach schools even without a prior 24-hour service window</p>
+                  <p>• Keep message under 1024 characters (template parameter limit)</p>
+                  <p>• Delivered to the school's registered mobile number</p>
+                  <p>• Configure credentials in <button onClick={() => navigate('/admin/settings?tab=whatsapp')} className="text-primary hover:underline">Settings → WhatsApp</button></p>
                 </CardContent>
               </Card>
             </div>

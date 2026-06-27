@@ -21,13 +21,73 @@ const NotificationCenter = () => {
 
   const [activeTab, setActiveTab] = useState('all');
 
-  const filtered = notifications.filter((n) => {
-    if (activeTab === 'unread') return !n.read;
-    if (activeTab === 'read') return n.read;
-    return true;
-  });
+  const allNotifs   = notifications;
+  const unreadNotifs = notifications.filter((n) => !n.read);
+  const readNotifs  = notifications.filter((n) => n.read);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = unreadNotifs.length;
+
+  const renderList = (items) => {
+    if (loading) {
+      return [1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />);
+    }
+    if (items.length === 0) {
+      return (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Bell className="w-12 h-12 mx-auto mb-4 opacity-30" />
+            <p className="font-medium">
+              {notifications.length === 0 ? 'No messages yet.' : 'No messages in this tab.'}
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+    return items.map((n) => (
+      <Card key={n.id} className={cn(!n.read && 'border-primary/30 bg-primary/5')}>
+        <CardContent className="p-4 flex gap-4">
+          <div className="shrink-0 mt-1">
+            {n.read ? (
+              <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-primary" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="font-semibold truncate">{n.subject}</p>
+              {!n.read && <Badge className="text-[10px] shrink-0">New</Badge>}
+            </div>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{n.message}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {n.created ? new Date(n.created).toLocaleString() : ''}
+              {n.notificationMethod && ` · ${n.notificationMethod}`}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 shrink-0">
+            {!n.read && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => markAsRead(n.id)}
+                title="Mark read"
+              >
+                <Check className="w-4 h-4" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => deleteNotification(n.id)}
+              title="Delete"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    ));
+  };
 
   return (
     <PageTransition>
@@ -58,7 +118,7 @@ const NotificationCenter = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="all">All ({notifications.length})</TabsTrigger>
+          <TabsTrigger value="all">All ({allNotifs.length})</TabsTrigger>
           <TabsTrigger value="unread">
             Unread
             {unreadCount > 0 && (
@@ -70,66 +130,16 @@ const NotificationCenter = () => {
           <TabsTrigger value="read">Read</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="mt-6 space-y-3">
-          {loading ? (
-            [1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full" />)
-          ) : filtered.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <Bell className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                <p className="font-medium">
-                  {notifications.length === 0
-                    ? 'No messages yet.'
-                    : 'No messages in this tab.'}
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            filtered.map((n) => (
-              <Card key={n.id} className={cn(!n.read && 'border-primary/30 bg-primary/5')}>
-                <CardContent className="p-4 flex gap-4">
-                  <div className="shrink-0 mt-1">
-                    {n.read ? (
-                      <CheckCircle2 className="w-5 h-5 text-muted-foreground" />
-                    ) : (
-                      <AlertCircle className="w-5 h-5 text-primary" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-semibold truncate">{n.subject}</p>
-                      {!n.read && <Badge className="text-[10px] shrink-0">New</Badge>}
-                    </div>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{n.message}</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {n.created ? new Date(n.created).toLocaleString() : ''}
-                      {n.notificationMethod && ` · ${n.notificationMethod}`}
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-2 shrink-0">
-                    {!n.read && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => markAsRead(n.id)}
-                        title="Mark read"
-                      >
-                        <Check className="w-4 h-4" />
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteNotification(n.id)}
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
+        <TabsContent value="all" className="mt-6 space-y-3">
+          {renderList(allNotifs)}
+        </TabsContent>
+
+        <TabsContent value="unread" className="mt-6 space-y-3">
+          {renderList(unreadNotifs)}
+        </TabsContent>
+
+        <TabsContent value="read" className="mt-6 space-y-3">
+          {renderList(readNotifs)}
         </TabsContent>
       </Tabs>
     </PageTransition>

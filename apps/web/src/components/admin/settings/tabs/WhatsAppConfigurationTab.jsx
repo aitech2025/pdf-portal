@@ -1,187 +1,68 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { SettingSection, InputSetting } from '../SettingComponents.jsx';
+import { SettingSection, InputSetting, PasswordField, ToggleSetting } from '../SettingComponents.jsx';
 import {
-  Send, RefreshCw, Wifi, WifiOff, QrCode, CheckCircle2,
-  Loader2, MessageCircle, Phone, AlertCircle, Smartphone, XCircle
+  Send, RefreshCw, CheckCircle2, Loader2, MessageCircle,
+  XCircle, Info
 } from 'lucide-react';
 import { toast } from 'sonner';
 import pb from '@/lib/apiClient';
 
-const STATUS_LABELS = {
-  disconnected: { label: 'Disconnected',  Icon: WifiOff },
-  connecting:   { label: 'Connecting…',   Icon: Loader2 },
-  qr_ready:     { label: 'Scan QR Code',  Icon: QrCode },
-  connected:    { label: 'Connected',     Icon: CheckCircle2 },
-};
-
-const WhatsAppConfigurationTab = () => {
-  const [waStatus, setWaStatus] = useState({
-    status: 'disconnected', qrDataUrl: null, phone: null, lastError: null,
-  });
-  const [connecting, setConnecting] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
+const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
+  const [cloudStatus, setCloudStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(true);
   const [testNumber, setTestNumber] = useState('');
   const [testing, setTesting] = useState(false);
-  const [connectingSeconds, setConnectingSeconds] = useState(0);
+  const [form, setForm] = useState({
+    whatsappEnabled: false,
+    whatsappPhoneNumberId: '',
+    whatsappAccessToken: '',
+    whatsappApiVersion: 'v20.0',
+  });
 
-  // All interval/timer handles live in refs so they never go stale in closures
-  const pollIntervalRef = useRef(null);   // main status poll
-  const countIntervalRef = useRef(null);  // elapsed-seconds counter
-  const pollModeRef = useRef('off');      // 'fast' | 'slow' | 'off'
-  const watchEndRef = useRef(0);          // epoch ms when slow-poll should stop
-
-  // ── helpers ────────────────────────────────────────────────────────────────
-
-  const clearPoll = useCallback(() => {
-    if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null; }
-    if (countIntervalRef.current) { clearInterval(countIntervalRef.current); countIntervalRef.current = null; }
-    pollModeRef.current = 'off';
-    setConnectingSeconds(0);
-  }, []);
-
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = async () => {
+    setStatusLoading(true);
     try {
       const res = await pb.fetch('/whatsapp/status', 'GET');
-      if (res) setWaStatus(res);
-      return res;
+      setCloudStatus(res);
     } catch {
-      return null;
-    }
-  }, []);
-
-  // Handle a freshly fetched status — decides whether to change poll mode
-  const handleStatusResult = useCallback((res) => {
-    if (!res) return;
-    const s = res.status;
-
-    if (s === 'connected') {
-      // Done — stop all polling
-      clearPoll();
-      return;
-    }
-
-    if (s === 'connecting' || s === 'qr_ready') {
-      // Active connection attempt — ensure fast poll is running
-      if (pollModeRef.current !== 'fast') {
-        clearPoll();
-        pollModeRef.current = 'fast';
-        pollIntervalRef.current = setInterval(async () => {
-          const r = await pb.fetch('/whatsapp/status', 'GET').catch(() => null);
-          if (!r) return;
-          setWaStatus(r);
-          if (r.status === 'connected') {
-            clearInterval(pollIntervalRef.current); pollIntervalRef.current = null;
-            if (countIntervalRef.current) { clearInterval(countIntervalRef.current); countIntervalRef.current = null; }
-            pollModeRef.current = 'off';
-            setConnectingSeconds(0);
-          } else if (r.status !== 'connecting' && r.status !== 'qr_ready') {
-            // Went disconnected — switch to slow reconnect-watch
-            clearInterval(pollIntervalRef.current); pollIntervalRef.current = null;
-            if (countIntervalRef.current) { clearInterval(countIntervalRef.current); countIntervalRef.current = null; }
-            setConnectingSeconds(0);
-            pollModeRef.current = 'slow';
-            watchEndRef.current = Date.now() + 90_000; // watch for 90 s
-            pollIntervalRef.current = setInterval(async () => {
-              if (Date.now() > watchEndRef.current) {
-                clearInterval(pollIntervalRef.current); pollIntervalRef.current = null;
-                pollModeRef.current = 'off';
-                return;
-              }
-              const r2 = await pb.fetch('/whatsapp/status', 'GET').catch(() => null);
-              if (!r2) return;
-              setWaStatus(r2);
-              // If backend auto-reconnected, handleStatusResult will switch back to fast mode
-              if (r2.status === 'connecting' || r2.status === 'qr_ready' || r2.status === 'connected') {
-                clearInterval(pollIntervalRef.current); pollIntervalRef.current = null;
-                pollModeRef.current = 'off';
-                // Trigger a mode switch via the outer logic on next render
-              }
-            }, 4000);
-          }
-
-          if (r.status === 'connecting' && !countIntervalRef.current) {
-            countIntervalRef.current = setInterval(() => setConnectingSeconds(s => s + 1), 1000);
-          }
-          if (r.status === 'qr_ready' && countIntervalRef.current) {
-            clearInterval(countIntervalRef.current); countIntervalRef.current = null;
-            setConnectingSeconds(0);
-          }
-        }, 1500);
-      }
-
-      // Start / stop the elapsed counter
-      if (s === 'connecting' && !countIntervalRef.current) {
-        countIntervalRef.current = setInterval(() => setConnectingSeconds(n => n + 1), 1000);
-      }
-      if (s === 'qr_ready' && countIntervalRef.current) {
-        clearInterval(countIntervalRef.current); countIntervalRef.current = null;
-        setConnectingSeconds(0);
-      }
-    }
-  }, [clearPoll]);
-
-  // ── mount / unmount ────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    fetchStatus().then(handleStatusResult);
-    return clearPoll;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // When the status returned in state changes, re-evaluate poll mode
-  useEffect(() => {
-    handleStatusResult(waStatus);
-  }, [waStatus.status]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── actions ────────────────────────────────────────────────────────────────
-
-  const handleConnect = async () => {
-    setConnecting(true);
-    try {
-      await pb.fetch('/whatsapp/connect', 'POST');
-      // Kick off several quick fetches to catch fast QR generation
-      for (const delay of [0, 800, 2000, 4000, 7000]) {
-        setTimeout(async () => {
-          const r = await fetchStatus();
-          handleStatusResult(r);
-        }, delay);
-      }
-    } catch (err) {
-      toast.error(err.message || 'Failed to start WhatsApp connection');
+      setCloudStatus(null);
     } finally {
-      setConnecting(false);
+      setStatusLoading(false);
     }
   };
 
-  const handleDisconnect = async () => {
-    if (!confirm('This will log out the linked WhatsApp number and clear the session. You will need to scan a new QR code to reconnect. Continue?')) return;
-    setDisconnecting(true);
-    try {
-      await pb.fetch('/whatsapp/disconnect', 'POST');
-      setWaStatus({ status: 'disconnected', qrDataUrl: null, phone: null, lastError: null });
-      clearPoll();
-      toast.success('WhatsApp disconnected and session cleared');
-    } catch (err) {
-      toast.error(err.message || 'Failed to disconnect');
-    } finally {
-      setDisconnecting(false);
+  useEffect(() => { fetchStatus(); }, []);
+
+  useEffect(() => {
+    if (settings) {
+      setForm({
+        whatsappEnabled: settings.whatsappEnabled ?? false,
+        whatsappPhoneNumberId: settings.whatsappPhoneNumberId ?? '',
+        whatsappAccessToken: settings.whatsappAccessToken ?? '',
+        whatsappApiVersion: settings.whatsappApiVersion ?? 'v20.0',
+      });
     }
+  }, [settings]);
+
+  const handleSave = async () => {
+    await onSave('whatsapp', form);
+    setTimeout(fetchStatus, 600);
   };
 
   const handleTest = async () => {
     if (!testNumber) { toast.error('Enter a phone number'); return; }
-    if (waStatus.status !== 'connected') { toast.error('WhatsApp must be connected first'); return; }
     setTesting(true);
     try {
-      const settings = await pb.fetch('/systemSettings', 'GET');
-      const id = settings?.items?.[0]?.id;
+      const settingsRes = await pb.fetch('/systemSettings', 'GET');
+      const id = settingsRes?.items?.[0]?.id;
       if (!id) { toast.error('Save system settings first'); return; }
       const res = await pb.fetch(`/systemSettings/${id}/test-whatsapp`, 'POST', { to: testNumber });
       if (res?.ok) {
-        toast.success(`Test message sent to ${testNumber}`);
+        toast.success(`Test WhatsApp sent to ${testNumber}`);
       } else {
-        toast.error(res?.message || 'Delivery failed');
+        toast.error(res?.message || 'Delivery failed — check server logs for details');
       }
     } catch (err) {
       toast.error(err.message || 'Failed to send test message');
@@ -190,183 +71,200 @@ const WhatsAppConfigurationTab = () => {
     }
   };
 
-  // ── derived state ──────────────────────────────────────────────────────────
-
-  const info = STATUS_LABELS[waStatus.status] ?? STATUS_LABELS.disconnected;
-  const isConnected   = waStatus.status === 'connected';
-  const isQrReady     = waStatus.status === 'qr_ready';
-  const isConnecting  = waStatus.status === 'connecting';
-  const isBusy        = connecting || disconnecting;
-  const showQrPanel   = isQrReady || isConnecting;
-  const connectingTooLong = connectingSeconds > 25;
-  const hasError      = waStatus.status === 'disconnected' && !!waStatus.lastError;
+  const fromEnv = cloudStatus?.source === 'env';
+  const isConfigured = cloudStatus?.configured === true;
+  const isEnabled = form.whatsappEnabled;
+  const canTest = isConfigured && isEnabled;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <Card className="border-border/50 shadow-soft-sm">
         <CardContent className="p-6 space-y-6">
 
-          {/* ── Status header ─────────────────────────────────────────────── */}
+          {/* ── Configuration Status ─────────────────────────────────────────── */}
           <SettingSection
-            title="WhatsApp via Baileys"
-            description="Sends WhatsApp messages directly from a company-owned WhatsApp number using the WhatsApp Web protocol. No third-party API keys required — scan a QR code once with your company phone."
+            title="WhatsApp Cloud API"
+            description="Send WhatsApp messages via the official Meta Cloud API. No QR scanning required — uses a permanent system-user access token."
           >
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-3">
-                <info.Icon className={`w-5 h-5 ${isConnecting ? 'animate-spin' : ''} ${isConnected ? 'text-emerald-500' : 'text-muted-foreground'}`} />
-                <div>
-                  <p className="font-medium text-sm">{info.label}</p>
-                  {isConnected && waStatus.phone && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> +{waStatus.phone}
-                    </p>
+            {statusLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" /> Checking configuration…
+              </div>
+            ) : (
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  {isConfigured ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-destructive" />
                   )}
-                  {isQrReady && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      Open WhatsApp on your phone → Linked Devices → Link a Device
+                  <div>
+                    <p className="font-medium text-sm">
+                      {isConfigured ? 'Cloud API Configured' : 'Not Configured'}
                     </p>
-                  )}
-                  {isConnecting && (
                     <p className="text-xs text-muted-foreground">
-                      Generating QR code{connectingSeconds > 0 ? ` (${connectingSeconds}s)` : '…'}
+                      {fromEnv
+                        ? `Credentials from environment variables · Phone ID: ${cloudStatus?.phoneNumberId}`
+                        : isConfigured
+                          ? `Credentials stored in database · Phone ID: ${cloudStatus?.phoneNumberId}`
+                          : 'Set credentials below or via environment variables'}
                     </p>
-                  )}
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" onClick={() => fetchStatus().then(handleStatusResult)} title="Refresh status" className="h-8 w-8">
-                  <RefreshCw className={`w-4 h-4 ${pollModeRef.current === 'fast' ? 'animate-spin' : ''}`} />
+                <Button variant="ghost" size="icon" onClick={fetchStatus} title="Refresh status" className="h-8 w-8">
+                  <RefreshCw className="w-4 h-4" />
                 </Button>
-
-                {isConnected ? (
-                  <Button
-                    variant="outline" size="sm"
-                    onClick={handleDisconnect}
-                    disabled={isBusy}
-                    className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                  >
-                    {disconnecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <WifiOff className="w-4 h-4 mr-2" />}
-                    Disconnect
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={handleConnect}
-                    disabled={isBusy || isConnecting || isQrReady}
-                  >
-                    {connecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wifi className="w-4 h-4 mr-2" />}
-                    {isConnecting ? 'Generating QR…' : isQrReady ? 'Waiting for scan…' : 'Connect WhatsApp'}
-                  </Button>
-                )}
               </div>
-            </div>
+            )}
 
-            {/* Connected banner */}
-            {isConnected && (
-              <div className="mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                  WhatsApp is linked and ready. Messages will be delivered through the company number.
-                  The session persists across server restarts — no need to scan again.
+            {fromEnv && (
+              <div className="mt-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-start gap-2">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-blue-700 dark:text-blue-400">
+                  Credentials are set via environment variables and cannot be edited here.
+                  Update <code className="font-mono text-xs bg-blue-500/10 px-1 rounded">WHATSAPP_PHONE_NUMBER_ID</code> and{' '}
+                  <code className="font-mono text-xs bg-blue-500/10 px-1 rounded">WHATSAPP_ACCESS_TOKEN</code> in your{' '}
+                  <code className="font-mono text-xs">.env</code> file to change them.
                 </p>
               </div>
             )}
 
-            {/* Connection error */}
-            {hasError && (
-              <div className="mt-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-start gap-2">
-                <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-medium text-destructive">Connection failed</p>
-                  <p className="text-xs mt-0.5 text-destructive/80">{waStatus.lastError}</p>
-                  <p className="text-xs mt-1 text-muted-foreground">
-                    The server retries automatically. Click "Connect WhatsApp" to retry now.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Timeout warning */}
-            {isConnecting && connectingTooLong && (
-              <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-700 dark:text-amber-400">
-                  <p className="font-medium">Taking longer than expected</p>
-                  <p className="text-xs mt-0.5">
-                    Check that the server can reach WhatsApp servers (edge.whatsapp.net on port 443).
-                  </p>
-                </div>
+            {isConfigured && isEnabled && (
+              <div className="mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                  WhatsApp Cloud API is active. School credential delivery, new content alerts,
+                  and broadcasts will be sent via WhatsApp.
+                </p>
               </div>
             )}
           </SettingSection>
 
-          {/* ── QR Code panel ─────────────────────────────────────────────── */}
-          {showQrPanel && (
+          {/* ── Enable / Disable ──────────────────────────────────────────────── */}
+          <SettingSection
+            title="Enable WhatsApp Notifications"
+            description={
+              fromEnv
+                ? 'Credentials are loaded from environment variables — WhatsApp is always active when env vars are set. This toggle has no effect on env-based credentials.'
+                : 'Toggle WhatsApp delivery globally. When disabled, no WhatsApp messages are sent even if credentials are configured.'
+            }
+          >
+            <ToggleSetting
+              label="WhatsApp Messaging"
+              description={
+                fromEnv
+                  ? 'Always enabled when credentials come from environment variables.'
+                  : isConfigured
+                    ? 'Send WhatsApp messages to school admins for credential delivery, content alerts, and broadcasts.'
+                    : 'Configure credentials below before enabling.'
+              }
+              checked={fromEnv ? true : isEnabled}
+              onCheckedChange={fromEnv ? undefined : (v) => setForm(f => ({ ...f, whatsappEnabled: v }))}
+              disabled={saving || fromEnv}
+            />
+          </SettingSection>
+
+          {/* ── Credentials (DB-sourced only) ─────────────────────────────────── */}
+          {!fromEnv && (
             <SettingSection
-              title="Scan QR Code"
-              description="Open WhatsApp on your company phone → tap ⋮ Menu → Linked Devices → Link a Device → scan this QR. The QR refreshes every ~20 seconds."
+              title="API Credentials"
+              description="Meta WhatsApp Cloud API credentials. Get these from Meta Developer Portal → Your App → WhatsApp → API Setup."
             >
-              <div className="flex flex-col items-center gap-4">
-                {isQrReady && waStatus.qrDataUrl ? (
-                  <>
-                    <div className="p-4 bg-white rounded-2xl shadow-md border border-border/50 inline-block">
-                      <img
-                        src={waStatus.qrDataUrl}
-                        alt="WhatsApp QR Code — scan with your phone"
-                        className="w-64 h-64 block"
-                      />
-                    </div>
-                    <div className="flex items-start gap-2 max-w-sm text-center">
-                      <Smartphone className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                      <p className="text-xs text-muted-foreground">
-                        WhatsApp → <strong>⋮ Menu</strong> → <strong>Linked Devices</strong> → <strong>Link a Device</strong> → Scan above QR
-                      </p>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground/60">
-                      QR refreshes automatically if it expires before scanning
-                    </p>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center gap-3 py-8">
-                    <div className="w-64 h-64 border-2 border-dashed border-border/50 rounded-2xl flex flex-col items-center justify-center gap-3 bg-muted/20">
-                      <Loader2 className="w-10 h-10 animate-spin text-primary/50" />
-                      <p className="text-sm text-muted-foreground font-medium">Generating QR code…</p>
-                      <p className="text-xs text-muted-foreground/70 text-center px-6">
-                        Connecting to WhatsApp servers. This usually takes 2–5 seconds.
-                      </p>
-                    </div>
-                  </div>
-                )}
+              <div className="space-y-4">
+                <InputSetting
+                  label="Phone Number ID"
+                  value={form.whatsappPhoneNumberId}
+                  onChange={e => setForm(f => ({ ...f, whatsappPhoneNumberId: e.target.value }))}
+                  placeholder="123456789012345"
+                  description="Found in Meta Developer Portal → WhatsApp → API Setup (this is the numeric ID, not the phone number itself)"
+                  disabled={saving}
+                />
+                <PasswordField
+                  label="Access Token"
+                  value={form.whatsappAccessToken}
+                  onChange={e => setForm(f => ({ ...f, whatsappAccessToken: e.target.value }))}
+                  placeholder="EAAxxxxxxxxxxxxxxxxxxxxx…"
+                  disabled={saving}
+                />
+                <InputSetting
+                  label="API Version"
+                  value={form.whatsappApiVersion}
+                  onChange={e => setForm(f => ({ ...f, whatsappApiVersion: e.target.value }))}
+                  placeholder="v20.0"
+                  description="Keep at v20.0 unless Meta requires a newer version"
+                  disabled={saving}
+                />
               </div>
             </SettingSection>
           )}
 
-          {/* ── Notification events ───────────────────────────────────────── */}
+          {/* ── Save button ───────────────────────────────────────────────────── */}
+          <div className="flex justify-end pt-2">
+            <Button onClick={handleSave} disabled={saving} className="shadow-soft-sm">
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {saving ? 'Saving…' : 'Save Settings'}
+            </Button>
+          </div>
+
+          {/* ── Message Templates ─────────────────────────────────────────────── */}
+          <SettingSection
+            title="Active Message Templates"
+            description="Pre-approved Meta templates used for WhatsApp delivery. Template names are configured via environment variables."
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                {
+                  label: 'Credential Delivery',
+                  value: 'school_account',
+                  description: 'Sent when a school admin account is created',
+                },
+                {
+                  label: 'New Content Alert',
+                  value: 'new_content_notification',
+                  description: 'Sent when a PDF is uploaded for a school\'s program',
+                },
+                {
+                  label: 'Broadcast',
+                  value: 'broadcast_announcement',
+                  description: 'Sent when admin broadcasts to schools via WhatsApp',
+                },
+              ].map(t => (
+                <div key={t.value} className="p-3 rounded-lg border border-border/50 bg-card/50">
+                  <p className="font-medium text-sm text-foreground">{t.label}</p>
+                  <p className="text-xs font-mono text-primary mt-1">{t.value}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t.description}</p>
+                </div>
+              ))}
+            </div>
+          </SettingSection>
+
+          {/* ── Notification Events ───────────────────────────────────────────── */}
           <SettingSection
             title="Notification Events"
-            description="WhatsApp messages are sent for these events when connected."
+            description="WhatsApp messages are delivered for these events when the API is configured and enabled."
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
-                'School onboarding (credential delivery)',
-                'User creation (credential delivery)',
+                'School onboarding — credential delivery (template)',
+                'User creation — credential delivery (template)',
+                'New PDF uploaded — content alert (template)',
+                'Platform broadcast — announcement (template)',
                 'Password reset (admin-triggered)',
-                'Forgot password (self-service)',
                 'School onboarding approval / rejection',
-                'User request approval / rejection',
-                'Account deactivation',
               ].map(event => (
                 <div key={event} className="flex items-center gap-2 text-sm text-foreground">
-                  <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <MessageCircle className={`w-4 h-4 shrink-0 ${canTest ? 'text-emerald-500' : 'text-muted-foreground/50'}`} />
                   {event}
                 </div>
               ))}
             </div>
           </SettingSection>
 
-          {/* ── Test message ──────────────────────────────────────────────── */}
-          <SettingSection title="Send Test Message" description="Verify delivery by sending a test message to any WhatsApp number.">
+          {/* ── Test Message ──────────────────────────────────────────────────── */}
+          <SettingSection
+            title="Send Test Message"
+            description="Send a test template message to verify your Cloud API credentials. Uses the school_account template with sample values."
+          >
             <div className="flex items-end gap-3 max-w-md">
               <div className="flex-1">
                 <InputSetting
@@ -374,22 +272,27 @@ const WhatsAppConfigurationTab = () => {
                   value={testNumber}
                   onChange={e => setTestNumber(e.target.value)}
                   placeholder="+919876543210"
-                  description="Include country code, e.g. +91 for India."
-                  disabled={testing || !isConnected}
+                  description="Include country code (e.g. +91 for India). Must have WhatsApp installed."
+                  disabled={testing || !canTest}
                 />
               </div>
               <Button
                 variant="outline"
                 onClick={handleTest}
-                disabled={testing || !isConnected || !testNumber}
+                disabled={testing || !canTest || !testNumber}
                 className="mb-6 shrink-0 bg-background"
               >
-                {testing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                {testing
+                  ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  : <Send className="w-4 h-4 mr-2" />}
                 {testing ? 'Sending…' : 'Send Test'}
               </Button>
             </div>
-            {!isConnected && (
-              <p className="text-xs text-muted-foreground">Connect WhatsApp first to send a test message.</p>
+            {!isConfigured && (
+              <p className="text-xs text-destructive">Configure credentials above to enable test messages.</p>
+            )}
+            {isConfigured && !isEnabled && (
+              <p className="text-xs text-muted-foreground">Enable WhatsApp messaging above, then save to send test messages.</p>
             )}
           </SettingSection>
 

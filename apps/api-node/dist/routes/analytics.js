@@ -1,13 +1,14 @@
-import { AnalyticsEvent, AuthToken, DownloadLog, OnboardingRequest, Pdf, School, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, User, ViewLog } from "../models/index.js";
+import { AnalyticsEvent, AuthToken, Category, DownloadLog, OnboardingRequest, Pdf, School, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, User, ViewLog } from "../models/index.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
 export const registerAnalyticsRoutes = async (app) => {
     app.get("/api/dashboard", { preHandler: requireAuth }, async () => {
-        const [user_count, school_count, active_school_count, pdf_count, pending_onboarding, active_sessions, storageAgg] = await Promise.all([
+        const [user_count, school_count, active_school_count, pdf_count, total_downloads, pending_onboarding, active_sessions, storageAgg] = await Promise.all([
             User.countDocuments(),
             School.countDocuments(),
             School.countDocuments({ is_active: true }),
             Pdf.countDocuments({ deleted_at: null }),
+            DownloadLog.countDocuments(),
             OnboardingRequest.countDocuments({ status: "pending" }),
             AuthToken.countDocuments({
                 token_type: "refresh",
@@ -45,6 +46,7 @@ export const registerAnalyticsRoutes = async (app) => {
             active_school_count,
             inactive_school_count: school_count - active_school_count,
             pdf_count,
+            total_downloads,
             pending_onboarding,
             active_sessions,
             top_downloads: topDownloads,
@@ -55,6 +57,47 @@ export const registerAnalyticsRoutes = async (app) => {
                 files: s.files
             }))
         };
+    });
+    app.get("/api/analytics/timeseries", { preHandler: requirePermission(PERMISSIONS.ANALYTICS_VIEW) }, async (request) => {
+        const rawDays = parseInt(request.query.days ?? "30", 10);
+        const days = Math.min(Math.max(isNaN(rawDays) ? 30 : rawDays, 1), 730);
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const dateRange = [];
+        for (let i = days - 1; i >= 0; i--) {
+            const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+            dateRange.push(d.toISOString().slice(0, 10));
+        }
+        const [downloadsAgg, registrationsAgg, topCatsAgg] = await Promise.all([
+            DownloadLog.aggregate([
+                { $match: { downloaded_at: { $gte: since } } },
+                { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$downloaded_at" } }, count: { $sum: 1 } } },
+                { $sort: { _id: 1 } }
+            ]),
+            User.aggregate([
+                { $match: { created: { $gte: since } } },
+                { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$created" } }, count: { $sum: 1 } } },
+                { $sort: { _id: 1 } }
+            ]),
+            DownloadLog.aggregate([
+                { $match: { downloaded_at: { $gte: since } } },
+                { $group: { _id: "$category_id", count: { $sum: 1 } } },
+                { $sort: { count: -1 } },
+                { $limit: 10 }
+            ])
+        ]);
+        const dlMap = new Map(downloadsAgg.map((d) => [d._id, d.count]));
+        const regMap = new Map(registrationsAgg.map((d) => [d._id, d.count]));
+        const downloads_per_day = dateRange.map(date => ({ date, count: dlMap.get(date) ?? 0 }));
+        const registrations_per_day = dateRange.map(date => ({ date, count: regMap.get(date) ?? 0 }));
+        const catIds = topCatsAgg.map((c) => c._id).filter(Boolean);
+        const catDocs = catIds.length ? await Category.find({ id: { $in: catIds } }).lean() : [];
+        const catNameMap = new Map(catDocs.map((c) => [c.id, c.category_name]));
+        const top_categories = topCatsAgg.map((c) => ({
+            category_id: c._id,
+            category_name: catNameMap.get(c._id) ?? "Unknown",
+            count: c.count
+        }));
+        return { days, downloads_per_day, registrations_per_day, top_categories };
     });
     app.get("/api/analytics/overview", { preHandler: requirePermission(PERMISSIONS.ANALYTICS_VIEW) }, async () => {
         const byEvent = await AnalyticsEvent.aggregate([{ $group: { _id: "$event_type", count: { $sum: 1 } } }]);

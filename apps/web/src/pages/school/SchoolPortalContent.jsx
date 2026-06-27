@@ -61,10 +61,10 @@ const SchoolPortalContent = ({ school }) => {
   const [currentPdf, setCurrentPdf] = useState(null);
   const [selectedPdfIds, setSelectedPdfIds] = useState([]);
 
-  const authHeader = { Authorization: `Bearer ${pb.authStore.token}` };
+  const getAuthHeader = () => ({ Authorization: `Bearer ${pb.authStore.token}` });
 
   const apiFetch = async (url) => {
-    const res = await fetch(url, { headers: authHeader });
+    const res = await fetch(url, { headers: getAuthHeader() });
     if (!res.ok) throw new Error(`Request failed: ${url}`);
     return res.json();
   };
@@ -227,7 +227,7 @@ const SchoolPortalContent = ({ school }) => {
   const handleDownloadSingle = async (pdf, e) => {
     e?.stopPropagation();
     try {
-      const res = await fetch(`/api/pdfs/${pdf.id}/download`, { headers: authHeader });
+      const res = await fetch(`/api/pdfs/${pdf.id}/download`, { headers: getAuthHeader() });
       if (!res.ok) throw new Error('Download failed');
       const blob = await res.blob();
       const link = document.createElement('a');
@@ -248,7 +248,7 @@ const SchoolPortalContent = ({ school }) => {
     try {
       await fetch('/api/favorites', {
         method: 'POST',
-        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdfId: pdf.id })
       });
       toast.success('Added to bookmarks');
@@ -265,7 +265,7 @@ const SchoolPortalContent = ({ school }) => {
       const archiveName = `content-bundle.zip`;
       const res = await fetch('/api/pdfs/bulk-download', {
         method: 'POST',
-        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids, archiveName })
       });
       if (!res.ok) {

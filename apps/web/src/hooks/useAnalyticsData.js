@@ -3,6 +3,25 @@ import { useState, useEffect } from 'react';
 import pb from '@/lib/apiClient';
 import { toast } from 'sonner';
 
+const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 };
+
+function parseDays(dateRange) {
+  return RANGE_DAYS[dateRange] ?? 30;
+}
+
+function formatDate(isoDate) {
+  return new Date(isoDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function sumCounts(arr) {
+  return arr.reduce((s, d) => s + (d.count ?? 0), 0);
+}
+
+function calcGrowth(prev, curr) {
+  if (!prev) return curr > 0 ? 100 : 0;
+  return Math.round(((curr - prev) / prev) * 100);
+}
+
 export function useAnalyticsData(dateRange = '30d') {
   const [data, setData] = useState({
     overview: {
@@ -30,52 +49,55 @@ export function useAnalyticsData(dateRange = '30d') {
     const fetchAnalytics = async () => {
       setLoading(true);
       try {
-        // In a real app, this would use complex aggregations or a dedicated endpoint.
-        // For this implementation, we'll fetch basic counts to populate the dashboard.
-        const [users, pdfs, downloads, schools] = await Promise.all([
-          pb.collection('users').getList(1, 1, { $autoCancel: false }),
-          pb.collection('pdfs').getList(1, 1, { $autoCancel: false }),
-          pb.collection('downloadLogs').getList(1, 1, { $autoCancel: false }),
-          pb.collection('schools').getList(1, 1, { $autoCancel: false })
+        const days = parseDays(dateRange);
+        // Fetch double the period so we can compare current vs prior for growth %
+        const [dashboard, timeseries] = await Promise.all([
+          pb.fetch('/dashboard', 'GET'),
+          pb.fetch('/analytics/timeseries', 'GET', null, { days: days * 2 })
         ]);
 
-        // Mock chart data for demonstration
-        const mockUserGrowth = Array.from({ length: 7 }).map((_, i) => ({
-          name: `Day ${i + 1}`,
-          users: Math.floor(Math.random() * 100) + 50
-        }));
+        const dlAll = timeseries?.downloads_per_day ?? [];
+        const regAll = timeseries?.registrations_per_day ?? [];
 
-        const mockDownloads = Array.from({ length: 7 }).map((_, i) => ({
-          name: `Day ${i + 1}`,
-          downloads: Math.floor(Math.random() * 500) + 100
+        // First half = prior period, second half = current period
+        const prevDlSum = sumCounts(dlAll.slice(0, days));
+        const currDlSum = sumCounts(dlAll.slice(days));
+        const prevRegSum = sumCounts(regAll.slice(0, days));
+        const currRegSum = sumCounts(regAll.slice(days));
+
+        const userGrowthData = regAll.slice(days).map(d => ({
+          name: formatDate(d.date),
+          users: d.count
+        }));
+        const downloadTrendData = dlAll.slice(days).map(d => ({
+          name: formatDate(d.date),
+          downloads: d.count
+        }));
+        const topCategoriesData = (timeseries?.top_categories ?? []).map(c => ({
+          name: c.category_name,
+          value: c.count
         }));
 
         setData({
           overview: {
-            totalUsers: users.totalItems,
-            totalPdfs: pdfs.totalItems,
-            totalDownloads: downloads.totalItems,
-            totalSchools: schools.totalItems,
-            activeUsersToday: Math.floor(users.totalItems * 0.1),
-            newRegistrations: Math.floor(users.totalItems * 0.05),
-            userGrowth: 12,
-            pdfGrowth: 8,
-            downloadGrowth: -3,
-            schoolGrowth: 5
+            totalUsers: dashboard?.user_count ?? 0,
+            totalPdfs: dashboard?.pdf_count ?? 0,
+            totalDownloads: dashboard?.total_downloads ?? 0,
+            totalSchools: dashboard?.school_count ?? 0,
+            activeUsersToday: dashboard?.active_sessions ?? 0,
+            newRegistrations: currRegSum,
+            userGrowth: calcGrowth(prevRegSum, currRegSum),
+            pdfGrowth: 0,
+            downloadGrowth: calcGrowth(prevDlSum, currDlSum),
+            schoolGrowth: 0
           },
           charts: {
-            userGrowth: mockUserGrowth,
-            downloadTrends: mockDownloads,
-            topCategories: [
-              { name: 'Math', value: 400 },
-              { name: 'Science', value: 300 },
-              { name: 'History', value: 200 },
-              { name: 'Art', value: 100 }
-            ],
+            userGrowth: userGrowthData,
+            downloadTrends: downloadTrendData,
+            topCategories: topCategoriesData,
             schoolDistribution: [
-              { name: 'Public', value: 60 },
-              { name: 'Private', value: 30 },
-              { name: 'Charter', value: 10 }
+              { name: 'Active', value: dashboard?.active_school_count ?? 0 },
+              { name: 'Inactive', value: dashboard?.inactive_school_count ?? 0 }
             ]
           }
         });

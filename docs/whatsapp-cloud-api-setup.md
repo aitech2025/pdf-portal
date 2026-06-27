@@ -4,6 +4,8 @@
 **Provider:** Meta WhatsApp Cloud API (official, production-grade)  
 **Last validated:** June 2026  
 
+EAAUZCwts5UbUBR9jotZCesduD77IQC3sfHSwyHayrvUvBNpVDg5ZCMZBwrrxveySCQBqnrh8MX7DAwrq4y3wXrZBIhV4GucILZAcTSzARAuic5ZCJoZAAe4CSZBAmPcZC8fgqoGXKEK6I7bfbDaZCrWmPg9ZA8r7IqzSVO5rJRbx6rd8ZCr5Y1YJWj6lLXIwvbLbZATrEr6wZDZD
+
 ---
 
 ## Overview
@@ -379,7 +381,7 @@ The admin composes the message in the Broadcast screen. When WhatsApp is selecte
 
 ```env
 # WhatsApp Cloud API — Meta
-WHATSAPP_PHONE_NUMBER_ID=123456789012345
+WHATSAPP_PHONE_NUMBER_ID=1185219464669473
 WHATSAPP_ACCESS_TOKEN=EAAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 WHATSAPP_API_VERSION=v20.0
 WHATSAPP_CREDENTIAL_TEMPLATE=school_account

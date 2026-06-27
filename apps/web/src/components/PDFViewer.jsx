@@ -1,5 +1,22 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Component } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
+class PdfErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { caught: false };
+  }
+  static getDerivedStateFromError() {
+    return { caught: true };
+  }
+  componentDidCatch() {
+    this.props.onError?.();
+  }
+  render() {
+    if (this.state.caught) return null;
+    return this.props.children;
+  }
+}
 import { Button } from '@/components/ui/button';
 import {
   Download,
@@ -250,21 +267,23 @@ const PDFViewer = ({ isOpen, onClose, pdfId, title, onDownload }) => {
             <iframe title={title} src={blobUrl} className="w-full h-full min-h-[600px] border-0" />
           )}
           {!loading && !error && !useNativeViewer && file && (
-            <Document
-              file={file}
-              onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={() => setUseNativeViewer(true)}
-              loading={<LoadingSpinner text="Loading PDF..." />}
-              className="flex flex-col items-center drop-shadow-xl"
-            >
-              <Page
-                pageNumber={pageNumber}
-                scale={scale}
-                renderTextLayer
-                renderAnnotationLayer
-                className="bg-white rounded-sm"
-              />
-            </Document>
+            <PdfErrorBoundary key={pdfId} onError={() => setUseNativeViewer(true)}>
+              <Document
+                file={file}
+                onLoadSuccess={onDocumentLoadSuccess}
+                onLoadError={() => setUseNativeViewer(true)}
+                loading={<LoadingSpinner text="Loading PDF..." />}
+                className="flex flex-col items-center drop-shadow-xl"
+              >
+                <Page
+                  pageNumber={pageNumber}
+                  scale={scale}
+                  renderTextLayer
+                  renderAnnotationLayer
+                  className="bg-white rounded-sm"
+                />
+              </Document>
+            </PdfErrorBoundary>
           )}
         </div>
       </DialogContent>

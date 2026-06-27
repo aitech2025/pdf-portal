@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Play, Edit2, Trash2, Video, VideoOff, Search, ExternalLink, Loader2,
-  Eye, GraduationCap, BookOpen, Tag, Info, LayoutList, LayoutGrid
+  Eye, GraduationCap, BookOpen, Tag, Info, LayoutList, LayoutGrid,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -369,14 +370,18 @@ const VideoLessonsPage = () => {
   const isPlatformAdmin = PLATFORM_ADMIN_ROLES.includes(currentUser?.role);
 
   const [lessons, setLessons] = useState([]);
+  const [totalLessons, setTotalLessons] = useState(0);
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filterProgram, setFilterProgram] = useState('all');
   const [filterClass, setFilterClass] = useState('all');
   const [filterSubject, setFilterSubject] = useState('all');
   const [filterUnassigned, setFilterUnassigned] = useState(false);
+  const [page, setPage] = useState(1);
+  const PER_PAGE = 50;
 
   const [viewMode, setViewMode] = useState('list');
   const [modalOpen, setModalOpen] = useState(false);
@@ -384,27 +389,41 @@ const VideoLessonsPage = () => {
   const [playingLesson, setPlayingLesson] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchLessons = useCallback(async (currentPage = 1) => {
     setLoading(true);
     try {
-      const [lessonsRes, clsRes, subjRes, progsRes] = await Promise.all([
-        client.fetch('/videoLessons/admin'),
+      const params = { page: currentPage, per_page: PER_PAGE };
+      if (filterProgram !== 'all') params.programId = filterProgram;
+      if (filterClass !== 'all') params.classId = filterClass;
+      if (filterSubject !== 'all') params.subjectId = filterSubject;
+      if (filterUnassigned) params.unassigned = 'true';
+      const lessonsRes = await client.fetch('/videoLessons/admin', 'GET', null, params);
+      setLessons(lessonsRes?.items ?? []);
+      setTotalLessons(lessonsRes?.totalItems ?? lessonsRes?.total ?? 0);
+    } catch (err) {
+      toast.error(err.message || 'Failed to load videos');
+    } finally {
+      setLoading(false);
+    }
+  }, [filterProgram, filterClass, filterSubject, filterUnassigned]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [clsRes, subjRes, progsRes] = await Promise.all([
         client.fetch('/masterClasses'),
         client.fetch('/masterSubjects'),
         client.fetch('/categories')
       ]);
-      setLessons(lessonsRes?.items ?? []);
       setClasses(clsRes?.items ?? []);
       setSubjects(subjRes?.items ?? []);
       setPrograms(progsRes?.items ?? []);
     } catch (err) {
       toast.error(err.message || 'Failed to load data');
-    } finally {
-      setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchLessons(page); }, [fetchLessons, page]);
 
   const handleSave = async (formData) => {
     try {
@@ -415,7 +434,7 @@ const VideoLessonsPage = () => {
         await client.fetch('/videoLessons', 'POST', formData);
         toast.success('Video added to repository');
       }
-      await fetchData();
+      fetchLessons(page);
     } catch (err) {
       toast.error(err.message || 'Failed to save');
       throw err;
@@ -427,7 +446,7 @@ const VideoLessonsPage = () => {
     try {
       await client.fetch(`/videoLessons/${id}`, 'DELETE');
       toast.success('Video deleted');
-      await fetchData();
+      fetchLessons(page);
     } catch (err) {
       toast.error(err.message || 'Failed to delete');
     } finally {
@@ -438,17 +457,16 @@ const VideoLessonsPage = () => {
   const filtered = lessons.filter(l => {
     if (search && !l.title?.toLowerCase().includes(search.toLowerCase())
       && !l.description?.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterClass !== 'all' && l.classId !== filterClass) return false;
-    if (filterSubject !== 'all' && l.subjectId !== filterSubject) return false;
-    if (filterUnassigned && l.programId) return false;
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(totalLessons / PER_PAGE));
 
   const getClassName = id => classes.find(c => c.id === id)?.className || '';
   const getSubjectName = id => subjects.find(s => s.id === id)?.subjectName || '';
   const getProgramName = id => programs.find(p => p.id === id)?.categoryName || '';
 
-  const unassignedCount = lessons.filter(l => !l.programId).length;
+  const unassignedCount = filterUnassigned ? totalLessons : undefined;
 
   return (
     <PageTransition className="space-y-6 pb-8">
@@ -472,21 +490,18 @@ const VideoLessonsPage = () => {
       <div className="flex flex-wrap gap-3">
         <div className="bg-card border border-border/50 rounded-lg px-4 py-2 text-sm">
           <span className="text-muted-foreground">Total: </span>
-          <span className="font-semibold">{lessons.length}</span>
+          <span className="font-semibold">{totalLessons}</span>
         </div>
-        {unassignedCount > 0 && (
-          <button
-            onClick={() => setFilterUnassigned(v => !v)}
-            className={`border rounded-lg px-4 py-2 text-sm transition-colors ${
-              filterUnassigned
-                ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-400'
-                : 'bg-card border-border/50 text-muted-foreground hover:border-amber-500/40'
-            }`}
-          >
-            <span className="font-semibold">{unassignedCount}</span> unassigned
-            {filterUnassigned ? ' (showing)' : ' — click to filter'}
-          </button>
-        )}
+        <button
+          onClick={() => { setFilterUnassigned(v => !v); setPage(1); }}
+          className={`border rounded-lg px-4 py-2 text-sm transition-colors ${
+            filterUnassigned
+              ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-400'
+              : 'bg-card border-border/50 text-muted-foreground hover:border-amber-500/40'
+          }`}
+        >
+          {filterUnassigned ? 'Unassigned only (active)' : 'Show unassigned'}
+        </button>
       </div>
 
       {/* Filters */}
@@ -500,14 +515,21 @@ const VideoLessonsPage = () => {
             className="pl-9"
           />
         </div>
-        <Select value={filterClass} onValueChange={v => { setFilterClass(v); setFilterSubject('all'); }}>
+        <Select value={filterProgram} onValueChange={v => { setFilterProgram(v); setFilterClass('all'); setFilterSubject('all'); setPage(1); }}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Programs" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Programs</SelectItem>
+            {programs.map(p => <SelectItem key={p.id} value={p.id}>{p.categoryName}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterClass} onValueChange={v => { setFilterClass(v); setFilterSubject('all'); setPage(1); }}>
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Classes" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Classes</SelectItem>
             {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.className}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={filterSubject} onValueChange={setFilterSubject}>
+        <Select value={filterSubject} onValueChange={v => { setFilterSubject(v); setPage(1); }}>
           <SelectTrigger className="w-[180px]"><SelectValue placeholder="All Subjects" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Subjects</SelectItem>
@@ -762,6 +784,31 @@ const VideoLessonsPage = () => {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-sm text-muted-foreground">
+            Page {page} of {totalPages} · {totalLessons} videos total
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline" size="sm"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+            </Button>
+            <Button
+              variant="outline" size="sm"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || loading}
+            >
+              Next <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
         </div>
       )}
 

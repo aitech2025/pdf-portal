@@ -35,11 +35,16 @@ const FileUploadZone = ({ onFileSelect, accept = ".pdf", maxFiles = 10, multiple
   };
 
   const handleFiles = (files) => {
+    const acceptsZip = accept.includes('.zip') || accept.includes('zip');
     const validFiles = files.filter(f => {
-      if (accept === '.pdf' && f.type !== 'application/pdf') return false;
+      const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+      const isZip = f.type === 'application/zip' || f.type === 'application/x-zip-compressed'
+        || f.name.toLowerCase().endsWith('.zip');
+      if (accept === '.pdf') return isPdf;
+      if (acceptsZip) return isPdf || isZip;
       return true;
     }).slice(0, maxFiles);
-    
+
     if (validFiles.length > 0) {
       onFileSelect(validFiles);
     }

@@ -22,10 +22,9 @@ export const useNotifications = () => {
       const res = await client.fetch('/notifications', 'GET', null, {
         page: 1,
         per_page: 500,
-        filter: `recipientId = "${currentUser.id}"`,
-        sort: '-created'
+        recipient_id: currentUser.id,
       });
-      setNotifications(res.items || res);
+      setNotifications(res.items ?? []);
       setError(null);
     } catch (err) {
       console.error('Error fetching notifications:', err);

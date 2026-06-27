@@ -43,7 +43,11 @@ const mapSystemSettingsUpdate = (body) => {
         enableTls: "enable_tls",
         activeEmailProvider: "active_email_provider",
         featureFlags: "feature_flags",
-        securitySettings: "security_settings"
+        securitySettings: "security_settings",
+        whatsappEnabled: "whatsapp_enabled",
+        whatsappPhoneNumberId: "whatsapp_phone_number_id",
+        whatsappAccessToken: "whatsapp_access_token",
+        whatsappApiVersion: "whatsapp_api_version"
     };
     for (const [key, raw] of Object.entries(body)) {
         if (SKIP_FROM_SET.has(key))

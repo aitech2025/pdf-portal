@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import {
   AnalyticsEvent,
   AuthToken,
+  Category,
   DownloadLog,
   OnboardingRequest,
   Pdf,
@@ -22,6 +23,7 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
       school_count,
       active_school_count,
       pdf_count,
+      total_downloads,
       pending_onboarding,
       active_sessions,
       storageAgg
@@ -30,6 +32,7 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
       School.countDocuments(),
       School.countDocuments({ is_active: true }),
       Pdf.countDocuments({ deleted_at: null }),
+      DownloadLog.countDocuments(),
       OnboardingRequest.countDocuments({ status: "pending" }),
       AuthToken.countDocuments({
         token_type: "refresh",
@@ -70,6 +73,7 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
       active_school_count,
       inactive_school_count: school_count - active_school_count,
       pdf_count,
+      total_downloads,
       pending_onboarding,
       active_sessions,
       top_downloads: topDownloads,
@@ -80,6 +84,56 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
         files: s.files
       }))
     };
+  });
+
+  app.get("/api/analytics/timeseries", { preHandler: requirePermission(PERMISSIONS.ANALYTICS_VIEW) }, async (request) => {
+    const rawDays = parseInt((request.query as Record<string, string>).days ?? "30", 10);
+    const days = Math.min(Math.max(isNaN(rawDays) ? 30 : rawDays, 1), 730);
+
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const dateRange: string[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      dateRange.push(d.toISOString().slice(0, 10));
+    }
+
+    const [downloadsAgg, registrationsAgg, topCatsAgg] = await Promise.all([
+      DownloadLog.aggregate([
+        { $match: { downloaded_at: { $gte: since } } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$downloaded_at" } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } }
+      ]),
+      User.aggregate([
+        { $match: { created: { $gte: since } } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$created" } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } }
+      ]),
+      DownloadLog.aggregate([
+        { $match: { downloaded_at: { $gte: since } } },
+        { $group: { _id: "$category_id", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ])
+    ]);
+
+    const dlMap = new Map<string, number>(downloadsAgg.map((d: { _id: string; count: number }) => [d._id, d.count]));
+    const regMap = new Map<string, number>(registrationsAgg.map((d: { _id: string; count: number }) => [d._id, d.count]));
+
+    const downloads_per_day = dateRange.map(date => ({ date, count: dlMap.get(date) ?? 0 }));
+    const registrations_per_day = dateRange.map(date => ({ date, count: regMap.get(date) ?? 0 }));
+
+    const catIds = topCatsAgg.map((c: { _id: string }) => c._id).filter(Boolean);
+    const catDocs = catIds.length ? await Category.find({ id: { $in: catIds } }).lean() : [];
+    const catNameMap = new Map<string, string>(catDocs.map((c) => [c.id, c.category_name]));
+
+    const top_categories = topCatsAgg.map((c: { _id: string; count: number }) => ({
+      category_id: c._id,
+      category_name: catNameMap.get(c._id) ?? "Unknown",
+      count: c.count
+    }));
+
+    return { days, downloads_per_day, registrations_per_day, top_categories };
   });
 
   app.get("/api/analytics/overview", { preHandler: requirePermission(PERMISSIONS.ANALYTICS_VIEW) }, async () => {

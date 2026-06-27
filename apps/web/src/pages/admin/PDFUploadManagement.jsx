@@ -175,10 +175,49 @@ const PDFUploadManagement = () => {
     setUploadProgress(0);
     let successCount = 0;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    const zipFiles = files.filter(f => f.name.toLowerCase().endsWith('.zip'));
+    const pdfFiles = files.filter(f => !f.name.toLowerCase().endsWith('.zip'));
+
+    // Handle ZIP files first
+    for (let i = 0; i < zipFiles.length; i++) {
+      const zip = zipFiles[i];
       try {
-        setUploadProgress(Math.floor((i / files.length) * 100) + 10);
+        setUploadProgress(Math.floor((i / files.length) * 80) + 5);
+        const formData = new FormData();
+        formData.append('categoryId', uploadProgram);
+        formData.append('classId', uploadClass);
+        if (uploadSubject) formData.append('subjectId', uploadSubject);
+        formData.append('versionNotes', versionNotes || 'Extracted from ZIP');
+        formData.append('file', zip);
+
+        const token = getToken();
+        const res = await fetch('/api/pdfs/upload-zip', {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error(err.detail || 'ZIP upload failed');
+        }
+        const result = await res.json();
+        successCount += result.created ?? 0;
+        if (result.created > 0) {
+          toast.success(`Extracted ${result.created} PDF(s) from ${zip.name}`);
+        }
+        if (result.skipped?.length > 0) {
+          toast.warning(`${result.skipped.length} file(s) skipped (not PDFs or failed)`);
+        }
+      } catch (err) {
+        toast.error(`Failed to process ${zip.name}: ${err.message || 'Unknown error'}`);
+      }
+    }
+
+    // Handle individual PDF files
+    for (let i = 0; i < pdfFiles.length; i++) {
+      const file = pdfFiles[i];
+      try {
+        setUploadProgress(Math.floor(((zipFiles.length + i) / files.length) * 80) + 10);
 
         // Check for existing PDF with same name in this combination
         const checkParams = new URLSearchParams({ categoryId: uploadProgram, classId: uploadClass });
@@ -191,7 +230,7 @@ const PDFUploadManagement = () => {
         if (existingPdf) {
           await uploadNewVersion(existingPdf.id, file, versionNotes, currentUser.id);
           successCount++;
-          if (i === files.length - 1) {
+          if (i === pdfFiles.length - 1 && zipFiles.length === 0) {
             const fullRecord = await apiFetch(`/api/pdfs/${existingPdf.id}`);
             setSelectedPdf(fullRecord);
             setIsUploadMode(false);
@@ -210,7 +249,7 @@ const PDFUploadManagement = () => {
           const newRecord = await pb.uploadPdf(formData);
           successCount++;
 
-          if (i === files.length - 1) {
+          if (i === pdfFiles.length - 1 && zipFiles.length === 0) {
             const fullRecord = await apiFetch(`/api/pdfs/${newRecord.id}`);
             setSelectedPdf(fullRecord);
             setIsUploadMode(false);
@@ -378,8 +417,9 @@ const PDFUploadManagement = () => {
                 <div className="pt-1">
                   <FileUploadZone
                     onFileSelect={handleFileUpload}
+                    accept=".pdf,.zip"
                     disabled={uploading || !uploadProgram || !uploadClass}
-                    maxFiles={10}
+                    maxFiles={20}
                     className="border-primary/50 bg-primary/5 hover:bg-primary/10 hover:border-primary"
                   />
                   {uploading && (

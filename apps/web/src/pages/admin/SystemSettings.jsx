@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Settings, Shield, Mail, ToggleLeft, Database, Activity,
   Server, HardDrive, RefreshCw, MessageCircle
@@ -122,7 +123,8 @@ const SystemHealthTab = () => {
 
 const SystemSettings = () => {
   const { settings, loading, saving, updateSection, refresh } = useSystemSettings();
-  const [activeTab, setActiveTab] = useState('general');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'general');
 
   if (loading) {
     return (
@@ -186,7 +188,7 @@ const SystemSettings = () => {
           </TabsContent>
 
           <TabsContent value="whatsapp" className="m-0 outline-none">
-            <WhatsAppConfigurationTab />
+            <WhatsAppConfigurationTab settings={settings} onSave={updateSection} saving={saving} />
           </TabsContent>
 
           <TabsContent value="health" className="m-0 outline-none">

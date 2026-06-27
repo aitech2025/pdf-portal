@@ -52,9 +52,14 @@ const loadCloudConfig = async (): Promise<WACloudConfig | null> => {
   try {
     const row = await SystemSettings.findOne().sort({ created: -1 }).lean();
     if (row) {
-      const phoneNumberId = (row as Record<string, unknown>).whatsapp_phone_number_id as string | undefined;
-      const accessToken = (row as Record<string, unknown>).whatsapp_access_token as string | undefined;
-      const apiVersion = ((row as Record<string, unknown>).whatsapp_api_version as string | undefined) ?? env.WHATSAPP_API_VERSION;
+      const r = row as Record<string, unknown>;
+      if (r.whatsapp_enabled === false) {
+        console.log("[WA Cloud] WhatsApp disabled in system settings");
+        return null;
+      }
+      const phoneNumberId = r.whatsapp_phone_number_id as string | undefined;
+      const accessToken = r.whatsapp_access_token as string | undefined;
+      const apiVersion = (r.whatsapp_api_version as string | undefined) ?? env.WHATSAPP_API_VERSION;
       if (phoneNumberId && accessToken) {
         return { phoneNumberId, accessToken, apiVersion };
       }
@@ -199,21 +204,25 @@ export const sendWhatsAppTemplate = async (
  */
 export const getCloudApiStatus = async (): Promise<{
   configured: boolean;
+  enabled: boolean;
   phoneNumberId?: string;
   source: "env" | "db" | "none";
 }> => {
   if (env.WHATSAPP_PHONE_NUMBER_ID && env.WHATSAPP_ACCESS_TOKEN) {
-    return { configured: true, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, source: "env" };
+    return { configured: true, enabled: true, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID, source: "env" };
   }
   try {
     const row = await SystemSettings.findOne().sort({ created: -1 }).lean();
     if (row) {
-      const phoneNumberId = (row as Record<string, unknown>).whatsapp_phone_number_id as string | undefined;
-      const accessToken = (row as Record<string, unknown>).whatsapp_access_token as string | undefined;
+      const r = row as Record<string, unknown>;
+      const phoneNumberId = r.whatsapp_phone_number_id as string | undefined;
+      const accessToken = r.whatsapp_access_token as string | undefined;
+      const enabled = r.whatsapp_enabled !== false && !!r.whatsapp_enabled;
       if (phoneNumberId && accessToken) {
-        return { configured: true, phoneNumberId, source: "db" };
+        return { configured: true, enabled, phoneNumberId, source: "db" };
       }
+      return { configured: false, enabled, source: "db" };
     }
   } catch { /* ignore */ }
-  return { configured: false, source: "none" };
+  return { configured: false, enabled: false, source: "none" };
 };

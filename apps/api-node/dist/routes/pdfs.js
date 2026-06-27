@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { inflateRaw } from "node:zlib";
+import { promisify } from "node:util";
 import { z } from "zod";
 import { canAccessCategory, isPlatformRole, requireCurrentUser } from "../lib/access.js";
 import { auditUnauthorized, writeAudit } from "../lib/audit.js";
@@ -241,6 +243,164 @@ export const registerPdfRoutes = async (app) => {
         }
         archive.finalize().catch((err) => request.log.error({ err }, "finalize failed"));
         return reply.send(archive);
+    });
+    // ─── ZIP batch upload ──────────────────────────────────────────────────────
+    const inflateRawAsync = promisify(inflateRaw);
+    function findZipEOCD(buf) {
+        for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65558); i--) {
+            if (buf.readUInt32LE(i) === 0x06054b50)
+                return i;
+        }
+        return -1;
+    }
+    async function extractPdfsFromZip(buffer) {
+        const eocd = findZipEOCD(buffer);
+        if (eocd < 0)
+            throw new Error("Not a valid ZIP file");
+        const totalEntries = buffer.readUInt16LE(eocd + 10);
+        const cdOffset = buffer.readUInt32LE(eocd + 16);
+        const entries = [];
+        let pos = cdOffset;
+        for (let i = 0; i < totalEntries; i++) {
+            if (pos + 46 > buffer.length || buffer.readUInt32LE(pos) !== 0x02014b50)
+                break;
+            const compressionMethod = buffer.readUInt16LE(pos + 10);
+            const compressedSize = buffer.readUInt32LE(pos + 20);
+            const fileNameLen = buffer.readUInt16LE(pos + 28);
+            const extraLen = buffer.readUInt16LE(pos + 30);
+            const commentLen = buffer.readUInt16LE(pos + 32);
+            const localOffset = buffer.readUInt32LE(pos + 42);
+            const filename = buffer.subarray(pos + 46, pos + 46 + fileNameLen).toString("utf8");
+            pos += 46 + fileNameLen + extraLen + commentLen;
+            if (filename.endsWith("/") || !filename.toLowerCase().endsWith(".pdf"))
+                continue;
+            if (localOffset + 30 > buffer.length || buffer.readUInt32LE(localOffset) !== 0x04034b50)
+                continue;
+            const localFileNameLen = buffer.readUInt16LE(localOffset + 26);
+            const localExtraLen = buffer.readUInt16LE(localOffset + 28);
+            const dataStart = localOffset + 30 + localFileNameLen + localExtraLen;
+            if (dataStart + compressedSize > buffer.length)
+                continue;
+            const compressed = buffer.subarray(dataStart, dataStart + compressedSize);
+            try {
+                let data;
+                if (compressionMethod === 0) {
+                    data = compressed;
+                }
+                else if (compressionMethod === 8) {
+                    data = await inflateRawAsync(compressed);
+                }
+                else {
+                    continue;
+                }
+                const baseName = filename.split("/").pop() ?? filename;
+                entries.push({ filename: baseName, data });
+            }
+            catch {
+                continue;
+            }
+        }
+        return entries;
+    }
+    app.post("/api/pdfs/upload-zip", { preHandler: requirePermission(PERMISSIONS.PDF_UPLOAD) }, async (request, reply) => {
+        const user = await requireCurrentUser(request, reply);
+        if (!user)
+            return;
+        const fieldValues = new Map();
+        let zipBuffer = null;
+        for await (const part of request.parts()) {
+            if (part.type === "file") {
+                zipBuffer = await part.toBuffer();
+            }
+            else if (part.type === "field" && typeof part.value === "string") {
+                fieldValues.set(part.fieldname, part.value);
+            }
+        }
+        if (!zipBuffer)
+            return reply.status(400).send({ detail: "ZIP file is required" });
+        const fieldValue = (...names) => {
+            for (const n of names) {
+                const v = fieldValues.get(n);
+                if (v !== undefined)
+                    return v;
+            }
+            return null;
+        };
+        const categoryId = fieldValue("category_id", "categoryId");
+        const classId = fieldValue("class_id", "classId");
+        const subjectId = fieldValue("subject_id", "subjectId");
+        const versionNotes = fieldValue("versionNotes", "version_notes") ?? "Extracted from ZIP";
+        if (!categoryId)
+            return reply.status(400).send({ detail: "categoryId is required" });
+        if (!classId)
+            return reply.status(400).send({ detail: "classId is required" });
+        const [cat, cls] = await Promise.all([
+            Category.findOne({ id: categoryId }),
+            ClassMaster.findOne({ id: classId })
+        ]);
+        if (!cat)
+            return reply.status(404).send({ detail: "Category not found" });
+        if (!cls)
+            return reply.status(404).send({ detail: "Class not found" });
+        let entries;
+        try {
+            entries = await extractPdfsFromZip(zipBuffer);
+        }
+        catch (err) {
+            return reply.status(400).send({ detail: err.message || "Failed to parse ZIP file" });
+        }
+        if (entries.length === 0) {
+            return reply.status(400).send({ detail: "No PDF files found inside the ZIP" });
+        }
+        const created = [];
+        const skipped = [];
+        for (const entry of entries) {
+            try {
+                const pdfCode = await generateMappedPdfCode(cat.category_name, cls.class_name);
+                const checksum = createHash("sha256").update(entry.data).digest("hex");
+                const doc = await Pdf.create({
+                    file_name: entry.filename,
+                    original_file_name: entry.filename,
+                    file_path: "",
+                    file_data: entry.data,
+                    file_size: entry.data.length,
+                    file_checksum: checksum,
+                    category_id: categoryId,
+                    sub_category_id: null,
+                    class_id: classId,
+                    subject_id: subjectId ?? null,
+                    uploaded_by: user.id,
+                    pdf_id: pdfCode,
+                    description: "",
+                    status: "approved",
+                    is_active: true,
+                    version_notes: versionNotes
+                });
+                await PdfVersion.create({
+                    pdf_id: doc.id,
+                    version_number: 1,
+                    file_path: "",
+                    file_data: entry.data,
+                    file_size: entry.data.length,
+                    uploaded_by: user.id,
+                    version_notes: versionNotes,
+                    is_current: true
+                });
+                await writeAudit({
+                    user_id: user.id,
+                    action: "pdf_upload",
+                    action_details: `ZIP batch: ${entry.filename}`,
+                    resource_type: "pdf",
+                    resource_id: doc.id,
+                    request
+                });
+                created.push(entry.filename);
+            }
+            catch {
+                skipped.push(entry.filename);
+            }
+        }
+        return reply.send({ created: created.length, skipped, files: created });
     });
     app.post("/api/pdfs", { preHandler: requirePermission(PERMISSIONS.PDF_UPLOAD) }, async (request, reply) => {
         const user = await requireCurrentUser(request, reply);

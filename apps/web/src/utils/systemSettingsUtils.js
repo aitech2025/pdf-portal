@@ -44,13 +44,17 @@ export const DEFAULT_SETTINGS = {
     apiAccess: false,
     offlineMode: false
   },
+  // WhatsApp Cloud API (root-level, not nested under integrations)
+  whatsappEnabled: false,
+  whatsappPhoneNumberId: '',
+  whatsappAccessToken: '',
+  whatsappApiVersion: 'v20.0',
   integrations: {
     googleOAuth: { enabled: false, clientId: '', clientSecret: '' },
     githubOAuth: { enabled: false, clientId: '', clientSecret: '' },
     slack: { enabled: false, webhookUrl: '' },
     teams: { enabled: false, webhookUrl: '' },
     stripe: { enabled: false, apiKey: '' },
-    whatsapp: { enabled: false, provider: 'waha', apiUrl: '', apiKey: '', session: 'default', fromNumber: '' },
     customWebhook: { enabled: false, url: '', events: [] }
   },
   securitySettings: {

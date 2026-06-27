@@ -1,6 +1,13 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Component } from 'react';
 import { Document, Page } from 'react-pdf';
+
+class PdfErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { caught: false }; }
+  static getDerivedStateFromError() { return { caught: true }; }
+  componentDidCatch() { this.props.onError?.(); }
+  render() { return this.state.caught ? null : this.props.children; }
+}
 import '@/lib/setupPdfWorker.js';
 import {
   ZoomIn, ZoomOut, Maximize, Minimize, ChevronLeft, ChevronRight,
@@ -262,22 +269,24 @@ const EnhancedPDFViewer = ({ pdfRecord, versionId = null, onClose, className }) 
           )}
 
           {!loading && !error && !useNativeViewer && file && (
-            <Document
-              file={file}
-              onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={onDocumentLoadError}
-              loading={null}
-              className="flex flex-col items-center py-4"
-            >
-              <Page
-                pageNumber={pageNumber}
-                scale={scale}
-                rotate={rotation}
-                renderTextLayer
-                renderAnnotationLayer
-                className="shadow-xl"
-              />
-            </Document>
+            <PdfErrorBoundary key={pdfRecord?.id ?? versionId} onError={onDocumentLoadError}>
+              <Document
+                file={file}
+                onLoadSuccess={onDocumentLoadSuccess}
+                onLoadError={onDocumentLoadError}
+                loading={null}
+                className="flex flex-col items-center py-4"
+              >
+                <Page
+                  pageNumber={pageNumber}
+                  scale={scale}
+                  rotate={rotation}
+                  renderTextLayer
+                  renderAnnotationLayer
+                  className="shadow-xl"
+                />
+              </Document>
+            </PdfErrorBoundary>
           )}
         </div>
       </div>
