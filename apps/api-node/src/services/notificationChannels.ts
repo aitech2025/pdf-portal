@@ -278,6 +278,17 @@ const sendWhatsApp = async (
     return result;
   }
 
+  if (notificationType === "program_assigned") {
+    // Template: new_content_notification  ({{1}} program name, {{2}} school name)
+    const programMatch = message.match(/Program:\s*(.+)/i);
+    const schoolMatch = message.match(/School:\s*(.+)/i);
+    const programName = programMatch?.[1]?.trim() ?? "New Program";
+    const schoolName = schoolMatch?.[1]?.trim() ?? "i-icon Academy";
+    const result = await sendWhatsAppTemplate(to, env.WHATSAPP_NEW_CONTENT_TEMPLATE, [programName, schoolName]);
+    if (!result.ok) console.error(`[WHATSAPP] Program assigned template failed to "${to}": ${result.error}`);
+    return result;
+  }
+
   if (notificationType === "bulk_announcement") {
     // Template: broadcast_announcement  ({{1}} = full message body composed by admin)
     // Free-text messages require a 24-hour service window opened by the recipient,

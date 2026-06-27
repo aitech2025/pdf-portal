@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { Category, ClassMaster, School, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, SubCategory, Subject, SubjectMaster } from "../models/index.js";
+import { Category, ClassMaster, School, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, SubCategory, Subject, SubjectMaster, User } from "../models/index.js";
 import { canAccessSchool } from "../lib/access.js";
 import { auditUnauthorized, writeAudit } from "../lib/audit.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
+import { createAndSendNotification } from "../services/notificationChannels.js";
 export const registerSchoolCategoryRoutes = async (app) => {
     app.get("/api/schools/:school_id/categories", { preHandler: requireAuth }, async (request, reply) => {
         const params = z.object({ school_id: z.string() }).parse(request.params);
@@ -70,6 +71,27 @@ export const registerSchoolCategoryRoutes = async (app) => {
                 resource_id: params.school_id,
                 request
             });
+        }
+        if (added.length > 0) {
+            const [assignedCategories, schoolAdmins] = await Promise.all([
+                Category.find({ id: { $in: added } }).lean(),
+                User.find({ school_id: params.school_id, role: { $in: ["school_admin", "school"] }, is_active: true }).lean()
+            ]);
+            const adminsWithPhone = schoolAdmins.filter(a => a.mobile_number);
+            if (adminsWithPhone.length > 0) {
+                for (const cat of assignedCategories) {
+                    const programName = cat.category_name;
+                    for (const admin of adminsWithPhone) {
+                        createAndSendNotification({
+                            recipient: { id: admin.id, email: admin.email ?? undefined, mobile_number: admin.mobile_number ?? undefined, name: admin.name ?? undefined },
+                            channels: ["whatsapp"],
+                            type: "program_assigned",
+                            subject: `New program access: ${programName}`,
+                            message: `Program: ${programName}\nSchool: ${school.school_name}`
+                        }).catch(err => console.error(`[schoolCategories] WhatsApp notify failed for ${admin.id}:`, err.message));
+                    }
+                }
+            }
         }
         return { school_id: params.school_id, categoryIds };
     });
