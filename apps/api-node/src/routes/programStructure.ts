@@ -12,16 +12,34 @@ export const registerProgramStructureRoutes = async (app: FastifyInstance): Prom
     const program = await Category.findOne({ id: params.program_id });
     if (!program) return reply.status(404).send({ detail: "Program not found" });
 
-    // Video programs derive their class/subject hierarchy from the videos assigned to them
+    // Video programs combine the explicit class/subject hierarchy chosen at creation
+    // (ProgramClassMap / ProgramClassSubjectMap) with any classes/subjects derived from
+    // the videos already assigned to them. This lets a program be granted to schools even
+    // before videos are uploaded, while staying backward-compatible with older video
+    // programs that only have video-derived structure.
     if (program.program_type === "video") {
-      const videos = await VideoLesson.find({ program_id: params.program_id }).select("class_id subject_id").lean();
+      const [videos, classMaps, subjectMaps] = await Promise.all([
+        VideoLesson.find({ program_id: params.program_id }).select("class_id subject_id").lean(),
+        ProgramClassMap.find({ program_id: params.program_id }).lean(),
+        ProgramClassSubjectMap.find({ program_id: params.program_id }).lean(),
+      ]);
 
-      // Build unique class → subjects map
+      // Build unique class → subjects map (union of explicit structure + videos)
       const classToSubjects = new Map<string, Set<string>>();
+      const ensureClass = (classId: string) => {
+        if (!classToSubjects.has(classId)) classToSubjects.set(classId, new Set());
+        return classToSubjects.get(classId)!;
+      };
+      for (const m of classMaps) ensureClass(m.class_id);
+      for (const m of subjectMaps) {
+        if (!m.class_id) continue;
+        const set = ensureClass(m.class_id);
+        if (m.subject_id) set.add(m.subject_id);
+      }
       for (const v of videos) {
         if (!v.class_id) continue;
-        if (!classToSubjects.has(v.class_id)) classToSubjects.set(v.class_id, new Set());
-        if (v.subject_id) classToSubjects.get(v.class_id)!.add(v.subject_id);
+        const set = ensureClass(v.class_id);
+        if (v.subject_id) set.add(v.subject_id);
       }
 
       const allClassIds = [...classToSubjects.keys()];

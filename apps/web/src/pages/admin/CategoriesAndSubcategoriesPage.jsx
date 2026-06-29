@@ -379,6 +379,7 @@ const CategoriesAndSubcategoriesPage = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [catSearch, setCatSearch] = useState('');
   const [catStatusFilter, setCatStatusFilter] = useState('all');
+  const [catTypeFilter, setCatTypeFilter] = useState('all'); // 'all' | 'pdf' | 'video'
 
   // Program structure (classes + subjects from junction tables) — for PDF programs
   const [programStructure, setProgramStructure] = useState(null);
@@ -414,8 +415,9 @@ const CategoriesAndSubcategoriesPage = () => {
     if (!Array.isArray(categories)) return [];
     return categories
       .filter(c => c && matchesSearch(catSearch, c.categoryName, c.categoryType, c.programType, c.description))
-      .filter(c => catStatusFilter === 'all' ? true : catStatusFilter === 'active' ? c.isActive !== false : c.isActive === false);
-  }, [categories, catSearch, catStatusFilter]);
+      .filter(c => catStatusFilter === 'all' ? true : catStatusFilter === 'active' ? c.isActive !== false : c.isActive === false)
+      .filter(c => catTypeFilter === 'all' ? true : catTypeFilter === 'video' ? c.programType === 'video' : (c.programType || 'pdf') !== 'video');
+  }, [categories, catSearch, catStatusFilter, catTypeFilter]);
 
   const fetchMasters = useCallback(async () => {
     if (mastersLoaded) return;
@@ -539,25 +541,31 @@ const CategoriesAndSubcategoriesPage = () => {
     } else {
       const newCat = await createCategory(data);
       setSelectedCategoryId(newCat.id);
-      // For PDF programs, assign classes and subjects from the wizard
-      if (data.programType !== 'video') {
-        if (structureData?.classIds?.length) {
-          await apiFetch(`/api/programs/${newCat.id}/classes`, {
+      // Assign classes and subjects from the wizard — applies to both PDF and Video
+      // programs so the class → subject hierarchy can be granted to schools.
+      if (structureData?.classIds?.length) {
+        await apiFetch(`/api/programs/${newCat.id}/classes`, {
+          method: 'POST',
+          body: JSON.stringify({ classIds: structureData.classIds })
+        });
+      }
+      for (const [classId, subjectIds] of Object.entries(structureData?.subjectsByClass || {})) {
+        if (subjectIds.length > 0) {
+          await apiFetch(`/api/programs/${newCat.id}/classes/${classId}/subjects`, {
             method: 'POST',
-            body: JSON.stringify({ classIds: structureData.classIds })
+            body: JSON.stringify({ subjectIds })
           });
         }
-        for (const [classId, subjectIds] of Object.entries(structureData?.subjectsByClass || {})) {
-          if (subjectIds.length > 0) {
-            await apiFetch(`/api/programs/${newCat.id}/classes/${classId}/subjects`, {
-              method: 'POST',
-              body: JSON.stringify({ subjectIds })
-            });
-          }
-        }
-        if (structureData?.classIds?.length) {
-          await fetchProgramStructure(newCat.id);
-        }
+      }
+      // Video programs: assign the chosen repository videos to this program
+      for (const videoId of structureData?.videoIds || []) {
+        await apiFetch(`/api/programs/${newCat.id}/videos`, {
+          method: 'POST',
+          body: JSON.stringify({ videoId })
+        });
+      }
+      if (structureData?.classIds?.length || structureData?.videoIds?.length) {
+        await fetchProgramStructure(newCat.id);
       }
     }
   };
@@ -615,6 +623,24 @@ const CategoriesAndSubcategoriesPage = () => {
                 catStatusFilter === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
             >{s}</button>
+          ))}
+        </div>
+        <div className="flex gap-1.5">
+          {[
+            { key: 'all', label: 'All Types', icon: null },
+            { key: 'pdf', label: 'PDF', icon: FileText },
+            { key: 'video', label: 'Video', icon: Video },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setCatTypeFilter(key)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1 text-xs py-1 rounded-md font-medium transition-colors",
+                catTypeFilter === key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              {Icon && <Icon className="w-3 h-3" />}{label}
+            </button>
           ))}
         </div>
       </div>

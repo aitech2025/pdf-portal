@@ -35,7 +35,10 @@ const schema = z.object({
 });
 
 const PDF_STEPS = ['Program Details', 'Assign Classes', 'Assign Subjects'];
-const VIDEO_STEPS = ['Program Details'];
+// Video programs reuse the class step, but their final step picks videos from the
+// repository (rather than master subjects). The chosen videos are assigned to the
+// program and their subjects form the program's class → subject hierarchy.
+const VIDEO_STEPS = ['Program Details', 'Assign Classes', 'Assign Videos'];
 
 const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
   const isEditing = !!category;
@@ -52,6 +55,11 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
   const [subjectsByClass, setSubjectsByClass] = useState({}); // classId → Set<subjectId>
   const [classSearch, setClassSearch] = useState('');
   const [expandedClasses, setExpandedClasses] = useState({});
+
+  // Video programs: repository videos to assign (final step)
+  const [repoVideos, setRepoVideos] = useState([]);
+  const [repoVideosLoading, setRepoVideosLoading] = useState(false);
+  const [selectedVideoIds, setSelectedVideoIds] = useState(new Set());
 
   const form = useForm({
     resolver: zodResolver(schema),
@@ -85,6 +93,8 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
       setSubjectsByClass({});
       setClassSearch('');
       setExpandedClasses({});
+      setRepoVideos([]);
+      setSelectedVideoIds(new Set());
       return;
     }
     form.reset(category
@@ -99,10 +109,35 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
     if (!isEditing) fetchMasters();
   }, [isOpen, category, isEditing, fetchMasters, form]);
 
-  // Reset step to 1 if program type changes while in steps 2/3
+  // Load repository videos when reaching the video-selection step
   useEffect(() => {
-    if (step > 1 && programType === 'video') setStep(1);
-  }, [programType, step]);
+    if (!isOpen || isEditing || programType !== 'video' || step !== 3) return;
+    let cancelled = false;
+    setRepoVideosLoading(true);
+    apiFetch('/api/videoLessons/admin?per_page=500')
+      .then(res => { if (!cancelled) setRepoVideos(res?.items ?? []); })
+      .catch(() => { if (!cancelled) setRepoVideos([]); })
+      .finally(() => { if (!cancelled) setRepoVideosLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, isEditing, programType, step]);
+
+  // ---------- video helpers ----------
+  const toggleVideo = (videoId) => {
+    setSelectedVideoIds(prev => {
+      const next = new Set(prev);
+      next.has(videoId) ? next.delete(videoId) : next.add(videoId);
+      return next;
+    });
+  };
+
+  const toggleAllVideos = (classVideos) => {
+    setSelectedVideoIds(prev => {
+      const next = new Set(prev);
+      const allSel = classVideos.length > 0 && classVideos.every(v => next.has(v.id));
+      classVideos.forEach(v => allSel ? next.delete(v.id) : next.add(v.id));
+      return next;
+    });
+  };
 
   // ---------- class helpers ----------
   const toggleClass = (classId) => {
@@ -177,11 +212,15 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
   const onFinalSubmit = async (data) => {
     setIsSubmitting(true);
     try {
-      const structureData = (isEditing || data.programType === 'video') ? null : {
+      const isVideo = data.programType === 'video';
+      const structureData = isEditing ? null : {
         classIds: [...selectedClassIds],
-        subjectsByClass: Object.fromEntries(
+        // PDF programs define their subjects explicitly; video programs derive subjects
+        // from the videos chosen below, so their subjectsByClass stays empty.
+        subjectsByClass: isVideo ? {} : Object.fromEntries(
           Object.entries(subjectsByClass).map(([k, v]) => [k, [...v]])
-        )
+        ),
+        videoIds: isVideo ? [...selectedVideoIds] : []
       };
       await onSave(data, structureData);
       onClose();
@@ -313,11 +352,13 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
                 </div>
               )}
 
-              {/* ── Step 2: Assign Classes (PDF only) ── */}
-              {step === 2 && !isEditing && programType === 'pdf' && (
+              {/* ── Step 2: Assign Classes ── */}
+              {step === 2 && !isEditing && (
                 <div className="space-y-3 px-1">
                   <p className="text-sm text-muted-foreground">
-                    Select which classes belong to this program. You can skip this and assign later.
+                    {programType === 'video'
+                      ? 'Select which classes this video program covers. Videos can then be organised by these classes and granted to schools.'
+                      : 'Select which classes belong to this program. You can skip this and assign later.'}
                   </p>
                   {mastersLoading ? (
                     <div className="flex items-center gap-2 py-6 text-muted-foreground justify-center">
@@ -378,7 +419,98 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
                 </div>
               )}
 
-              {/* ── Step 3: Assign Subjects per Class (PDF only) ── */}
+              {/* ── Step 3 (Video): Select repository videos per class ── */}
+              {step === 3 && !isEditing && programType === 'video' && (
+                <div className="space-y-3 px-1">
+                  <p className="text-sm text-muted-foreground">
+                    Select videos from the repository for the chosen classes. Selected videos are assigned to this program and their subjects become its content.
+                  </p>
+                  {selectedClassList.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-border/50 rounded-lg">
+                      <p className="text-sm text-muted-foreground">No classes selected. Go back to select classes first.</p>
+                    </div>
+                  ) : repoVideosLoading ? (
+                    <div className="flex items-center gap-2 py-6 text-muted-foreground justify-center">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading videos…
+                    </div>
+                  ) : (
+                    <div className="max-h-72 overflow-y-auto space-y-2 border border-border/50 rounded-lg p-2">
+                      {selectedClassList.map(cls => {
+                        const classVideos = repoVideos.filter(v => v.classId === cls.id);
+                        const isExpanded = expandedClasses[cls.id] !== false;
+                        const selectedCount = classVideos.filter(v => selectedVideoIds.has(v.id)).length;
+                        const allVideosSelected = classVideos.length > 0 && classVideos.every(v => selectedVideoIds.has(v.id));
+
+                        return (
+                          <div key={cls.id} className="border border-border/40 rounded-lg overflow-hidden">
+                            <div className="flex items-center gap-2 p-2.5 bg-muted/30">
+                              <GraduationCap className="w-4 h-4 text-primary shrink-0" />
+                              <span className="text-sm font-semibold flex-1">{cls.className}</span>
+                              {selectedCount > 0 && (
+                                <span className="text-xs text-primary font-medium bg-primary/10 px-1.5 py-0.5 rounded-full">
+                                  {selectedCount} selected
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setExpandedClasses(e => ({ ...e, [cls.id]: !isExpanded }))}
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              </button>
+                            </div>
+                            {isExpanded && (
+                              <div className="p-2 space-y-1.5">
+                                {classVideos.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground/70 italic px-1 py-2">
+                                    No videos in the repository for this class. Upload videos in the <strong>Video Repository</strong> first.
+                                  </p>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleAllVideos(classVideos)}
+                                      className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground px-1"
+                                    >
+                                      {allVideosSelected ? <CheckSquare className="w-3 h-3 text-primary" /> : <Square className="w-3 h-3" />}
+                                      {allVideosSelected ? 'Deselect All' : 'Select All Videos'}
+                                    </button>
+                                    {classVideos.map(v => {
+                                      const checked = selectedVideoIds.has(v.id);
+                                      const subjName = masterSubjects.find(s => s.id === v.subjectId)?.subjectName;
+                                      return (
+                                        <label
+                                          key={v.id}
+                                          className={cn(
+                                            "flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors",
+                                            checked ? "bg-primary/10" : "hover:bg-muted/60"
+                                          )}
+                                        >
+                                          <Checkbox checked={checked} onCheckedChange={() => toggleVideo(v.id)} />
+                                          <Video className="w-4 h-4 text-muted-foreground shrink-0" />
+                                          <div className="flex-1 min-w-0">
+                                            <span className="text-sm font-medium truncate block">{v.title}</span>
+                                            {subjName && <span className="text-xs text-muted-foreground">{subjName}</span>}
+                                          </div>
+                                        </label>
+                                      );
+                                    })}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {selectedVideoIds.size > 0 && (
+                    <p className="text-xs text-primary font-medium">{selectedVideoIds.size} video(s) selected</p>
+                  )}
+                </div>
+              )}
+
+              {/* ── Step 3 (PDF): Assign Subjects per Class ── */}
               {step === 3 && !isEditing && programType === 'pdf' && (
                 <div className="space-y-3 px-1">
                   <p className="text-sm text-muted-foreground">
