@@ -50,25 +50,25 @@ export function useAdminDashboardData(dateRange = '30d') {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        // Fetch totals using getList with limit 1 to get totalItems efficiently
+        // Totals come from the cached /dashboard endpoint (O(1) counts, shared across
+        // admins). Recent-activity lists pass count=false so they skip the expensive
+        // full-collection count they don't use.
         const [
-          usersRes, schoolsRes, pdfsRes, downloadsRes,
+          dashRes,
           recentUploads, recentDownloads, recentUsers, recentEvents,
-          pendingSchools, pendingUsers
+          schoolsRes, pendingUsers
         ] = await Promise.all([
-          client.fetch('/users', 'GET', null, { page: 1, per_page: 1 }),
-          client.fetch('/schools', 'GET', null, { page: 1, per_page: 1 }),
-          client.fetch('/pdfs', 'GET', null, { page: 1, per_page: 1 }),
-          client.fetch('/downloadLogs', 'GET', null, { page: 1, per_page: 1 }),
+          client.fetch('/dashboard', 'GET').catch(() => ({})),
 
-          client.fetch('/pdfs', 'GET', null, { page: 1, per_page: 10, sort: '-created' }),
-          client.fetch('/downloadLogs', 'GET', null, { page: 1, per_page: 10, sort: '-created', expand: 'userId,pdfId' }),
-          client.fetch('/users', 'GET', null, { page: 1, per_page: 10, sort: '-created' }),
-          client.fetch('/auditLogs', 'GET', null, { page: 1, per_page: 10, sort: '-created', expand: 'userId' }),
+          client.fetch('/pdfs', 'GET', null, { page: 1, per_page: 10, sort: '-created', count: 'false' }),
+          client.fetch('/downloadLogs', 'GET', null, { page: 1, per_page: 10, count: 'false' }),
+          client.fetch('/users', 'GET', null, { page: 1, per_page: 10, sort: '-created', count: 'false' }),
+          client.fetch('/auditLogs', 'GET', null, { page: 1, per_page: 10, sort: '-created', count: 'false' }),
 
-          client.fetch('/onboardingRequests', 'GET', null, { page: 1, per_page: 1, filter: 'status="pending"' }),
+          client.fetch('/schools', 'GET', null, { page: 1, per_page: 5, sort: '-created' }),
           client.fetch('/userRequests', 'GET', null, { page: 1, per_page: 1, filter: 'status="pending"' })
         ]);
+        const dash = dashRes || {};
 
         // Mocking complex chart data for premium UI feel without heavy aggregation queries
         const mockUserGrowth = Array.from({ length: 12 }).map((_, i) => ({
@@ -83,12 +83,12 @@ export function useAdminDashboardData(dateRange = '30d') {
 
         setData({
           metrics: {
-            totalUsers: usersRes.totalItems,
-            totalSchools: schoolsRes.totalItems,
-            totalPdfs: pdfsRes.totalItems,
-            totalDownloads: downloadsRes.totalItems,
-            activeUsersToday: Math.floor(usersRes.totalItems * 0.15), // Mock active
-            newRegistrations: Math.floor(usersRes.totalItems * 0.05), // Mock new
+            totalUsers: dash.user_count ?? 0,
+            totalSchools: dash.school_count ?? 0,
+            totalPdfs: dash.pdf_count ?? 0,
+            totalDownloads: dash.total_downloads ?? 0,
+            activeUsersToday: dash.active_sessions ?? 0,
+            newRegistrations: Math.floor((dash.user_count ?? 0) * 0.05), // Mock new
           },
           trends: {
             users: 12.5,
@@ -105,7 +105,7 @@ export function useAdminDashboardData(dateRange = '30d') {
           pendingItems: {
             pdfApprovals: 12, // Mock
             userRequests: pendingUsers.totalItems,
-            schoolRegistrations: pendingSchools.totalItems,
+            schoolRegistrations: dash.pending_onboarding ?? 0,
             supportTickets: 5, // Mock
           },
           topPerformers: {

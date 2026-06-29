@@ -70,7 +70,8 @@ export const registerUserRoutes = async (app: FastifyInstance): Promise<void> =>
         page: z.coerce.number().default(1),
         per_page: z.coerce.number().default(50),
         sort: z.string().optional(),
-        q: z.string().optional()
+        q: z.string().optional(),
+        count: z.string().optional()
       })
       .parse(request.query);
 
@@ -99,11 +100,12 @@ export const registerUserRoutes = async (app: FastifyInstance): Promise<void> =>
           : "created";
     const sortDir = query.sort?.startsWith("-") ? -1 : -1;
     const skip = (query.page - 1) * query.per_page;
+    const wantCount = query.count !== "false";
     const [rows, total] = await Promise.all([
       User.find(filter).sort({ [sortField]: sortDir }).skip(skip).limit(query.per_page).lean(),
-      User.countDocuments(filter)
+      wantCount ? User.countDocuments(filter) : Promise.resolve(undefined)
     ]);
-    return listResponse(rows.map((r) => serializeDoc(r as Record<string, unknown>)), total);
+    return listResponse(rows.map((r) => serializeDoc(r as Record<string, unknown>)), total ?? rows.length);
   });
 
   app.get("/api/users/:user_id", { preHandler: requireAuth }, async (request, reply) => {

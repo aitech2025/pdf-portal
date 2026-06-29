@@ -303,6 +303,9 @@ const DownloadLogSchema = new Schema(
   },
   commonOptions
 );
+// Supports the school dashboard's per-school date-bounded download counts/aggregations.
+DownloadLogSchema.index({ school_id: 1, downloaded_at: -1 });
+DownloadLogSchema.index({ school_id: 1, category_id: 1 });
 
 const ViewLogSchema = new Schema(
   {

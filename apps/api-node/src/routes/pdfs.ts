@@ -41,7 +41,8 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
         q: z.string().optional(),
         page: z.coerce.number().default(1),
         per_page: z.coerce.number().default(50),
-        include_deleted: z.coerce.boolean().optional()
+        include_deleted: z.coerce.boolean().optional(),
+        count: z.string().optional()
       })
       .parse(request.query);
 
@@ -93,12 +94,13 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
     }
 
     const skip = (query.page - 1) * query.per_page;
+    const wantCount = query.count !== "false";
     const [rows, total] = await Promise.all([
       Pdf.find(filter).sort({ created: -1 }).skip(skip).limit(query.per_page).lean(),
-      Pdf.countDocuments(filter)
+      wantCount ? Pdf.countDocuments(filter) : Promise.resolve(undefined)
     ]);
     const enriched = await enrichPdfs(rows as Record<string, unknown>[]);
-    return listResponse(enriched, total);
+    return listResponse(enriched, total ?? rows.length);
   });
 
   app.get("/api/pdfs/:pdf_id", { preHandler: requireAuth }, async (request, reply) => {

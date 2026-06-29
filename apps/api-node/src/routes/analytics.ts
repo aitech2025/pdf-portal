@@ -15,76 +15,84 @@ import {
 } from "../models/index.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
+import { cached } from "../lib/cache.js";
+
+// Aggregate dashboards tolerate a few seconds of staleness; caching keeps them fast
+// and shields the DB from repeated heavy aggregations on every page load.
+const DASHBOARD_TTL_MS = 30_000;
 
 export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<void> => {
-  app.get("/api/dashboard", { preHandler: requireAuth }, async () => {
-    const [
-      user_count,
-      school_count,
-      active_school_count,
-      pdf_count,
-      total_downloads,
-      pending_onboarding,
-      active_sessions,
-      storageAgg
-    ] = await Promise.all([
-      User.countDocuments(),
-      School.countDocuments(),
-      School.countDocuments({ is_active: true }),
-      Pdf.countDocuments({ deleted_at: null }),
-      DownloadLog.countDocuments(),
-      OnboardingRequest.countDocuments({ status: "pending" }),
-      AuthToken.countDocuments({
-        token_type: "refresh",
-        revoked_at: null,
-        expires_at: { $gt: new Date() }
-      }),
-      Pdf.aggregate([
-        { $match: { deleted_at: null } },
-        { $group: { _id: null, totalBytes: { $sum: "$file_size" } } }
-      ])
-    ]);
+  app.get("/api/dashboard", { preHandler: requireAuth }, async () =>
+    cached("dashboard:overview", DASHBOARD_TTL_MS, async () => {
+      const [
+        user_count,
+        school_count,
+        active_school_count,
+        pdf_count,
+        total_downloads,
+        pending_onboarding,
+        active_sessions,
+        storageAgg,
+        topDownloads,
+        storageByTenant
+      ] = await Promise.all([
+        // estimatedDocumentCount() reads collection metadata (O(1)) instead of scanning.
+        User.estimatedDocumentCount(),
+        School.estimatedDocumentCount(),
+        School.countDocuments({ is_active: true }),
+        Pdf.countDocuments({ deleted_at: null }),
+        DownloadLog.estimatedDocumentCount(),
+        OnboardingRequest.countDocuments({ status: "pending" }),
+        AuthToken.countDocuments({
+          token_type: "refresh",
+          revoked_at: null,
+          expires_at: { $gt: new Date() }
+        }),
+        Pdf.aggregate([
+          { $match: { deleted_at: null } },
+          { $group: { _id: null, totalBytes: { $sum: "$file_size" } } }
+        ]),
+        DownloadLog.aggregate([
+          { $group: { _id: "$pdf_id", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 5 }
+        ]),
+        Pdf.aggregate([
+          { $match: { deleted_at: null } },
+          {
+            $lookup: {
+              from: "schoolcategoryaccesses",
+              localField: "category_id",
+              foreignField: "category_id",
+              as: "grants"
+            }
+          },
+          { $unwind: "$grants" },
+          { $group: { _id: "$grants.school_id", bytes: { $sum: "$file_size" }, files: { $sum: 1 } } },
+          { $sort: { bytes: -1 } },
+          { $limit: 10 }
+        ])
+      ]);
 
-    const topDownloads = await DownloadLog.aggregate([
-      { $group: { _id: "$pdf_id", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 5 }
-    ]);
-
-    const storageByTenant = await Pdf.aggregate([
-      { $match: { deleted_at: null } },
-      {
-        $lookup: {
-          from: "schoolcategoryaccesses",
-          localField: "category_id",
-          foreignField: "category_id",
-          as: "grants"
-        }
-      },
-      { $unwind: "$grants" },
-      { $group: { _id: "$grants.school_id", bytes: { $sum: "$file_size" }, files: { $sum: 1 } } },
-      { $sort: { bytes: -1 } },
-      { $limit: 10 }
-    ]);
-
-    return {
-      user_count,
-      school_count,
-      active_school_count,
-      inactive_school_count: school_count - active_school_count,
-      pdf_count,
-      total_downloads,
-      pending_onboarding,
-      active_sessions,
-      top_downloads: topDownloads,
-      storage_bytes: storageAgg[0]?.totalBytes ?? 0,
-      storage_by_school: storageByTenant.map((s) => ({
-        school_id: s._id,
-        bytes: s.bytes,
-        files: s.files
-      }))
-    };
-  });
+      return {
+        user_count,
+        school_count,
+        active_school_count,
+        inactive_school_count: school_count - active_school_count,
+        pdf_count,
+        total_downloads,
+        pending_onboarding,
+        active_sessions,
+        top_downloads: topDownloads,
+        storage_bytes: storageAgg[0]?.totalBytes ?? 0,
+        storage_by_school: storageByTenant.map((s) => ({
+          school_id: s._id,
+          bytes: s.bytes,
+          files: s.files
+        }))
+      };
+    })
+  );
 
   app.get("/api/analytics/timeseries", { preHandler: requirePermission(PERMISSIONS.ANALYTICS_VIEW) }, async (request) => {
     const rawDays = parseInt((request.query as Record<string, string>).days ?? "30", 10);
@@ -163,6 +171,8 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
         storage_bytes: 0
       };
     }
+
+    return cached(`analytics:school:${schoolId}:${userId ?? "none"}`, DASHBOARD_TTL_MS, async () => {
     const [subjectGrants, classGrants, progGrants] = await Promise.all([
       SchoolSubjectAccess.find({ school_id: schoolId }).lean(),
       SchoolClassAccess.find({ school_id: schoolId }).lean(),
@@ -270,5 +280,6 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
       recently_viewed,
       storage_bytes: storageAgg[0]?.totalBytes ?? 0
     };
+    });
   });
 };
