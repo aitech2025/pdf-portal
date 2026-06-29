@@ -30,3 +30,22 @@ export function getPdfCode(pdf) {
   const code = pdf.pdfId ?? pdf.pdf_id ?? pdf.pdfID ?? null
   return code && String(code).trim() ? String(code) : null
 }
+
+/**
+ * Generic free-text search predicate used by list/table pages.
+ * Returns true when `query` is empty, or when ANY of the provided column values
+ * contains the query (case-insensitive). Pass every value displayed in the row —
+ * strings, numbers, dates, arrays, etc. Null/undefined values are skipped.
+ *
+ * Usage: rows.filter(r => matchesSearch(query, r.name, r.email, statusLabel(r), r.grades))
+ */
+export function matchesSearch(query, ...values) {
+  if (query == null) return true
+  const q = String(query).trim().toLowerCase()
+  if (!q) return true
+  return values.some((v) => {
+    if (v === null || v === undefined) return false
+    if (Array.isArray(v)) return v.some((x) => x != null && String(x).toLowerCase().includes(q))
+    return String(v).toLowerCase().includes(q)
+  })
+}

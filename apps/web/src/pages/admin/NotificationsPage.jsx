@@ -16,7 +16,7 @@ import PageTransition from '@/components/PageTransition.jsx';
 import ConfirmationModal from '@/components/ConfirmationModal.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
-import { cn } from '@/lib/utils';
+import { cn, matchesSearch } from '@/lib/utils';
 
 const getNotificationConfig = (type) => {
   const configs = {
@@ -66,10 +66,7 @@ const NotificationsPage = () => {
         if (filterTab === 'read') return n.read;
         return true; // 'all'
       })
-      .filter(n => 
-        n.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        n.message.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      .filter(n => matchesSearch(searchTerm, n.subject, n.message, n.type));
   }, [notifications, filterTab, searchTerm]);
 
   const handleNotificationClick = (notif) => {

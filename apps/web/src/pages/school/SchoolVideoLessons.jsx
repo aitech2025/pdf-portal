@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Skeleton } from '@/components/ui/skeleton';
 import { Search, Play, Download, ExternalLink, Video, VideoOff, Eye, BookOpen, Loader2 } from 'lucide-react';
 import PageTransition from '@/components/PageTransition.jsx';
+import PaginationControls from '@/components/PaginationControls.jsx';
+import { matchesSearch } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const PLAYER_SIZES = [
@@ -42,6 +44,24 @@ const apiFetch = async (url, options = {}) => {
     throw new Error(err.detail || 'Request failed');
   }
   return res.status === 204 ? null : res.json();
+};
+
+// Fetch every assigned lesson by walking pages — the API caps per_page (default 50),
+// so a school with 100+ assigned videos would otherwise only ever see the first page.
+const fetchAllVideoLessons = async () => {
+  const PER_PAGE = 200;
+  const all = [];
+  let page = 1;
+  // Cap iterations defensively to avoid an infinite loop on an unexpected response.
+  for (let i = 0; i < 100; i++) {
+    const res = await apiFetch(`/api/videoLessons?page=${page}&per_page=${PER_PAGE}`);
+    const items = res?.items ?? [];
+    all.push(...items);
+    const total = res?.totalItems ?? res?.total ?? all.length;
+    if (items.length === 0 || all.length >= total) break;
+    page += 1;
+  }
+  return all;
 };
 
 const parseVimeoUrl = (url) => {
@@ -153,6 +173,7 @@ const VideoPlayerDialog = ({ lesson, open, onClose }) => {
 
   if (!lesson) return null;
   const vimeoUrl = lesson.vimeoUrl;
+  const { id: vimeoId } = parseVimeoUrl(vimeoUrl);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -247,19 +268,21 @@ const SchoolVideoLessons = () => {
   const [filterClass, setFilterClass] = useState('all');
   const [filterSubject, setFilterSubject] = useState('all');
   const [playingLesson, setPlayingLesson] = useState(null);
+  const [page, setPage] = useState(1);
+  const PER_PAGE = 12;
 
   const fetchData = useCallback(async () => {
     if (!schoolId) return;
     setLoading(true);
     try {
-      const [lessonsRes, programsRes, classesRes, subjectsRes] = await Promise.all([
-        apiFetch('/api/videoLessons'),
+      const [allLessons, programsRes, classesRes, subjectsRes] = await Promise.all([
+        fetchAllVideoLessons(),
         apiFetch(`/api/schools/${schoolId}/categories`),
         apiFetch(`/api/schools/${schoolId}/classes`).catch(() => ({ items: [] })),
         apiFetch(`/api/schools/${schoolId}/subjects`).catch(() => ({ items: [] })),
       ]);
 
-      setLessons(lessonsRes?.items ?? []);
+      setLessons(allLessons);
 
       setPrograms((programsRes?.items ?? []).map(a => ({ id: a.categoryId, name: a.categoryName })));
 
@@ -300,12 +323,26 @@ const SchoolVideoLessons = () => {
       : subjects;
 
   const filtered = lessons.filter(lesson => {
-    const matchSearch = !search || lesson.title?.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = matchesSearch(
+      search,
+      lesson.title, lesson.description,
+      programMap[lesson.programId], classMap[lesson.classId], subjectMap[lesson.subjectId]
+    );
     const matchProgram = filterProgram === 'all' || lesson.programId === filterProgram;
     const matchClass = filterClass === 'all' || lesson.classId === filterClass;
     const matchSubject = filterSubject === 'all' || lesson.subjectId === filterSubject;
     return matchSearch && matchProgram && matchClass && matchSubject;
   });
+
+  // Reset to first page whenever the filtered result set changes (search / filters)
+  useEffect(() => { setPage(1); }, [search, filterProgram, filterClass, filterSubject]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const pageItems = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+
+  const goPrev = () => setPage(p => Math.max(1, p - 1));
+  const goNext = () => setPage(p => Math.min(totalPages, p + 1));
 
   return (
     <PageTransition>
@@ -372,6 +409,18 @@ const SchoolVideoLessons = () => {
           )}
         </div>
 
+        {/* Top pagination */}
+        {!loading && (
+          <PaginationControls
+            page={safePage}
+            totalPages={totalPages}
+            onPrev={goPrev}
+            onNext={goNext}
+            total={filtered.length}
+            itemLabel="lessons"
+          />
+        )}
+
         {/* Lessons Grid */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -399,7 +448,7 @@ const SchoolVideoLessons = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filtered.map(lesson => {
+            {pageItems.map(lesson => {
               const { id: vimeoId } = parseVimeoUrl(lesson.vimeoUrl);
               const thumbnail = lesson.thumbnail || (vimeoId ? `https://vumbnail.com/${vimeoId}.jpg` : null);
               const programName = programMap[lesson.programId] || '';
@@ -462,6 +511,18 @@ const SchoolVideoLessons = () => {
               );
             })}
           </div>
+        )}
+
+        {/* Bottom pagination */}
+        {!loading && (
+          <PaginationControls
+            page={safePage}
+            totalPages={totalPages}
+            onPrev={goPrev}
+            onNext={goNext}
+            total={filtered.length}
+            itemLabel="lessons"
+          />
         )}
       </div>
 

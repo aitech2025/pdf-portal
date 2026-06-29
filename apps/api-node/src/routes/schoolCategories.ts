@@ -217,18 +217,19 @@ export const registerSchoolCategoryRoutes = async (app: FastifyInstance): Promis
     { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) },
     async (request, reply) => {
       const params = z.object({ school_id: z.string(), class_id: z.string() }).parse(request.params);
+      const query = z.object({ program_id: z.string().optional(), programId: z.string().optional() }).parse(request.query);
+      const programId = query.programId ?? query.program_id;
 
-      // deleteMany handles multiple records (same class under different programs)
-      const classResult = await SchoolClassAccess.deleteMany({
-        school_id: params.school_id,
-        class_id: params.class_id
-      });
+      // When program_id is supplied, scope removal to that program so a class shared
+      // across multiple programs isn't wiped from all of them. deleteMany still handles
+      // multiple records for the same (program, class) pair.
+      const classFilter: Record<string, unknown> = { school_id: params.school_id, class_id: params.class_id };
+      if (programId) classFilter.program_id = programId;
 
-      // Cascade: remove all subject access records for this class
-      await SchoolSubjectAccess.deleteMany({
-        school_id: params.school_id,
-        class_id: params.class_id
-      });
+      const classResult = await SchoolClassAccess.deleteMany(classFilter);
+
+      // Cascade: remove subject access records for this class (scoped to the program when given)
+      await SchoolSubjectAccess.deleteMany(classFilter);
 
       return { message: "Class access removed", deletedCount: classResult.deletedCount };
     }
@@ -309,12 +310,24 @@ export const registerSchoolCategoryRoutes = async (app: FastifyInstance): Promis
     { preHandler: requirePermission(PERMISSIONS.SCHOOL_MANAGE) },
     async (request, reply) => {
       const params = z.object({ school_id: z.string(), subject_id: z.string() }).parse(request.params);
+      const query = z
+        .object({
+          program_id: z.string().optional(),
+          programId: z.string().optional(),
+          class_id: z.string().optional(),
+          classId: z.string().optional()
+        })
+        .parse(request.query);
+      const programId = query.programId ?? query.program_id;
+      const classId = query.classId ?? query.class_id;
 
-      // deleteMany handles multiple records (same subject in different class/program combinations)
-      const result = await SchoolSubjectAccess.deleteMany({
-        school_id: params.school_id,
-        subject_id: params.subject_id
-      });
+      // Scope removal to the specific program/class when supplied so the same subject
+      // master granted under another program/class combination isn't removed as well.
+      const filter: Record<string, unknown> = { school_id: params.school_id, subject_id: params.subject_id };
+      if (programId) filter.program_id = programId;
+      if (classId) filter.class_id = classId;
+
+      const result = await SchoolSubjectAccess.deleteMany(filter);
 
       return { message: "Subject access removed", deletedCount: result.deletedCount };
     }

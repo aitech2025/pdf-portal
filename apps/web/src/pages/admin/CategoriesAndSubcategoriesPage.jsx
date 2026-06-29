@@ -15,7 +15,7 @@ import PageTransition from '@/components/PageTransition.jsx';
 import { useCategoriesManagement } from '@/hooks/useCategoriesManagement.js';
 import CategoryModal from '@/components/admin/categories/CategoryModal.jsx';
 import DeleteConfirmationDialog from '@/components/admin/categories/DeleteConfirmationDialog.jsx';
-import { cn } from '@/lib/utils';
+import { cn, matchesSearch } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import pb from '@/lib/apiClient';
 import { toast } from 'sonner';
@@ -413,7 +413,7 @@ const CategoriesAndSubcategoriesPage = () => {
   const filteredCategories = useMemo(() => {
     if (!Array.isArray(categories)) return [];
     return categories
-      .filter(c => c && c.categoryName && c.categoryName.toLowerCase().includes(catSearch.toLowerCase()))
+      .filter(c => c && matchesSearch(catSearch, c.categoryName, c.categoryType, c.programType, c.description))
       .filter(c => catStatusFilter === 'all' ? true : catStatusFilter === 'active' ? c.isActive !== false : c.isActive === false);
   }, [categories, catSearch, catStatusFilter]);
 
@@ -477,7 +477,7 @@ const CategoriesAndSubcategoriesPage = () => {
   const filteredStructureClasses = useMemo(() => {
     if (!programStructure) return [];
     return (programStructure.classes || []).filter(cls =>
-      !classSearch || cls.className?.toLowerCase().includes(classSearch.toLowerCase())
+      matchesSearch(classSearch, cls.className, cls.classCode)
     );
   }, [programStructure, classSearch]);
 

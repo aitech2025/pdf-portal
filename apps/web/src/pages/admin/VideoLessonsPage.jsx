@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Play, Edit2, Trash2, Video, VideoOff, Search, ExternalLink, Loader2,
-  Eye, GraduationCap, BookOpen, Tag, Info, LayoutList, LayoutGrid,
-  ChevronLeft, ChevronRight
+  Eye, GraduationCap, BookOpen, Tag, Info, LayoutList, LayoutGrid
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,9 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import PageTransition from '@/components/PageTransition.jsx';
+import PaginationControls from '@/components/PaginationControls.jsx';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import client from '@/lib/apiClient';
+import { matchesSearch } from '@/lib/utils';
 
 const PLATFORM_ADMIN_ROLES = ['super_admin', 'platform_admin', 'admin'];
 
@@ -454,17 +455,20 @@ const VideoLessonsPage = () => {
     }
   };
 
-  const filtered = lessons.filter(l => {
-    if (search && !l.title?.toLowerCase().includes(search.toLowerCase())
-      && !l.description?.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(totalLessons / PER_PAGE));
-
   const getClassName = id => classes.find(c => c.id === id)?.className || '';
   const getSubjectName = id => subjects.find(s => s.id === id)?.subjectName || '';
   const getProgramName = id => programs.find(p => p.id === id)?.categoryName || '';
+
+  const filtered = lessons.filter(l =>
+    matchesSearch(
+      search,
+      l.title, l.description,
+      getClassName(l.classId), getSubjectName(l.subjectId), getProgramName(l.programId),
+      l.isActive !== false ? 'active' : 'inactive'
+    )
+  );
+
+  const totalPages = Math.max(1, Math.ceil(totalLessons / PER_PAGE));
 
   const unassignedCount = filterUnassigned ? totalLessons : undefined;
 
@@ -553,6 +557,17 @@ const VideoLessonsPage = () => {
           </button>
         </div>
       </div>
+
+      {/* Top pagination */}
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        onPrev={() => setPage(p => Math.max(1, p - 1))}
+        onNext={() => setPage(p => Math.min(totalPages, p + 1))}
+        total={totalLessons}
+        itemLabel="videos"
+        loading={loading}
+      />
 
       {/* List / Grid */}
       {loading ? (
@@ -787,30 +802,17 @@ const VideoLessonsPage = () => {
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4">
-          <p className="text-sm text-muted-foreground">
-            Page {page} of {totalPages} · {totalLessons} videos total
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline" size="sm"
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
-            >
-              <ChevronLeft className="w-4 h-4 mr-1" /> Previous
-            </Button>
-            <Button
-              variant="outline" size="sm"
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || loading}
-            >
-              Next <ChevronRight className="w-4 h-4 ml-1" />
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Bottom pagination */}
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        onPrev={() => setPage(p => Math.max(1, p - 1))}
+        onNext={() => setPage(p => Math.min(totalPages, p + 1))}
+        total={totalLessons}
+        itemLabel="videos"
+        loading={loading}
+        className="mt-4"
+      />
 
       {isPlatformAdmin && (
         <VideoModal

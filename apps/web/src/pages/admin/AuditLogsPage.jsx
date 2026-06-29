@@ -10,6 +10,7 @@ import { Search, ShieldAlert, Filter, X, ChevronLeft, ChevronRight, Download } f
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { matchesSearch } from '@/lib/utils';
 
 const ACTION_OPTIONS = [
   { value: 'all', label: 'All Actions' },
@@ -93,14 +94,15 @@ const AuditLogsPage = () => {
     fetchLogs();
   }, [fetchLogs]);
 
-  // Client-side search on user name/email
+  // Client-side search across all displayed columns
   const filtered = search
     ? logs.filter(l => {
       const user = l.expand?.userId;
-      const name = (user?.name || '').toLowerCase();
-      const email = (user?.email || '').toLowerCase();
-      const q = search.toLowerCase();
-      return name.includes(q) || email.includes(q) || (l.actionDetails || '').toLowerCase().includes(q);
+      return matchesSearch(
+        search,
+        user?.name, user?.email,
+        l.action, l.actionDetails, l.resourceType, l.resourceId, l.ipAddress
+      );
     })
     : logs;
 

@@ -20,7 +20,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import PageTransition from '@/components/PageTransition.jsx';
-import { cn } from '@/lib/utils';
+import { cn, matchesSearch } from '@/lib/utils';
 
 const getToken = () => {
   try { return pb.authStore.token || localStorage.getItem('authToken') || ''; } catch { return ''; }
@@ -203,7 +203,7 @@ const SubjectManagementPage = () => {
   };
 
   const filtered = subjects.filter(s => {
-    const matchSearch = !search || s.subjectName?.toLowerCase().includes(search.toLowerCase()) || s.subjectCode?.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = matchesSearch(search, s.subjectName, s.subjectCode, s.description, s.isActive !== false ? 'active' : 'inactive');
     const matchStatus = statusFilter === 'all' ? true : statusFilter === 'active' ? s.isActive !== false : s.isActive === false;
     return matchSearch && matchStatus;
   });

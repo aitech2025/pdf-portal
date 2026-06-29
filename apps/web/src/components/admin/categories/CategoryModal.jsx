@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, GraduationCap, BookOpen, Search, CheckSquare, Square, ChevronDown, ChevronRight, FileText, Video } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, matchesSearch } from '@/lib/utils';
 import pb from '@/lib/apiClient';
 
 const getToken = () => {
@@ -121,7 +121,7 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
 
   const toggleAllClasses = () => {
     const visible = masterClasses.filter(c =>
-      !classSearch || c.className?.toLowerCase().includes(classSearch.toLowerCase())
+      matchesSearch(classSearch, c.className, c.classCode)
     );
     const allSelected = visible.every(c => selectedClassIds.has(c.id));
     if (allSelected) {
@@ -193,7 +193,7 @@ const CategoryModal = ({ isOpen, onClose, onSave, category = null }) => {
   };
 
   const visibleClasses = masterClasses.filter(c =>
-    !classSearch || c.className?.toLowerCase().includes(classSearch.toLowerCase())
+    matchesSearch(classSearch, c.className, c.classCode)
   );
   const allVisibleSelected = visibleClasses.length > 0 && visibleClasses.every(c => selectedClassIds.has(c.id));
   const selectedClassList = masterClasses.filter(c => selectedClassIds.has(c.id));

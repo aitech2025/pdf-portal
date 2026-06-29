@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { FileText, Search, X, FolderOpen } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatBytes } from '@/lib/utils';
+import { formatBytes, matchesSearch, getPdfCode } from '@/lib/utils';
 import pb from '@/lib/apiClient';
 import { toast } from 'sonner';
 
@@ -36,9 +36,8 @@ const PDFSelectionModal = ({ isOpen, onClose, onSelect }) => {
     }
   };
 
-  const filteredPdfs = pdfs.filter(pdf => 
-    pdf.fileName.toLowerCase().includes(search.toLowerCase()) ||
-    pdf.expand?.categoryId?.categoryName?.toLowerCase().includes(search.toLowerCase())
+  const filteredPdfs = pdfs.filter(pdf =>
+    matchesSearch(search, pdf.fileName, getPdfCode(pdf), pdf.expand?.categoryId?.categoryName, pdf.description)
   );
 
   return (

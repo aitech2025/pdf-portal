@@ -8,6 +8,11 @@ import { cn } from '@/lib/utils';
 
 const COLLEGE_CLASS_CODES = new Set(['11', '12']);
 
+// classId / subjectId from /structure are global master IDs (ClassMaster / SubjectMaster)
+// shared across programs. Subject selections must be bucketed per (program, class) so the
+// same master class/subject appearing under two programs doesn't collide and toggle each other.
+const subjKey = (programId, classId) => `${programId}::${classId}`;
+
 const getToken = () => {
   try { return localStorage.getItem('authToken') || localStorage.getItem('auth_token') || ''; } catch { return ''; }
 };
@@ -141,8 +146,20 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
 
       const pendingSubj = {};
       for (const item of assignedSubjItems) {
-        if (!pendingSubj[item.classId]) pendingSubj[item.classId] = new Set();
-        pendingSubj[item.classId].add(item.subjectId);
+        // Resolve the owning program (grants store program_id; fall back to structure lookup for legacy nulls)
+        let programId = item.programId;
+        if (!programId) {
+          for (const progId of assignedProgIds) {
+            if (programStructuresRef.current[progId]?.classes?.some(c => c.classId === item.classId)) {
+              programId = progId;
+              break;
+            }
+          }
+        }
+        if (!programId) continue;
+        const key = subjKey(programId, item.classId);
+        if (!pendingSubj[key]) pendingSubj[key] = new Set();
+        pendingSubj[key].add(item.subjectId);
       }
       setPendingSubjects(pendingSubj);
       setSavedSubjects(pendingSubj);
@@ -216,7 +233,7 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
           if (removedClassIds.length) {
             setPendingSubjects(ps => {
               const ns = { ...ps };
-              for (const classId of removedClassIds) delete ns[classId];
+              for (const classId of removedClassIds) delete ns[subjKey(programId, classId)];
               return ns;
             });
           }
@@ -240,7 +257,7 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
       const set = new Set(next[programId]);
       if (set.has(classId)) {
         set.delete(classId);
-        setPendingSubjects(ps => { const n = { ...ps }; delete n[classId]; return n; });
+        setPendingSubjects(ps => { const n = { ...ps }; delete n[subjKey(programId, classId)]; return n; });
       } else {
         set.add(classId);
       }
@@ -261,7 +278,7 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
         next[programId] = new Set();
         setPendingSubjects(ps => {
           const n = { ...ps };
-          for (const c of programClasses) delete n[c.classId];
+          for (const c of programClasses) delete n[subjKey(programId, c.classId)];
           return n;
         });
       } else {
@@ -271,24 +288,25 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
     });
   };
 
-  const toggleSubject = (classId, subjectId) => {
+  const toggleSubject = (programId, classId, subjectId) => {
+    const key = subjKey(programId, classId);
     setPendingSubjects(prev => {
       const next = { ...prev };
-      if (!next[classId]) next[classId] = new Set();
-      const set = new Set(next[classId]);
+      const set = new Set(next[key] || []);
       if (set.has(subjectId)) set.delete(subjectId);
       else set.add(subjectId);
-      next[classId] = set;
+      next[key] = set;
       return next;
     });
   };
 
-  const toggleAllSubjects = (classId, subjects) => {
+  const toggleAllSubjects = (programId, classId, subjects) => {
+    const key = subjKey(programId, classId);
     setPendingSubjects(prev => {
       const next = { ...prev };
-      const currentSet = new Set(next[classId] || []);
+      const currentSet = new Set(next[key] || []);
       const allSelected = subjects.length > 0 && subjects.every(s => currentSet.has(s.subjectId));
-      next[classId] = allSelected ? new Set() : new Set(subjects.map(s => s.subjectId));
+      next[key] = allSelected ? new Set() : new Set(subjects.map(s => s.subjectId));
       return next;
     });
   };
@@ -309,9 +327,9 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
         await apiFetch(`/api/schools/${schoolId}/categories/${id}`, { method: 'DELETE' });
       }
 
-      // Per-program class adds: compare pending vs saved snapshot to avoid cross-program ID collisions
+      // Per-program class adds/removes: compare pending vs saved snapshot to avoid cross-program ID collisions
       const classAssignments = [];
-      const classIdsToRemove = [];
+      const classesToRemove = []; // { programId, classId } — program-scoped so shared classes aren't wiped elsewhere
       for (const [programId, classIds] of Object.entries(pendingClasses)) {
         const savedForProgram = savedClasses[programId] || new Set();
         for (const classId of classIds) {
@@ -321,7 +339,7 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
       for (const [programId, savedClassIds] of Object.entries(savedClasses)) {
         const pendingForProgram = pendingClasses[programId] || new Set();
         for (const classId of savedClassIds) {
-          if (!pendingForProgram.has(classId)) classIdsToRemove.push(classId);
+          if (!pendingForProgram.has(classId)) classesToRemove.push({ programId, classId });
         }
       }
       if (classAssignments.length) {
@@ -330,24 +348,17 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
           body: JSON.stringify({ assignments: classAssignments })
         });
       }
-      for (const classId of classIdsToRemove) {
-        await apiFetch(`/api/schools/${schoolId}/classes/${classId}`, { method: 'DELETE' });
+      for (const { programId, classId } of classesToRemove) {
+        await apiFetch(`/api/schools/${schoolId}/classes/${classId}?program_id=${encodeURIComponent(programId)}`, { method: 'DELETE' });
       }
 
-      // Build classId → programId lookup for subject assignments
-      const classToProgram = {};
-      for (const [programId, classIds] of Object.entries(pendingClasses)) {
-        for (const classId of classIds) classToProgram[classId] = programId;
-      }
-
-      // Per-class subject adds: compare pending vs saved snapshot to avoid cross-class ID collisions
+      // Per (program, class) subject adds — keys are `${programId}::${classId}`
       const subjectAssignments = [];
-      for (const [classId, subjIds] of Object.entries(pendingSubjects)) {
-        const programId = classToProgram[classId];
-        if (!programId) continue;
-        const savedForClass = savedSubjects[classId] || new Set();
+      for (const [key, subjIds] of Object.entries(pendingSubjects)) {
+        const [programId, classId] = key.split('::');
+        const savedForKey = savedSubjects[key] || new Set();
         for (const subjectId of subjIds) {
-          if (!savedForClass.has(subjectId)) subjectAssignments.push({ programId, classId, subjectId });
+          if (!savedForKey.has(subjectId)) subjectAssignments.push({ programId, classId, subjectId });
         }
       }
       if (subjectAssignments.length) {
@@ -356,12 +367,19 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
           body: JSON.stringify({ assignments: subjectAssignments })
         });
       }
-      // Subject removes: DELETE is flat (not class-scoped), so compare flat saved vs flat pending
-      const allPendingSubjectIds = new Set(Object.values(pendingSubjects).flatMap(s => [...s]));
-      const allSavedSubjectIds = new Set(Object.values(savedSubjects).flatMap(s => [...s]));
-      const toRemoveSubjectIds = [...allSavedSubjectIds].filter(id => !allPendingSubjectIds.has(id));
-      for (const subjectId of toRemoveSubjectIds) {
-        await apiFetch(`/api/schools/${schoolId}/subjects/${subjectId}`, { method: 'DELETE' });
+      // Subject removes — scoped to the specific program/class so a shared subject master
+      // granted under another program/class combination isn't removed too.
+      for (const [key, savedIds] of Object.entries(savedSubjects)) {
+        const [programId, classId] = key.split('::');
+        const pendingForKey = pendingSubjects[key] || new Set();
+        for (const subjectId of savedIds) {
+          if (!pendingForKey.has(subjectId)) {
+            await apiFetch(
+              `/api/schools/${schoolId}/subjects/${subjectId}?program_id=${encodeURIComponent(programId)}&class_id=${encodeURIComponent(classId)}`,
+              { method: 'DELETE' }
+            );
+          }
+        }
       }
 
       await refresh();
@@ -474,7 +492,7 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
                 {programClasses.map(cls => {
                   const isClassSelected = selectedClasses.has(cls.classId);
                   const classSubjects = cls.subjects || [];
-                  const selectedSubjects = pendingSubjects[cls.classId] || new Set();
+                  const selectedSubjects = pendingSubjects[subjKey(program.id, cls.classId)] || new Set();
                   const allSubjectsSelected = classSubjects.length > 0 && classSubjects.every(s => selectedSubjects.has(s.subjectId));
 
                   return (
@@ -504,7 +522,7 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
                         <div className="pb-2.5 pl-7 space-y-1.5">
                           <div className="flex items-center gap-2 py-1">
                             <button
-                              onClick={() => toggleAllSubjects(cls.classId, classSubjects)}
+                              onClick={() => toggleAllSubjects(program.id, cls.classId, classSubjects)}
                               className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
                             >
                               {allSubjectsSelected ? <CheckSquare className="w-3 h-3 text-primary" /> : <Square className="w-3 h-3" />}
@@ -517,7 +535,7 @@ const CategoryAccessPanel = ({ schoolId, institutionType, onCountChange }) => {
                               return (
                                 <button
                                   key={subj.subjectId}
-                                  onClick={() => toggleSubject(cls.classId, subj.subjectId)}
+                                  onClick={() => toggleSubject(program.id, cls.classId, subj.subjectId)}
                                   className={cn(
                                     "inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-0.5 border transition-colors",
                                     isSubjSelected

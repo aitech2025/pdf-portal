@@ -15,7 +15,7 @@ import ConfirmationModal from '@/components/ConfirmationModal.jsx';
 import EnhancedPDFViewer from '@/components/EnhancedPDFViewer.jsx';
 import VersionHistoryModal from '@/components/admin/pdfs/VersionHistoryModal.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatBytes, cn, getPdfCode } from '@/lib/utils';
+import { formatBytes, cn, getPdfCode, matchesSearch } from '@/lib/utils';
 import { usePDFVersioning } from '@/hooks/usePDFVersioning.js';
 import { useAuth } from '@/contexts/AuthContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -286,14 +286,19 @@ const PDFUploadManagement = () => {
     }
   };
 
-  const filteredPdfs = pdfs.filter(p => {
-    if (!search) return true;
-    const name = p.fileName || p.file_name || '';
-    const pdfId = getPdfCode(p) || '';
-    return name.toLowerCase().includes(search.toLowerCase()) || pdfId.toLowerCase().includes(search.toLowerCase());
-  });
-
   const getProgramName = (id) => programs.find(p => p.id === id)?.categoryName || '';
+
+  const filteredPdfs = pdfs.filter(p =>
+    matchesSearch(
+      search,
+      p.fileName || p.file_name,
+      getPdfCode(p),
+      getProgramName(p.categoryId || p.category_id),
+      p.className || p.class_name,
+      p.subjectName || p.subject_name,
+      p.description, p.tags
+    )
+  );
 
   return (
     <PageTransition>

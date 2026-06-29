@@ -16,6 +16,7 @@ import SchoolDetailsModal from '@/components/admin/schools/SchoolDetailsModal.js
 import CreateSchoolDialog from '@/components/admin/schools/CreateSchoolDialog.jsx';
 import CategoryAssignmentModal from '@/components/admin/schools/CategoryAssignmentModal.jsx';
 import { useLocation } from 'react-router-dom';
+import { matchesSearch } from '@/lib/utils';
 
 const SchoolsAndUsersPage = () => {
   const location = useLocation();
@@ -225,16 +226,26 @@ const SchoolsAndUsersPage = () => {
   };
 
   const filteredSchools = schools.filter(s =>
-    s.schoolName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.schoolId?.toLowerCase().includes(searchQuery.toLowerCase())
+    matchesSearch(
+      searchQuery,
+      s.schoolName, s.schoolId, s.location, s.address,
+      s.email, s.mobileNumber, s.pointOfContactName,
+      s.isActive ? 'active' : 'inactive'
+    )
   );
   const filteredOnboarding = onboardingRequests.filter(r =>
-    r.schoolName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.email?.toLowerCase().includes(searchQuery.toLowerCase())
+    matchesSearch(
+      searchQuery,
+      r.schoolName, r.email, r.mobileNumber, r.pointOfContactName, r.location,
+      r.status, r.created ? new Date(r.created).toLocaleDateString() : null
+    )
   );
   const filteredUsers = userRequests.filter(r =>
-    r.requestedUserName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.requestedUserEmail?.toLowerCase().includes(searchQuery.toLowerCase())
+    matchesSearch(
+      searchQuery,
+      r.requestedUserName, r.requestedUserEmail, r.requestedUserMobile,
+      r.expand?.schoolId?.schoolName, r.status
+    )
   );
 
   return (

@@ -82,7 +82,13 @@ export const registerUserRoutes = async (app: FastifyInstance): Promise<void> =>
     if (isActive !== undefined) filter.is_active = isActive;
     if (query.q) {
       const regex = new RegExp(query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      filter.$or = [{ name: regex }, { email: regex }];
+      // Search across every displayed/identifying column, not just name.
+      filter.$or = [
+        { name: regex },
+        { email: regex },
+        { mobile_number: regex },
+        { role: regex }
+      ];
     }
 
     const sortField =

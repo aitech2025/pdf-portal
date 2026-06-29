@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import ConfirmationModal from '@/components/ConfirmationModal.jsx';
+import { matchesSearch } from '@/lib/utils';
 
 const TeamManagementPage = () => {
   const [members, setMembers] = useState([]);
@@ -89,8 +90,7 @@ const TeamManagementPage = () => {
   };
 
   const filtered = members.filter(m =>
-    (m.name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (m.email || '').toLowerCase().includes(search.toLowerCase())
+    matchesSearch(search, m.name, m.email, m.role, m.mobileNumber)
   );
 
   return (

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   FileText, BookOpen, FolderTree, UploadCloud, ArrowRight, HardDrive, BarChart3,
   Eye, GraduationCap, Search
@@ -28,6 +29,9 @@ const ContentDashboard = () => {
   const [selectedPdf, setSelectedPdf] = useState(null);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [contentSearch, setContentSearch] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterClass, setFilterClass] = useState('all');
+  const [filterSubject, setFilterSubject] = useState('all');
 
   const fetchData = async () => {
     try {
@@ -79,16 +83,21 @@ const ContentDashboard = () => {
   );
 
   const filteredPdfs = useMemo(() => {
-    if (!contentSearch.trim()) return allPdfs;
-    const q = contentSearch.toLowerCase();
-    return allPdfs.filter(p =>
-      p.fileName?.toLowerCase().includes(q) ||
-      classMap[p.classId]?.toLowerCase().includes(q) ||
-      subjectMap[p.subjectId]?.toLowerCase().includes(q) ||
-      categoryMap[p.categoryId]?.toLowerCase().includes(q) ||
-      (p.subCategoryName || '').toLowerCase().includes(q)
-    );
-  }, [allPdfs, contentSearch, classMap, subjectMap, categoryMap]);
+    const q = contentSearch.trim().toLowerCase();
+    return allPdfs.filter(p => {
+      if (filterCategory !== 'all' && p.categoryId !== filterCategory) return false;
+      if (filterClass !== 'all' && p.classId !== filterClass) return false;
+      if (filterSubject !== 'all' && p.subjectId !== filterSubject) return false;
+      if (!q) return true;
+      return (
+        p.fileName?.toLowerCase().includes(q) ||
+        classMap[p.classId]?.toLowerCase().includes(q) ||
+        subjectMap[p.subjectId]?.toLowerCase().includes(q) ||
+        categoryMap[p.categoryId]?.toLowerCase().includes(q) ||
+        (p.subCategoryName || '').toLowerCase().includes(q)
+      );
+    });
+  }, [allPdfs, contentSearch, filterCategory, filterClass, filterSubject, classMap, subjectMap, categoryMap]);
 
   const StatCard = ({ title, value, icon: Icon, colorClass, bgClass }) => (
     <Card className="shadow-soft-sm hover:shadow-soft-md transition-base border-none overflow-hidden relative">
@@ -173,6 +182,41 @@ const ContentDashboard = () => {
                   className="pl-9 h-9 text-sm"
                 />
               </div>
+              {!selectedPdf && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <Select value={filterCategory} onValueChange={v => { setFilterCategory(v); setFilterClass('all'); setFilterSubject('all'); }}>
+                    <SelectTrigger className="h-9 w-[170px] text-sm"><SelectValue placeholder="All Programs" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Programs</SelectItem>
+                      {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.categoryName}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filterClass} onValueChange={v => { setFilterClass(v); setFilterSubject('all'); }}>
+                    <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="All Classes" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Classes</SelectItem>
+                      {allClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.className}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filterSubject} onValueChange={setFilterSubject}>
+                    <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="All Subjects" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Subjects</SelectItem>
+                      {allSubjects.map(s => <SelectItem key={s.id} value={s.id}>{s.subjectName}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {(filterCategory !== 'all' || filterClass !== 'all' || filterSubject !== 'all') && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 text-muted-foreground"
+                      onClick={() => { setFilterCategory('all'); setFilterClass('all'); setFilterSubject('all'); }}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              )}
             </CardHeader>
             <CardContent className="p-0 overflow-y-auto flex-1">
               {loading ? (

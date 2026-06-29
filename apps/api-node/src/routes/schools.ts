@@ -108,7 +108,16 @@ export const registerSchoolRoutes = async (app: FastifyInstance): Promise<void> 
     const filter: Record<string, unknown> = {};
     if (query.filter) {
       const regex = new RegExp(query.filter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      filter.$or = [{ school_name: regex }, { school_id: regex }, { email: regex }];
+      // Search across every displayed/identifying column.
+      filter.$or = [
+        { school_name: regex },
+        { school_id: regex },
+        { email: regex },
+        { location: regex },
+        { address: regex },
+        { mobile_number: regex },
+        { point_of_contact_name: regex }
+      ];
     }
 
     const sortField =

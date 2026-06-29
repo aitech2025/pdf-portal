@@ -25,7 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import LoadingSpinner from '@/components/LoadingSpinner.jsx';
 import PDFViewer from '@/components/PDFViewer.jsx';
-import { cn } from '@/lib/utils';
+import { cn, matchesSearch, getPdfCode } from '@/lib/utils';
 
 const formatSize = (bytes) => {
   if (!bytes) return '0 B';
@@ -195,25 +195,19 @@ const SchoolPortalContent = ({ school }) => {
   );
 
   const filteredPdfs = useMemo(
-    () =>
-      pdfs.filter(
-        (p) =>
-          !search ||
-          (p.fileName ?? '').toLowerCase().includes(search.toLowerCase()) ||
-          (p.pdfId ?? '').toLowerCase().includes(search.toLowerCase())
-      ),
+    () => pdfs.filter((p) => matchesSearch(search, p.fileName, getPdfCode(p), p.description)),
     [pdfs, search]
   );
 
   // Flat list filtered
   const filteredAllPdfs = useMemo(
     () =>
-      allPdfs.filter(
-        (p) =>
-          !search ||
-          (p.fileName ?? '').toLowerCase().includes(search.toLowerCase()) ||
-          (programMap[p.categoryId] ?? '').toLowerCase().includes(search.toLowerCase()) ||
-          (classMap[p.classId] ?? '').toLowerCase().includes(search.toLowerCase())
+      allPdfs.filter((p) =>
+        matchesSearch(
+          search,
+          p.fileName, getPdfCode(p),
+          programMap[p.categoryId], classMap[p.classId], p.description
+        )
       ),
     [allPdfs, search, programMap, classMap]
   );

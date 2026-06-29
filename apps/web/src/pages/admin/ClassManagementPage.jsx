@@ -20,7 +20,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import PageTransition from '@/components/PageTransition.jsx';
-import { cn } from '@/lib/utils';
+import { cn, matchesSearch } from '@/lib/utils';
 
 const getToken = () => {
   try { return pb.authStore.token || localStorage.getItem('authToken') || ''; } catch { return ''; }
@@ -203,7 +203,7 @@ const ClassManagementPage = () => {
   };
 
   const filtered = classes.filter(c => {
-    const matchSearch = !search || c.className?.toLowerCase().includes(search.toLowerCase()) || c.classCode?.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = matchesSearch(search, c.className, c.classCode, c.description, c.isActive !== false ? 'active' : 'inactive');
     const matchStatus = statusFilter === 'all' ? true : statusFilter === 'active' ? c.isActive !== false : c.isActive === false;
     return matchSearch && matchStatus;
   });
