@@ -7,9 +7,26 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, Eye, Filter, Plus, Building2, CheckCircle2, XCircle, RotateCcw, FolderTree } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search, Eye, Filter, Plus, Building2, CheckCircle2, XCircle, RotateCcw, FolderTree, ChevronLeft, ChevronRight } from 'lucide-react';
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
+
+const TableNav = ({ page, totalPages, onPrev, onNext, total, itemLabel, loading, className = '' }) => (
+  <div className={`flex items-center justify-between gap-4 ${className}`}>
+    <p className="text-sm text-muted-foreground">
+      {total > 0 ? `Page ${page} of ${totalPages} · ${total} ${itemLabel} total` : `No ${itemLabel}`}
+    </p>
+    <div className="flex items-center gap-2">
+      <Button variant="outline" size="sm" onClick={onPrev} disabled={page <= 1 || loading}>
+        <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+      </Button>
+      <Button variant="outline" size="sm" onClick={onNext} disabled={page >= totalPages || loading}>
+        Next <ChevronRight className="w-4 h-4 ml-1" />
+      </Button>
+    </div>
+  </div>
+);
 import RequestDetailPanel from '@/components/RequestDetailPanel.jsx';
 import RejectionReasonModal from '@/components/RejectionReasonModal.jsx';
 import SchoolDetailsModal from '@/components/admin/schools/SchoolDetailsModal.jsx';
@@ -40,6 +57,11 @@ const SchoolsAndUsersPage = () => {
   const [isCreateSchoolOpen, setIsCreateSchoolOpen] = useState(false);
   const [isCategoryAssignmentOpen, setIsCategoryAssignmentOpen] = useState(false);
   const [categoryAssignmentSchool, setCategoryAssignmentSchool] = useState(null);
+
+  const [perPage, setPerPage] = useState(10);
+  const [schoolsPage, setSchoolsPage] = useState(1);
+  const [onboardingPage, setOnboardingPage] = useState(1);
+  const [usersPage, setUsersPage] = useState(1);
 
   const token = pb.authStore.token;
 
@@ -248,6 +270,17 @@ const SchoolsAndUsersPage = () => {
     )
   );
 
+  // Reset all tab pages when search or per-page changes
+  useEffect(() => { setSchoolsPage(1); setOnboardingPage(1); setUsersPage(1); }, [searchQuery, perPage]);
+
+  const schoolsTotalPages = Math.max(1, Math.ceil(filteredSchools.length / perPage));
+  const onboardingTotalPages = Math.max(1, Math.ceil(filteredOnboarding.length / perPage));
+  const usersTotalPages = Math.max(1, Math.ceil(filteredUsers.length / perPage));
+
+  const pagedSchools = filteredSchools.slice((schoolsPage - 1) * perPage, schoolsPage * perPage);
+  const pagedOnboarding = filteredOnboarding.slice((onboardingPage - 1) * perPage, onboardingPage * perPage);
+  const pagedUsers = filteredUsers.slice((usersPage - 1) * perPage, usersPage * perPage);
+
   return (
     <PageTransition>
       <div className="mb-8">
@@ -265,7 +298,22 @@ const SchoolsAndUsersPage = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">Show</span>
+            <Select value={String(perPage)} onValueChange={(v) => setPerPage(Number(v))}>
+              <SelectTrigger className="w-20 h-9 text-sm bg-card border-border/60">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">entries</span>
+          </div>
           {activeTab === 'schools' && (
             <Button className="rounded-full shadow-soft-sm" onClick={() => setIsCreateSchoolOpen(true)}>
               <Plus className="w-4 h-4 mr-2" /> Onboard School
@@ -287,6 +335,16 @@ const SchoolsAndUsersPage = () => {
             <Card className="border-none shadow-soft-md"><CardContent className="p-6 space-y-4"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></CardContent></Card>
           ) : (
             <div className="bg-card rounded-[var(--radius-xl)] shadow-soft-md border border-border/50 overflow-hidden">
+              <TableNav
+                page={schoolsPage}
+                totalPages={schoolsTotalPages}
+                onPrev={() => setSchoolsPage(p => Math.max(1, p - 1))}
+                onNext={() => setSchoolsPage(p => Math.min(schoolsTotalPages, p + 1))}
+                total={filteredSchools.length}
+                itemLabel="schools"
+                loading={loading}
+                className="px-4 py-3 border-b border-border/50"
+              />
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>
@@ -301,7 +359,7 @@ const SchoolsAndUsersPage = () => {
                   {filteredSchools.length === 0 && (
                     <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground">No schools found.</TableCell></TableRow>
                   )}
-                  {filteredSchools.map(school => (
+                  {pagedSchools.map(school => (
                     <TableRow key={school.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell className="font-medium text-foreground">
                         <div className="flex items-center gap-2">
@@ -371,6 +429,16 @@ const SchoolsAndUsersPage = () => {
                   ))}
                 </TableBody>
               </Table>
+              <TableNav
+                page={schoolsPage}
+                totalPages={schoolsTotalPages}
+                onPrev={() => setSchoolsPage(p => Math.max(1, p - 1))}
+                onNext={() => setSchoolsPage(p => Math.min(schoolsTotalPages, p + 1))}
+                total={filteredSchools.length}
+                itemLabel="schools"
+                loading={loading}
+                className="px-4 py-3 border-t border-border/50"
+              />
             </div>
           )}
         </TabsContent>
@@ -381,6 +449,16 @@ const SchoolsAndUsersPage = () => {
             <Card className="border-none shadow-soft-md"><CardContent className="p-6 space-y-4"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></CardContent></Card>
           ) : (
             <div className="bg-card rounded-[var(--radius-xl)] shadow-soft-md border border-border/50 overflow-hidden">
+              <TableNav
+                page={onboardingPage}
+                totalPages={onboardingTotalPages}
+                onPrev={() => setOnboardingPage(p => Math.max(1, p - 1))}
+                onNext={() => setOnboardingPage(p => Math.min(onboardingTotalPages, p + 1))}
+                total={filteredOnboarding.length}
+                itemLabel="requests"
+                loading={loading}
+                className="px-4 py-3 border-b border-border/50"
+              />
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>
@@ -395,7 +473,7 @@ const SchoolsAndUsersPage = () => {
                   {filteredOnboarding.length === 0 && (
                     <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground">No onboarding requests found.</TableCell></TableRow>
                   )}
-                  {filteredOnboarding.map(req => (
+                  {pagedOnboarding.map(req => (
                     <TableRow key={req.id}>
                       <TableCell className="font-medium text-foreground">{req.schoolName}</TableCell>
                       <TableCell className="text-muted-foreground">{req.email}</TableCell>
@@ -450,6 +528,16 @@ const SchoolsAndUsersPage = () => {
                   ))}
                 </TableBody>
               </Table>
+              <TableNav
+                page={onboardingPage}
+                totalPages={onboardingTotalPages}
+                onPrev={() => setOnboardingPage(p => Math.max(1, p - 1))}
+                onNext={() => setOnboardingPage(p => Math.min(onboardingTotalPages, p + 1))}
+                total={filteredOnboarding.length}
+                itemLabel="requests"
+                loading={loading}
+                className="px-4 py-3 border-t border-border/50"
+              />
             </div>
           )}
         </TabsContent>
@@ -460,6 +548,16 @@ const SchoolsAndUsersPage = () => {
             <Card className="border-none shadow-soft-md"><CardContent className="p-6 space-y-4"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></CardContent></Card>
           ) : (
             <div className="bg-card rounded-[var(--radius-xl)] shadow-soft-md border border-border/50 overflow-hidden">
+              <TableNav
+                page={usersPage}
+                totalPages={usersTotalPages}
+                onPrev={() => setUsersPage(p => Math.max(1, p - 1))}
+                onNext={() => setUsersPage(p => Math.min(usersTotalPages, p + 1))}
+                total={filteredUsers.length}
+                itemLabel="requests"
+                loading={loading}
+                className="px-4 py-3 border-b border-border/50"
+              />
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>
@@ -474,7 +572,7 @@ const SchoolsAndUsersPage = () => {
                   {filteredUsers.length === 0 && (
                     <TableRow><TableCell colSpan={5} className="h-40 text-center text-muted-foreground">No user requests found.</TableCell></TableRow>
                   )}
-                  {filteredUsers.map(req => (
+                  {pagedUsers.map(req => (
                     <TableRow key={req.id}>
                       <TableCell className="font-medium text-foreground">{req.requestedUserName}</TableCell>
                       <TableCell className="text-muted-foreground">{req.requestedUserEmail}</TableCell>
@@ -517,6 +615,16 @@ const SchoolsAndUsersPage = () => {
                   ))}
                 </TableBody>
               </Table>
+              <TableNav
+                page={usersPage}
+                totalPages={usersTotalPages}
+                onPrev={() => setUsersPage(p => Math.max(1, p - 1))}
+                onNext={() => setUsersPage(p => Math.min(usersTotalPages, p + 1))}
+                total={filteredUsers.length}
+                itemLabel="requests"
+                loading={loading}
+                className="px-4 py-3 border-t border-border/50"
+              />
             </div>
           )}
         </TabsContent>
