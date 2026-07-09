@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import pb from '@/lib/apiClient';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,56 +16,106 @@ import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import EnhancedPDFViewer from '@/components/EnhancedPDFViewer.jsx';
 import VersionHistoryModal from '@/components/admin/pdfs/VersionHistoryModal.jsx';
+import PaginationControls from '@/components/PaginationControls.jsx';
 import { formatBytes, cn, getPdfCode } from '@/lib/utils';
+
+const PER_PAGE = 50;
 
 const ContentDashboard = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState(null);
-  const [allPdfs, setAllPdfs] = useState([]);
+
+  // Reference data — loaded once on mount
   const [categories, setCategories] = useState([]);
   const [allClasses, setAllClasses] = useState([]);
   const [allSubjects, setAllSubjects] = useState([]);
+
+  // Current page of PDFs (server-filtered)
+  const [pdfs, setPdfs] = useState([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [page, setPage] = useState(1);
+
+  // Stats panel
+  const [stats, setStats] = useState(null);
+
+  // PDF fetch loading state
   const [loading, setLoading] = useState(true);
+
+  // Viewer / modal state
   const [selectedPdf, setSelectedPdf] = useState(null);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
-  const [contentSearch, setContentSearch] = useState('');
+
+  // Filters
+  const [searchInput, setSearchInput] = useState('');   // raw input
+  const [contentSearch, setContentSearch] = useState(''); // debounced
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterClass, setFilterClass] = useState('all');
   const [filterSubject, setFilterSubject] = useState('all');
 
-  const fetchData = async () => {
-    try {
-      const [pdfsRes, catsRes, classesRes, subjectsRes] = await Promise.all([
-        pb.fetch('/pdfs', 'GET', null, { per_page: 300, sort: '-created' }),
-        pb.fetch('/categories', 'GET', null, { per_page: 100, sort: 'displayOrder' }),
-        pb.fetch('/masterClasses', 'GET'),
-        pb.fetch('/masterSubjects', 'GET'),
-      ]);
+  const totalPages = Math.max(1, Math.ceil(totalItems / PER_PAGE));
 
-      const pdfs = pdfsRes?.items ?? [];
+  // Debounce search input → contentSearch, reset page on change
+  const debounceRef = useRef(null);
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setContentSearch(searchInput);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(debounceRef.current);
+  }, [searchInput]);
+
+  // Load reference data and storage stat once
+  useEffect(() => {
+    Promise.all([
+      pb.fetch('/categories', 'GET', null, { per_page: 100, sort: 'displayOrder' }),
+      pb.fetch('/masterClasses', 'GET'),
+      pb.fetch('/masterSubjects', 'GET'),
+      pb.fetch('/dashboard', 'GET').catch(() => null),
+    ]).then(([catsRes, classesRes, subjectsRes, dashRes]) => {
       const cats = catsRes?.items ?? [];
-
-      setAllPdfs(pdfs);
       setCategories(cats);
       setAllClasses(classesRes?.items ?? []);
       setAllSubjects(subjectsRes?.items ?? []);
-
-      const totalBytes = pdfs.reduce((s, p) => s + (p.fileSize || 0), 0);
-      setStats({
-        totalPdfs: pdfsRes?.totalItems ?? pdfs.length,
+      setStats(prev => ({
+        ...prev,
         totalCategories: catsRes?.totalItems ?? cats.length,
-        storageUsage: formatBytes(totalBytes) || `${(pdfs.length * 2.4).toFixed(1)} MB`
-      });
+        storageUsage: dashRes?.storage_bytes ? formatBytes(dashRes.storage_bytes) : null,
+      }));
+    }).catch(console.error);
+  }, []);
+
+  // Fetch PDFs — server-side filtered and paginated
+  const fetchPdfs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = { per_page: PER_PAGE, page, sort: '-created' };
+      if (filterCategory !== 'all') params.category_id = filterCategory;
+      if (filterClass !== 'all') params.class_id = filterClass;
+      if (filterSubject !== 'all') params.subject_id = filterSubject;
+      if (contentSearch.trim()) params.q = contentSearch.trim();
+
+      const pdfsRes = await pb.fetch('/pdfs', 'GET', null, params);
+      const items = pdfsRes?.items ?? [];
+      setPdfs(items);
+      const total = pdfsRes?.totalItems ?? items.length;
+      setTotalItems(total);
+      setStats(prev => ({ ...prev, totalPdfs: total }));
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, contentSearch, filterCategory, filterClass, filterSubject]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchPdfs();
+  }, [fetchPdfs]);
+
+  // Change a filter and reset page to 1
+  const changeFilter = (setter) => (value) => {
+    setter(value);
+    setPage(1);
+  };
 
   const classMap = useMemo(() =>
     Object.fromEntries(allClasses.map(c => [c.id, c.className])),
@@ -81,23 +131,6 @@ const ContentDashboard = () => {
     Object.fromEntries(categories.map(c => [c.id, c.categoryName])),
     [categories]
   );
-
-  const filteredPdfs = useMemo(() => {
-    const q = contentSearch.trim().toLowerCase();
-    return allPdfs.filter(p => {
-      if (filterCategory !== 'all' && p.categoryId !== filterCategory) return false;
-      if (filterClass !== 'all' && p.classId !== filterClass) return false;
-      if (filterSubject !== 'all' && p.subjectId !== filterSubject) return false;
-      if (!q) return true;
-      return (
-        p.fileName?.toLowerCase().includes(q) ||
-        classMap[p.classId]?.toLowerCase().includes(q) ||
-        subjectMap[p.subjectId]?.toLowerCase().includes(q) ||
-        categoryMap[p.categoryId]?.toLowerCase().includes(q) ||
-        (p.subCategoryName || '').toLowerCase().includes(q)
-      );
-    });
-  }, [allPdfs, contentSearch, filterCategory, filterClass, filterSubject, classMap, subjectMap, categoryMap]);
 
   const StatCard = ({ title, value, icon: Icon, colorClass, bgClass }) => (
     <Card className="shadow-soft-sm hover:shadow-soft-md transition-base border-none overflow-hidden relative">
@@ -126,6 +159,8 @@ const ContentDashboard = () => {
     );
   }
 
+  const hasFilters = filterCategory !== 'all' || filterClass !== 'all' || filterSubject !== 'all';
+
   return (
     <PageTransition>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -143,15 +178,15 @@ const ContentDashboard = () => {
         </div>
       </div>
 
-      {loading ? (
+      {!stats ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-32 rounded-[var(--radius-lg)]" />)}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <StatCard title="Total PDFs" value={stats?.totalPdfs || 0} icon={FileText} colorClass="text-primary" bgClass="bg-primary/10" />
-          <StatCard title="Categories" value={stats?.totalCategories || 0} icon={BookOpen} colorClass="text-secondary" bgClass="bg-secondary/10" />
-          <StatCard title="Storage Used" value={stats?.storageUsage || '0 MB'} icon={HardDrive} colorClass="text-accent" bgClass="bg-accent/10" />
+          <StatCard title="Total PDFs" value={stats?.totalPdfs ?? 0} icon={FileText} colorClass="text-primary" bgClass="bg-primary/10" />
+          <StatCard title="Categories" value={stats?.totalCategories ?? 0} icon={BookOpen} colorClass="text-secondary" bgClass="bg-secondary/10" />
+          <StatCard title="Storage Used" value={stats?.storageUsage ?? '—'} icon={HardDrive} colorClass="text-accent" bgClass="bg-accent/10" />
         </div>
       )}
 
@@ -164,7 +199,9 @@ const ContentDashboard = () => {
                 <div>
                   <CardTitle>Content</CardTitle>
                   <CardDescription>
-                    {loading ? 'Loading…' : `${filteredPdfs.length} of ${allPdfs.length} PDF${allPdfs.length !== 1 ? 's' : ''}`}
+                    {loading
+                      ? 'Loading…'
+                      : `${totalItems} PDF${totalItems !== 1 ? 's' : ''}${totalPages > 1 ? ` · Page ${page}/${totalPages}` : ''}`}
                   </CardDescription>
                 </div>
                 {!selectedPdf && (
@@ -177,40 +214,45 @@ const ContentDashboard = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input
                   placeholder="Search by name, class, subject or program…"
-                  value={contentSearch}
-                  onChange={e => setContentSearch(e.target.value)}
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
                   className="pl-9 h-9 text-sm"
                 />
               </div>
               {!selectedPdf && (
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <Select value={filterCategory} onValueChange={v => { setFilterCategory(v); setFilterClass('all'); setFilterSubject('all'); }}>
+                  <Select value={filterCategory} onValueChange={v => { changeFilter(setFilterCategory)(v); changeFilter(setFilterClass)('all'); changeFilter(setFilterSubject)('all'); }}>
                     <SelectTrigger className="h-9 w-[170px] text-sm"><SelectValue placeholder="All Programs" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Programs</SelectItem>
                       {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.categoryName}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Select value={filterClass} onValueChange={v => { setFilterClass(v); setFilterSubject('all'); }}>
+                  <Select value={filterClass} onValueChange={v => { changeFilter(setFilterClass)(v); changeFilter(setFilterSubject)('all'); }}>
                     <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="All Classes" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Classes</SelectItem>
                       {allClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.className}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Select value={filterSubject} onValueChange={setFilterSubject}>
+                  <Select value={filterSubject} onValueChange={changeFilter(setFilterSubject)}>
                     <SelectTrigger className="h-9 w-[150px] text-sm"><SelectValue placeholder="All Subjects" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Subjects</SelectItem>
                       {allSubjects.map(s => <SelectItem key={s.id} value={s.id}>{s.subjectName}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  {(filterCategory !== 'all' || filterClass !== 'all' || filterSubject !== 'all') && (
+                  {hasFilters && (
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-9 text-muted-foreground"
-                      onClick={() => { setFilterCategory('all'); setFilterClass('all'); setFilterSubject('all'); }}
+                      onClick={() => {
+                        setFilterCategory('all');
+                        setFilterClass('all');
+                        setFilterSubject('all');
+                        setPage(1);
+                      }}
                     >
                       Clear
                     </Button>
@@ -219,15 +261,30 @@ const ContentDashboard = () => {
               )}
             </CardHeader>
             <CardContent className="p-0 overflow-y-auto flex-1">
+              {totalPages > 1 && (
+                <div className="px-4 pt-3">
+                  <PaginationControls
+                    page={page}
+                    totalPages={totalPages}
+                    total={totalItems}
+                    itemLabel="PDFs"
+                    loading={loading}
+                    onPrev={() => setPage(p => Math.max(1, p - 1))}
+                    onNext={() => setPage(p => Math.min(totalPages, p + 1))}
+                  />
+                </div>
+              )}
               {loading ? (
                 <div className="p-4 space-y-2">
                   {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-10 w-full" />)}
                 </div>
-              ) : filteredPdfs.length === 0 ? (
+              ) : pdfs.length === 0 ? (
                 <div className="text-center py-16 px-4">
                   <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-40" />
                   <p className="text-muted-foreground font-medium">
-                    {allPdfs.length === 0 ? 'No PDFs uploaded yet.' : 'No PDFs match your search.'}
+                    {totalItems === 0 && !contentSearch && !hasFilters
+                      ? 'No PDFs uploaded yet.'
+                      : 'No PDFs match your search.'}
                   </p>
                 </div>
               ) : (
@@ -242,8 +299,8 @@ const ContentDashboard = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPdfs.map(pdf => {
-                      const className = classMap[pdf.classId] || pdf.subCategoryName || '—';
+                    {pdfs.map(pdf => {
+                      const pdfClassName = classMap[pdf.classId] || pdf.subCategoryName || '—';
                       const subjectName = subjectMap[pdf.subjectId] || '—';
                       const programName = categoryMap[pdf.categoryId] || pdf.categoryName || '—';
                       const isSelected = selectedPdf?.id === pdf.id;
@@ -330,6 +387,19 @@ const ContentDashboard = () => {
                   </TableBody>
                 </Table>
               )}
+              {totalPages > 1 && !loading && pdfs.length > 0 && (
+                <div className="px-4 pb-4 pt-3 border-t border-border/30">
+                  <PaginationControls
+                    page={page}
+                    totalPages={totalPages}
+                    total={totalItems}
+                    itemLabel="PDFs"
+                    loading={loading}
+                    onPrev={() => setPage(p => Math.max(1, p - 1))}
+                    onNext={() => setPage(p => Math.min(totalPages, p + 1))}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -379,7 +449,7 @@ const ContentDashboard = () => {
         isOpen={historyModalOpen}
         onClose={() => setHistoryModalOpen(false)}
         pdf={selectedPdf}
-        onVersionChanged={fetchData}
+        onVersionChanged={fetchPdfs}
       />
     </PageTransition>
   );

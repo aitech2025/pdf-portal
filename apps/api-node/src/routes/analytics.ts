@@ -17,9 +17,9 @@ import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
 import { cached } from "../lib/cache.js";
 
-// Aggregate dashboards tolerate a few seconds of staleness; caching keeps them fast
+// Aggregate dashboards tolerate a few minutes of staleness; caching keeps them fast
 // and shields the DB from repeated heavy aggregations on every page load.
-const DASHBOARD_TTL_MS = 30_000;
+const DASHBOARD_TTL_MS = 300_000;
 
 export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<void> => {
   app.get("/api/dashboard", { preHandler: requireAuth }, async () =>
@@ -33,8 +33,7 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
         pending_onboarding,
         active_sessions,
         storageAgg,
-        topDownloads,
-        storageByTenant
+        topDownloads
       ] = await Promise.all([
         // estimatedDocumentCount() reads collection metadata (O(1)) instead of scanning.
         User.estimatedDocumentCount(),
@@ -56,21 +55,6 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
           { $group: { _id: "$pdf_id", count: { $sum: 1 } } },
           { $sort: { count: -1 } },
           { $limit: 5 }
-        ]),
-        Pdf.aggregate([
-          { $match: { deleted_at: null } },
-          {
-            $lookup: {
-              from: "schoolcategoryaccesses",
-              localField: "category_id",
-              foreignField: "category_id",
-              as: "grants"
-            }
-          },
-          { $unwind: "$grants" },
-          { $group: { _id: "$grants.school_id", bytes: { $sum: "$file_size" }, files: { $sum: 1 } } },
-          { $sort: { bytes: -1 } },
-          { $limit: 10 }
         ])
       ]);
 
@@ -84,12 +68,7 @@ export const registerAnalyticsRoutes = async (app: FastifyInstance): Promise<voi
         pending_onboarding,
         active_sessions,
         top_downloads: topDownloads,
-        storage_bytes: storageAgg[0]?.totalBytes ?? 0,
-        storage_by_school: storageByTenant.map((s) => ({
-          school_id: s._id,
-          bytes: s.bytes,
-          files: s.files
-        }))
+        storage_bytes: storageAgg[0]?.totalBytes ?? 0
       };
     })
   );
