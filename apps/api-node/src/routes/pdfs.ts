@@ -7,7 +7,7 @@ import { z } from "zod";
 import { canAccessCategory, isPlatformRole, requireCurrentUser } from "../lib/access.js";
 import { auditUnauthorized, writeAudit } from "../lib/audit.js";
 import { generateMappedPdfCode } from "../lib/codes.js";
-import { Category, ClassMaster, SubjectMaster, DownloadLog, Pdf, PdfVersion, School, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, SubCategory, User, ViewLog } from "../models/index.js";
+import { AuditLog, Category, ClassMaster, SubjectMaster, DownloadLog, Pdf, PdfVersion, School, SchoolCategoryAccess, SchoolClassAccess, SchoolSubjectAccess, SubCategory, User, ViewLog } from "../models/index.js";
 import { createAndSendNotification } from "../services/notificationChannels.js";
 import { enrichPdfs } from "../lib/pdfEnrich.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
@@ -96,7 +96,7 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
     const skip = (query.page - 1) * query.per_page;
     const wantCount = query.count !== "false";
     const [rows, total] = await Promise.all([
-      Pdf.find(filter).sort({ created: -1 }).skip(skip).limit(query.per_page).lean(),
+      Pdf.find(filter).select({ file_data: 0 }).sort({ created: -1 }).skip(skip).limit(query.per_page).lean(),
       wantCount ? Pdf.countDocuments(filter) : Promise.resolve(undefined)
     ]);
     const enriched = await enrichPdfs(rows as Record<string, unknown>[]);
@@ -219,7 +219,8 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
       request.log.error({ err }, "archiver error");
     });
 
-    // Track download events + audit + counters
+    // Build archive and collect successful entries for batch DB writes
+    const downloaded: (typeof pdfs[0])[] = [];
     for (const pdf of pdfs) {
       if (!pdf.file_data) continue;
       const entryName = (pdf.file_name ?? `${pdf.pdf_id ?? pdf.id}.pdf`).replace(/[\\/]/g, "_");
@@ -229,26 +230,38 @@ export const registerPdfRoutes = async (app: FastifyInstance): Promise<void> => 
         ? (raw as Buffer)
         : Buffer.from((raw as { buffer: ArrayBufferLike }).buffer ?? (raw as ArrayBufferLike));
       archive.append(buf, { name: entryName });
+      downloaded.push(pdf);
+    }
 
-      await Pdf.updateOne({ id: pdf.id }, { $inc: { download_count: 1 } });
+    // Batch all DB writes in parallel (replaces up to 3N sequential awaits)
+    if (downloaded.length > 0) {
+      const now = new Date();
+      const batchOps: Promise<unknown>[] = [
+        Pdf.bulkWrite(downloaded.map((p) => ({
+          updateOne: { filter: { id: p.id }, update: { $inc: { download_count: 1 } } }
+        }))),
+        AuditLog.insertMany(downloaded.map((p) => ({
+          user_id: user.id,
+          action: "download",
+          action_details: `bulk download PDF ${p.file_name}`,
+          resource_type: "pdf",
+          resource_id: p.id,
+          ip_address: request.ip,
+          user_agent: request.headers["user-agent"] ?? undefined,
+          timestamp: now
+        })))
+      ];
       if (user.school_id) {
-        await DownloadLog.create({
+        batchOps.push(DownloadLog.insertMany(downloaded.map((p) => ({
           school_id: user.school_id,
           user_id: user.id,
-          pdf_id: pdf.id,
-          category_id: pdf.category_id ?? null,
-          sub_category_id: pdf.sub_category_id ?? null,
+          pdf_id: p.id,
+          category_id: p.category_id ?? null,
+          sub_category_id: p.sub_category_id ?? null,
           download_type: "bulk"
-        });
+        }))));
       }
-      await writeAudit({
-        user_id: user.id,
-        action: "download",
-        action_details: `bulk download PDF ${pdf.file_name}`,
-        resource_type: "pdf",
-        resource_id: pdf.id,
-        request
-      });
+      Promise.allSettled(batchOps).catch((err) => request.log.error({ err }, "bulk download batch ops failed"));
     }
 
     archive.finalize().catch((err) => request.log.error({ err }, "finalize failed"));

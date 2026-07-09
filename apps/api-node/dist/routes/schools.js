@@ -14,12 +14,12 @@ import { createAndSendNotification } from "../services/notificationChannels.js";
  */
 const sendCredentialNotifications = async (opts) => {
     const { userId, userName, loginId, contactEmail, schoolName, schoolId, password, mobileNumber } = opts;
-    const subject = "Welcome to i-icon Academy — your school account is ready";
+    const subject = "Welcome to i-icon Academy — your school/college account is ready";
     const mobileNote = mobileNumber
         ? `  Mobile: ${mobileNumber} (can also be used to log in)\n`
         : "";
     const text = `Dear ${userName},\n\n` +
-        `Your school "${schoolName}" (ID: ${schoolId}) has been registered on i-icon Academy.\n\n` +
+        `Your school/college "${schoolName}" (ID: ${schoolId}) has been registered on i-icon Academy.\n\n` +
         `Your login credentials:\n` +
         `  User ID: ${loginId}\n` +
         `  Password: ${password}\n` +
@@ -32,7 +32,7 @@ const sendCredentialNotifications = async (opts) => {
     const html = `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;padding:24px;color:#0f172a">` +
         `<h2 style="margin:0 0 16px;color:#4338ca">Welcome to i-icon Academy</h2>` +
         `<p>Dear ${userName},</p>` +
-        `<p>Your school <strong>${schoolName}</strong> (ID: <code>${schoolId}</code>) has been registered on i-icon Academy.</p>` +
+        `<p>Your school/college <strong>${schoolName}</strong> (ID: <code>${schoolId}</code>) has been registered on i-icon Academy.</p>` +
         `<div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:16px 0">` +
         `<div><strong>User ID:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${loginId}</code></div>` +
         `<div style="margin-top:8px"><strong>Password:</strong> <code style="font-family:monospace;background:#fff;padding:2px 6px;border-radius:4px">${password}</code></div>` +
@@ -90,7 +90,16 @@ export const registerSchoolRoutes = async (app) => {
         const filter = {};
         if (query.filter) {
             const regex = new RegExp(query.filter.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-            filter.$or = [{ school_name: regex }, { school_id: regex }, { email: regex }];
+            // Search across every displayed/identifying column.
+            filter.$or = [
+                { school_name: regex },
+                { school_id: regex },
+                { email: regex },
+                { location: regex },
+                { address: regex },
+                { mobile_number: regex },
+                { point_of_contact_name: regex }
+            ];
         }
         const sortField = query.sort === "schoolName" || query.sort === "-schoolName"
             ? "school_name"
@@ -103,10 +112,11 @@ export const registerSchoolRoutes = async (app) => {
             School.find(filter)
                 .sort({ [sortField]: sortDir })
                 .skip(skip)
-                .limit(query.per_page),
+                .limit(query.per_page)
+                .lean(),
             School.countDocuments(filter)
         ]);
-        return listResponse(rows.map((s) => serializeDoc(s.toObject())), total);
+        return listResponse(rows.map((s) => serializeDoc(s)), total);
     });
     app.get("/api/schools/:school_id", { preHandler: requireAuth }, async (request, reply) => {
         const params = z.object({ school_id: z.string() }).parse(request.params);

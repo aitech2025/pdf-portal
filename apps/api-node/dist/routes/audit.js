@@ -21,7 +21,8 @@ export const registerAuditRoutes = async (app) => {
             from: z.string().optional(),
             to: z.string().optional(),
             page: z.coerce.number().default(1),
-            per_page: z.coerce.number().default(100)
+            per_page: z.coerce.number().default(100),
+            count: z.string().optional()
         })
             .parse(request.query);
         const filter = {};
@@ -38,11 +39,12 @@ export const registerAuditRoutes = async (app) => {
             filter.timestamp = ts;
         }
         const skip = (query.page - 1) * query.per_page;
+        const wantCount = query.count !== "false";
         const [rows, total] = await Promise.all([
             AuditLog.find(filter).sort({ timestamp: -1 }).skip(skip).limit(query.per_page).lean(),
-            AuditLog.countDocuments(filter)
+            wantCount ? AuditLog.countDocuments(filter) : Promise.resolve(undefined)
         ]);
-        return listResponse(rows.map((r) => serializeDoc(r)), total);
+        return listResponse(rows.map((r) => serializeDoc(r)), total ?? rows.length);
     });
     app.get("/api/auditLogs/export", { preHandler: requirePermission(PERMISSIONS.AUDIT_VIEW) }, async (request, reply) => {
         const query = z
@@ -97,7 +99,8 @@ export const registerAuditRoutes = async (app) => {
             schoolId: z.string().optional(),
             user_id: z.string().optional(),
             page: z.coerce.number().default(1),
-            per_page: z.coerce.number().default(50)
+            per_page: z.coerce.number().default(50),
+            count: z.string().optional()
         })
             .parse(request.query);
         const filter = {};
@@ -113,10 +116,13 @@ export const registerAuditRoutes = async (app) => {
             filter.school_id = request.authUser?.school_id ?? "";
         }
         const skip = (query.page - 1) * query.per_page;
+        // count=false lets callers that only need the page (e.g. dashboards) skip the
+        // expensive full-collection count over a large logs table.
+        const wantCount = query.count !== "false";
         const [rows, total] = await Promise.all([
             DownloadLog.find(filter).sort({ downloaded_at: -1 }).skip(skip).limit(query.per_page).lean(),
-            DownloadLog.countDocuments(filter)
+            wantCount ? DownloadLog.countDocuments(filter) : Promise.resolve(undefined)
         ]);
-        return listResponse(rows.map((r) => serializeDoc(r)), total);
+        return listResponse(rows.map((r) => serializeDoc(r)), total ?? rows.length);
     });
 };

@@ -165,6 +165,11 @@ const PdfSchema = new Schema(
   commonOptions
 );
 
+// Compound index covering the school access control filter (category + class + subject + status + active + deleted)
+PdfSchema.index({ category_id: 1, class_id: 1, subject_id: 1, status: 1, is_active: 1, deleted_at: 1 });
+// Text index for full-text search across file_name, description, and tags
+PdfSchema.index({ file_name: "text", description: "text", tags: "text" });
+
 const PdfVersionSchema = new Schema(
   {
     id: { type: String, default: genId, unique: true, index: true },
@@ -205,6 +210,8 @@ const NotificationSchema = new Schema(
   },
   commonOptions
 );
+// Compound for paginated inbox: filter by recipient, sorted by creation date
+NotificationSchema.index({ recipient_id: 1, created: -1 });
 
 const AuthTokenSchema = new Schema(
   {
@@ -320,6 +327,7 @@ const ViewLogSchema = new Schema(
   commonOptions
 );
 ViewLogSchema.index({ user_id: 1, viewed_at: -1 });
+ViewLogSchema.index({ school_id: 1, viewed_at: -1 });
 
 const AuditLogSchema = new Schema(
   {
@@ -335,6 +343,8 @@ const AuditLogSchema = new Schema(
   },
   commonOptions
 );
+// Compound for audit log queries: timestamp-first (sort) + optional user_id/action filters
+AuditLogSchema.index({ timestamp: -1, user_id: 1, action: 1 });
 
 const AnalyticsEventSchema = new Schema(
   {

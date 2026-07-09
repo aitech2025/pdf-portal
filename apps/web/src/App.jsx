@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { Route, Routes, BrowserRouter as Router, Navigate } from 'react-router-dom';
 import client from '@/lib/apiClient';
 import { AuthProvider } from '@/contexts/AuthContext.jsx';
@@ -7,54 +7,66 @@ import { useAuth } from '@/contexts/AuthContext.jsx';
 import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import AppLayout from '@/components/AppLayout.jsx';
 
+// Auth / public pages — small, load eagerly so login is instant
 import LoginPage from '@/pages/LoginPage.jsx';
 import ForgotPasswordPage from '@/pages/ForgotPasswordPage.jsx';
 import ResetPasswordPage from '@/pages/ResetPasswordPage.jsx';
 import VerifyEmailPage from '@/pages/VerifyEmailPage.jsx';
 import MaintenanceModePage from '@/pages/MaintenanceModePage.jsx';
 import GuestSignupForm from '@/pages/GuestSignupForm.jsx';
-import UserProfilePage from '@/pages/UserProfilePage.jsx';
-import GlobalSearchPage from '@/pages/GlobalSearchPage.jsx';
-import NotificationCenter from '@/pages/NotificationCenter.jsx';
-import SettingsPage from '@/pages/SettingsPage.jsx';
-import HelpCenterPage from '@/pages/HelpCenterPage.jsx';
 import ForbiddenPage from '@/pages/ForbiddenPage.jsx';
 import NotFoundPage from '@/pages/NotFoundPage.jsx';
 
-// Admin Routes
-import AdminDashboard from '@/pages/AdminDashboard.jsx';
-import AdvancedAnalyticsDashboard from '@/pages/admin/AdvancedAnalyticsDashboard.jsx';
-import AnalyticsReports from '@/pages/admin/AnalyticsReports.jsx';
-import CategoriesAndSubcategoriesPage from '@/pages/admin/CategoriesAndSubcategoriesPage.jsx';
-import CategoriesManagementTest from '@/pages/admin/CategoriesManagementTest.jsx';
-import SimpleTest from '@/pages/admin/SimpleTest.jsx';
-import PDFUploadManagement from '@/pages/admin/PDFUploadManagement.jsx';
-import SchoolManagement from '@/pages/admin/SchoolManagement.jsx';
-import SchoolsAndUsersPage from '@/pages/admin/SchoolsAndUsersPage.jsx';
-import ContentDashboard from '@/pages/admin/ContentDashboard.jsx';
-import AuditLogsPage from '@/pages/admin/AuditLogsPage.jsx';
-import TeamManagementPage from '@/pages/admin/TeamManagementPage.jsx';
-import BulkCreationPage from '@/pages/admin/BulkCreationPage.jsx';
-import UserManagement from '@/pages/admin/UserManagement.jsx';
-import ExportDataPage from '@/pages/ExportDataPage.jsx';
-import ContentModeration from '@/pages/admin/ContentModeration.jsx';
-import SystemSettings from '@/pages/admin/SystemSettings.jsx';
-import NotificationsPage from '@/pages/admin/NotificationsPage.jsx';
-import BulkNotificationPage from '@/pages/admin/BulkNotificationPage.jsx';
-import ProgramsManagementPage from '@/pages/admin/ProgramsManagementPage.jsx';
-import VideoLessonsPage from '@/pages/admin/VideoLessonsPage.jsx';
-import ClassManagementPage from '@/pages/admin/ClassManagementPage.jsx';
-import SubjectManagementPage from '@/pages/admin/SubjectManagementPage.jsx';
+// Shared authenticated pages — lazy loaded
+const UserProfilePage = lazy(() => import('@/pages/UserProfilePage.jsx'));
+const GlobalSearchPage = lazy(() => import('@/pages/GlobalSearchPage.jsx'));
+const NotificationCenter = lazy(() => import('@/pages/NotificationCenter.jsx'));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage.jsx'));
+const HelpCenterPage = lazy(() => import('@/pages/HelpCenterPage.jsx'));
 
-// School Routes
-import SchoolDashboard from '@/pages/SchoolDashboard.jsx';
-import SchoolPortal from '@/pages/school/SchoolPortal.jsx';
-import SchoolPortalBrowse from '@/pages/school/SchoolPortalBrowse.jsx';
-import SchoolBookmarksPage from '@/pages/school/SchoolBookmarksPage.jsx';
-import FirstLoginChangePassword from '@/pages/school/FirstLoginChangePassword.jsx';
-import SchoolSettings from '@/pages/school/SchoolSettings.jsx';
-import SchoolAnalyticsDashboard from '@/pages/school/SchoolAnalyticsDashboard.jsx';
-import SchoolVideoLessons from '@/pages/school/SchoolVideoLessons.jsx';
+// Admin pages — lazy loaded
+const AdminDashboard = lazy(() => import('@/pages/AdminDashboard.jsx'));
+const AdvancedAnalyticsDashboard = lazy(() => import('@/pages/admin/AdvancedAnalyticsDashboard.jsx'));
+const AnalyticsReports = lazy(() => import('@/pages/admin/AnalyticsReports.jsx'));
+const CategoriesAndSubcategoriesPage = lazy(() => import('@/pages/admin/CategoriesAndSubcategoriesPage.jsx'));
+const CategoriesManagementTest = lazy(() => import('@/pages/admin/CategoriesManagementTest.jsx'));
+const SimpleTest = lazy(() => import('@/pages/admin/SimpleTest.jsx'));
+const PDFUploadManagement = lazy(() => import('@/pages/admin/PDFUploadManagement.jsx'));
+const SchoolManagement = lazy(() => import('@/pages/admin/SchoolManagement.jsx'));
+const SchoolsAndUsersPage = lazy(() => import('@/pages/admin/SchoolsAndUsersPage.jsx'));
+const ContentDashboard = lazy(() => import('@/pages/admin/ContentDashboard.jsx'));
+const AuditLogsPage = lazy(() => import('@/pages/admin/AuditLogsPage.jsx'));
+const TeamManagementPage = lazy(() => import('@/pages/admin/TeamManagementPage.jsx'));
+const BulkCreationPage = lazy(() => import('@/pages/admin/BulkCreationPage.jsx'));
+const UserManagement = lazy(() => import('@/pages/admin/UserManagement.jsx'));
+const ExportDataPage = lazy(() => import('@/pages/ExportDataPage.jsx'));
+const ContentModeration = lazy(() => import('@/pages/admin/ContentModeration.jsx'));
+const SystemSettings = lazy(() => import('@/pages/admin/SystemSettings.jsx'));
+const NotificationsPage = lazy(() => import('@/pages/admin/NotificationsPage.jsx'));
+const BulkNotificationPage = lazy(() => import('@/pages/admin/BulkNotificationPage.jsx'));
+const ProgramsManagementPage = lazy(() => import('@/pages/admin/ProgramsManagementPage.jsx'));
+const VideoLessonsPage = lazy(() => import('@/pages/admin/VideoLessonsPage.jsx'));
+const ClassManagementPage = lazy(() => import('@/pages/admin/ClassManagementPage.jsx'));
+const SubjectManagementPage = lazy(() => import('@/pages/admin/SubjectManagementPage.jsx'));
+
+// School pages — lazy loaded
+const SchoolDashboard = lazy(() => import('@/pages/SchoolDashboard.jsx'));
+const SchoolPortal = lazy(() => import('@/pages/school/SchoolPortal.jsx'));
+const SchoolPortalBrowse = lazy(() => import('@/pages/school/SchoolPortalBrowse.jsx'));
+const SchoolBookmarksPage = lazy(() => import('@/pages/school/SchoolBookmarksPage.jsx'));
+const FirstLoginChangePassword = lazy(() => import('@/pages/school/FirstLoginChangePassword.jsx'));
+const SchoolSettings = lazy(() => import('@/pages/school/SchoolSettings.jsx'));
+const SchoolAnalyticsDashboard = lazy(() => import('@/pages/school/SchoolAnalyticsDashboard.jsx'));
+const SchoolVideoLessons = lazy(() => import('@/pages/school/SchoolVideoLessons.jsx'));
+
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-3"></div>
+      <p className="text-sm text-muted-foreground">Loading...</p>
+    </div>
+  </div>
+);
 
 function AppContent() {
   const [isMaintenance, setIsMaintenance] = useState(false);
@@ -111,7 +123,9 @@ function AppContent() {
   }
 
   return (
-    <MaintenanceAwareRoutes isMaintenance={isMaintenance} maintenanceMessage={maintenanceMessage} />
+    <Suspense fallback={<PageLoader />}>
+      <MaintenanceAwareRoutes isMaintenance={isMaintenance} maintenanceMessage={maintenanceMessage} />
+    </Suspense>
   );
 }
 

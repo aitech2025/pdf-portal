@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import compress from "@fastify/compress";
 import cors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
@@ -10,6 +11,7 @@ import { registerRealtimeRoutes } from "./services/realtime.js";
 import { registerMaintenanceGuard } from "./plugins/maintenance.js";
 export const buildApp = () => {
     const app = Fastify({ logger: true });
+    app.register(compress, { global: true });
     app.register(cors, {
         origin: true,
         credentials: true

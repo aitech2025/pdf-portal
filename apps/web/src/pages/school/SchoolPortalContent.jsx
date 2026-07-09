@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import LoadingSpinner from '@/components/LoadingSpinner.jsx';
 import PDFViewer from '@/components/PDFViewer.jsx';
+import PaginationControls from '@/components/PaginationControls.jsx';
 import { cn, matchesSearch, getPdfCode } from '@/lib/utils';
 
 const formatSize = (bytes) => {
@@ -60,6 +61,10 @@ const SchoolPortalContent = ({ school }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentPdf, setCurrentPdf] = useState(null);
   const [selectedPdfIds, setSelectedPdfIds] = useState([]);
+
+  const PDF_PER_PAGE = 20;
+  const [listPage, setListPage] = useState(1);
+  const [treePdfPage, setTreePdfPage] = useState(1);
 
   const getAuthHeader = () => ({ Authorization: `Bearer ${pb.authStore.token}` });
 
@@ -105,6 +110,8 @@ const SchoolPortalContent = ({ school }) => {
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
     setSearch('');
+    setListPage(1);
+    setTreePdfPage(1);
     if (mode === 'list') loadAllPdfs();
   };
 
@@ -142,6 +149,7 @@ const SchoolPortalContent = ({ school }) => {
     setSelectedSubject(subj);
     setStep(4);
     setSearch('');
+    setTreePdfPage(1);
     fetchPdfs(selectedProgram.categoryId, selectedClass.classId, subj.subjectId);
   };
 
@@ -336,7 +344,7 @@ const SchoolPortalContent = ({ school }) => {
                 placeholder={searchPlaceholder}
                 className="pl-9"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); setListPage(1); setTreePdfPage(1); }}
               />
               {search && (
                 <button
@@ -401,7 +409,7 @@ const SchoolPortalContent = ({ school }) => {
               {/* Toolbar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border border-border/50">
                 <span className="text-sm text-muted-foreground">
-                  {allPdfsLoading ? 'Loading…' : `${filteredAllPdfs.length} PDF${filteredAllPdfs.length !== 1 ? 's' : ''}`}
+                  {allPdfsLoading ? 'Loading…' : `${filteredAllPdfs.length} PDF${filteredAllPdfs.length !== 1 ? 's' : ''} total`}
                   {selectedPdfIds.length > 0 && (
                     <span className="ml-2 text-foreground font-medium">· {selectedPdfIds.length} selected</span>
                   )}
@@ -441,6 +449,16 @@ const SchoolPortalContent = ({ school }) => {
                   </p>
                 </div>
               ) : (
+                <>
+                  <PaginationControls
+                    page={listPage}
+                    totalPages={Math.ceil(filteredAllPdfs.length / PDF_PER_PAGE) || 1}
+                    onPrev={() => setListPage(p => Math.max(1, p - 1))}
+                    onNext={() => setListPage(p => Math.min(Math.ceil(filteredAllPdfs.length / PDF_PER_PAGE), p + 1))}
+                    total={filteredAllPdfs.length}
+                    itemLabel="PDFs"
+                    className="mb-2"
+                  />
                 <div className="rounded-xl border border-border/50 overflow-hidden">
                   {/* Table header */}
                   <div className="grid grid-cols-[auto_1fr_1fr_1.5fr_auto] gap-3 px-4 py-3 bg-muted/50 border-b border-border/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -453,7 +471,7 @@ const SchoolPortalContent = ({ school }) => {
 
                   {/* Table rows */}
                   <div className="divide-y divide-border/40">
-                    {filteredAllPdfs.map((pdf) => {
+                    {filteredAllPdfs.slice((listPage - 1) * PDF_PER_PAGE, listPage * PDF_PER_PAGE).map((pdf) => {
                       const isSelected = selectedPdfIds.includes(pdf.id);
                       return (
                         <div
@@ -534,6 +552,16 @@ const SchoolPortalContent = ({ school }) => {
                     })}
                   </div>
                 </div>
+                  <PaginationControls
+                    page={listPage}
+                    totalPages={Math.ceil(filteredAllPdfs.length / PDF_PER_PAGE) || 1}
+                    onPrev={() => setListPage(p => Math.max(1, p - 1))}
+                    onNext={() => setListPage(p => Math.min(Math.ceil(filteredAllPdfs.length / PDF_PER_PAGE), p + 1))}
+                    total={filteredAllPdfs.length}
+                    itemLabel="PDFs"
+                    className="mt-2"
+                  />
+                </>
               )}
             </div>
           )}
@@ -737,6 +765,16 @@ const SchoolPortalContent = ({ school }) => {
                       {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
                     </div>
                   ) : (
+                    <>
+                      <PaginationControls
+                        page={treePdfPage}
+                        totalPages={Math.ceil(filteredPdfs.length / PDF_PER_PAGE) || 1}
+                        onPrev={() => setTreePdfPage(p => Math.max(1, p - 1))}
+                        onNext={() => setTreePdfPage(p => Math.min(Math.ceil(filteredPdfs.length / PDF_PER_PAGE), p + 1))}
+                        total={filteredPdfs.length}
+                        itemLabel="PDFs"
+                        className="mb-2"
+                      />
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                       {filteredPdfs.length === 0 ? (
                         <div className="col-span-full py-16 text-center border rounded-xl border-dashed">
@@ -746,7 +784,7 @@ const SchoolPortalContent = ({ school }) => {
                           </p>
                         </div>
                       ) : (
-                        filteredPdfs.map((pdf) => {
+                        filteredPdfs.slice((treePdfPage - 1) * PDF_PER_PAGE, treePdfPage * PDF_PER_PAGE).map((pdf) => {
                           const selected = selectedPdfIds.includes(pdf.id);
                           return (
                             <Card
@@ -827,6 +865,16 @@ const SchoolPortalContent = ({ school }) => {
                         })
                       )}
                     </div>
+                      <PaginationControls
+                        page={treePdfPage}
+                        totalPages={Math.ceil(filteredPdfs.length / PDF_PER_PAGE) || 1}
+                        onPrev={() => setTreePdfPage(p => Math.max(1, p - 1))}
+                        onNext={() => setTreePdfPage(p => Math.min(Math.ceil(filteredPdfs.length / PDF_PER_PAGE), p + 1))}
+                        total={filteredPdfs.length}
+                        itemLabel="PDFs"
+                        className="mt-2"
+                      />
+                    </>
                   )}
                 </div>
               )}

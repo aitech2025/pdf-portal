@@ -26,7 +26,7 @@ const sendUserCredentialNotifications = async (
   const subject = "Welcome to i-icon Academy — your account is ready";
   const text =
     `Dear ${user.name},\n\n` +
-    `Your account at school "${schoolName}" on i-icon Academy has been created.\n\n` +
+    `Your account at school/college "${schoolName}" on i-icon Academy has been created.\n\n` +
     `Login credentials:\n` +
     `  User ID: ${user.email}\n` +
     `  Password: ${password}\n\n` +

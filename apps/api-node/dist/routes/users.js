@@ -17,7 +17,7 @@ const genPassword = (length = 12) => {
 const sendUserCredentialNotifications = async (user, schoolName, password, channels = ["email", "whatsapp"]) => {
     const subject = "Welcome to i-icon Academy — your account is ready";
     const text = `Dear ${user.name},\n\n` +
-        `Your account at school "${schoolName}" on i-icon Academy has been created.\n\n` +
+        `Your account at school/college "${schoolName}" on i-icon Academy has been created.\n\n` +
         `Login credentials:\n` +
         `  User ID: ${user.email}\n` +
         `  Password: ${password}\n\n` +
@@ -57,7 +57,8 @@ export const registerUserRoutes = async (app) => {
             page: z.coerce.number().default(1),
             per_page: z.coerce.number().default(50),
             sort: z.string().optional(),
-            q: z.string().optional()
+            q: z.string().optional(),
+            count: z.string().optional()
         })
             .parse(request.query);
         const filter = {};
@@ -71,7 +72,13 @@ export const registerUserRoutes = async (app) => {
             filter.is_active = isActive;
         if (query.q) {
             const regex = new RegExp(query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-            filter.$or = [{ name: regex }, { email: regex }];
+            // Search across every displayed/identifying column, not just name.
+            filter.$or = [
+                { name: regex },
+                { email: regex },
+                { mobile_number: regex },
+                { role: regex }
+            ];
         }
         const sortField = query.sort?.replace(/^-/, "") === "created"
             ? "created"
@@ -80,11 +87,12 @@ export const registerUserRoutes = async (app) => {
                 : "created";
         const sortDir = query.sort?.startsWith("-") ? -1 : -1;
         const skip = (query.page - 1) * query.per_page;
+        const wantCount = query.count !== "false";
         const [rows, total] = await Promise.all([
             User.find(filter).sort({ [sortField]: sortDir }).skip(skip).limit(query.per_page).lean(),
-            User.countDocuments(filter)
+            wantCount ? User.countDocuments(filter) : Promise.resolve(undefined)
         ]);
-        return listResponse(rows.map((r) => serializeDoc(r)), total);
+        return listResponse(rows.map((r) => serializeDoc(r)), total ?? rows.length);
     });
     app.get("/api/users/:user_id", { preHandler: requireAuth }, async (request, reply) => {
         const params = z.object({ user_id: z.string() }).parse(request.params);

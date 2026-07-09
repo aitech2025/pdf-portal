@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import PageTransition from '@/components/PageTransition.jsx';
+import PaginationControls from '@/components/PaginationControls.jsx';
 
 import { useSchoolManagement } from '@/hooks/useSchoolManagement.js';
 import { SCHOOL_STATUSES, exportSchoolsToCSV } from '@/utils/schoolManagementUtils.js';
@@ -124,6 +125,18 @@ const SchoolManagement = () => {
             </div>
           )}
         </div>
+
+        {/* Top pagination */}
+        <PaginationControls
+          page={page}
+          totalPages={Math.ceil(totalItems / perPage) || 1}
+          onPrev={() => setPage(p => Math.max(1, p - 1))}
+          onNext={() => setPage(p => p + 1)}
+          total={totalItems}
+          itemLabel="schools"
+          loading={loading}
+          className="px-4 py-3 border-b border-border/50"
+        />
 
         {/* Table */}
         <div className="overflow-x-auto relative min-h-[400px]">

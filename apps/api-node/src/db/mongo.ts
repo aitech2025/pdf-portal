@@ -4,7 +4,14 @@ import { User } from "../models/index.js";
 import { hashPassword, verifyPassword } from "../lib/auth.js";
 
 export const connectMongo = async (): Promise<void> => {
-  await mongoose.connect(env.MONGODB_URI, { dbName: env.DB_NAME });
+  await mongoose.connect(env.MONGODB_URI, {
+    dbName: env.DB_NAME,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    connectTimeoutMS: 10000
+  });
 };
 
 export const closeMongo = async (): Promise<void> => {

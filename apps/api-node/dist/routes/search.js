@@ -17,6 +17,11 @@ export const registerSearchRoutes = async (app) => {
         })
             .parse(request.query);
         const regex = new RegExp(query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        // Fetch school grants once and reuse for both PDF and category filters
+        const schoolGrants = !isPlatformRole(user.role)
+            ? await SchoolCategoryAccess.find({ school_id: user.school_id ?? "" }).lean()
+            : null;
+        const grantedCategoryIds = schoolGrants?.map((g) => g.category_id);
         const pdfFilter = {
             deleted_at: null,
             status: "approved",
@@ -28,14 +33,11 @@ export const registerSearchRoutes = async (app) => {
                 { tags: regex }
             ]
         };
-        if (!isPlatformRole(user.role)) {
-            const grants = await SchoolCategoryAccess.find({ school_id: user.school_id ?? "" }).lean();
-            const categoryIds = grants.map((g) => g.category_id);
-            pdfFilter.category_id = { $in: categoryIds };
-        }
+        if (grantedCategoryIds)
+            pdfFilter.category_id = { $in: grantedCategoryIds };
         const skip = (query.page - 1) * query.per_page;
         const [pdfs, pdfTotal] = await Promise.all([
-            Pdf.find(pdfFilter).sort({ created: -1 }).skip(skip).limit(query.per_page).lean(),
+            Pdf.find(pdfFilter).select({ file_data: 0 }).sort({ created: -1 }).skip(skip).limit(query.per_page).lean(),
             Pdf.countDocuments(pdfFilter)
         ]);
         let categories = [];
@@ -43,10 +45,8 @@ export const registerSearchRoutes = async (app) => {
             const catFilter = {
                 $or: [{ category_name: regex }, { category_code: regex }, { slug: regex }]
             };
-            if (!isPlatformRole(user.role)) {
-                const grants = await SchoolCategoryAccess.find({ school_id: user.school_id ?? "" }).lean();
-                catFilter.id = { $in: grants.map((g) => g.category_id) };
-            }
+            if (grantedCategoryIds)
+                catFilter.id = { $in: grantedCategoryIds };
             categories = await Category.find(catFilter).limit(20).lean();
         }
         const programs = isPlatformRole(user.role) && query.type !== "pdfs"

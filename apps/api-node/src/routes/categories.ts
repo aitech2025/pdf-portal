@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { Category, Program, SubCategory, Subject } from "../models/index.js";
+import { Category, Pdf, Program, SubCategory, Subject } from "../models/index.js";
+import { enrichPdfs } from "../lib/pdfEnrich.js";
 import { writeAudit } from "../lib/audit.js";
 import { generateCategoryCode, slugify } from "../lib/codes.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
@@ -22,13 +23,12 @@ const parseBody = (body: Record<string, unknown>) => ({
 export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void> => {
   app.get("/api/categories", { preHandler: requireAuth }, async () => {
     const rows = await Category.find({ is_archived: { $ne: true } }).sort({ display_order: 1, created: -1 }).lean();
-    const { Pdf, SubCategory: SubCat } = await import("../models/index.js");
     const [counts, subCats] = await Promise.all([
       Pdf.aggregate([
         { $match: { deleted_at: null } },
         { $group: { _id: "$category_id", count: { $sum: 1 } } }
       ]),
-      SubCat.find({}).sort({ display_order: 1 }).lean()
+      SubCategory.find({}).sort({ display_order: 1 }).lean()
     ]);
     const countMap = new Map(counts.map((c) => [c._id, c.count]));
     const subCatMap = new Map<string, typeof subCats>();
@@ -60,16 +60,13 @@ export const registerCategoryRoutes = async (app: FastifyInstance): Promise<void
     const cat = await Category.findOne({ id: params.cat_id });
     if (!cat) return reply.status(404).send({ detail: "Category not found" });
 
-    const { Pdf, SubCategory: SubCat } = await import("../models/index.js");
-    const { enrichPdfs } = await import("../lib/pdfEnrich.js");
-
     const filter: Record<string, unknown> = { category_id: params.cat_id, deleted_at: null };
     if (query.status) filter.status = query.status;
     if (query.is_active !== undefined) filter.is_active = query.is_active;
 
     const skip = (query.page - 1) * query.per_page;
     const [rows, total] = await Promise.all([
-      Pdf.find(filter).sort({ created: -1 }).skip(skip).limit(query.per_page).lean(),
+      Pdf.find(filter).select({ file_data: 0 }).sort({ created: -1 }).skip(skip).limit(query.per_page).lean(),
       Pdf.countDocuments(filter)
     ]);
 

@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from 'sonner';
 import PageTransition from '@/components/PageTransition.jsx';
+import PaginationControls from '@/components/PaginationControls.jsx';
 import pb from '@/lib/apiClient';
 
 import { useUserManagement } from '@/hooks/useUserManagement.js';
@@ -204,6 +205,18 @@ const UserManagement = () => {
             </div>
           )}
         </div>
+
+        {/* Top pagination */}
+        <PaginationControls
+          page={page}
+          totalPages={Math.ceil(totalItems / perPage) || 1}
+          onPrev={() => setPage(p => Math.max(1, p - 1))}
+          onNext={() => setPage(p => p + 1)}
+          total={totalItems}
+          itemLabel="users"
+          loading={loading}
+          className="px-4 py-3 border-b border-border/50"
+        />
 
         {/* Table */}
         <div className="overflow-x-auto relative min-h-[400px]">
