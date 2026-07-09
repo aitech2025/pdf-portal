@@ -81,14 +81,14 @@ const SchoolsAndUsersPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [schoolRes, onboardingRes, userRes] = await Promise.all([
-        pb.collection('schools').getList(1, 100, { sort: '-created', $autoCancel: false }),
-        pb.collection('onboardingRequests').getList(1, 100, { sort: '-created', $autoCancel: false }),
-        pb.collection('userRequests').getList(1, 100, { sort: '-created', expand: 'schoolId', $autoCancel: false }),
+      const [schoolItems, onboardingItems, userItems] = await Promise.all([
+        pb.collection('schools').getFullList({ sort: '-created', $autoCancel: false }),
+        pb.collection('onboardingRequests').getFullList({ sort: '-created', $autoCancel: false }),
+        pb.collection('userRequests').getFullList({ sort: '-created', expand: 'schoolId', $autoCancel: false }),
       ]);
-      setSchools(schoolRes.items);
-      setOnboardingRequests(onboardingRes.items);
-      setUserRequests(userRes.items);
+      setSchools(schoolItems);
+      setOnboardingRequests(onboardingItems);
+      setUserRequests(userItems);
     } catch (err) {
       toast.error('Failed to load data');
     } finally {

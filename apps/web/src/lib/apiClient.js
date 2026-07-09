@@ -349,6 +349,18 @@ class ApiClient {
                     perPage
                 };
             },
+            async getFullList(options = {}) {
+                const batchSize = 200;
+                let page = 1;
+                let allItems = [];
+                while (true) {
+                    const result = await self.collection(name).getList(page, batchSize, options);
+                    allItems = allItems.concat(result.items);
+                    if (allItems.length >= result.totalItems || result.items.length < batchSize) break;
+                    page++;
+                }
+                return allItems;
+            },
             async getOne(id, options = {}) {
                 return await self.fetch(`/${name}/${id}`, 'GET');
             },
