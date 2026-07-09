@@ -1,0 +1,9 @@
+
+> web@0.0.0 prebuild C:\Users\navee\OneDrive\Desktop\Pet-Projects\EduTech\pdf-portal\apps\web
+> node scripts/copy-pdf-worker.cjs
+
+[copy-pdf-worker] copied to public/pdf.worker.min.mjs
+
+> web@0.0.0 build C:\Users\navee\OneDrive\Desktop\Pet-Projects\EduTech\pdf-portal\apps\web
+> node tools/generate-llms.js || true && vite build --outDir ../../dist/apps/web
+
