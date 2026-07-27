@@ -57,6 +57,7 @@ const PDFUploadManagement = () => {
   const [uploadClass, setUploadClass] = useState('');
   const [uploadSubject, setUploadSubject] = useState('');
   const [versionNotes, setVersionNotes] = useState('');
+  const [customFileName, setCustomFileName] = useState('');
 
   // Program structure for upload form (classes + subjects)
   const [uploadStructure, setUploadStructure] = useState(null);
@@ -175,69 +176,46 @@ const PDFUploadManagement = () => {
     setUploadProgress(0);
     let successCount = 0;
 
-    const zipFiles = files.filter(f => f.name.toLowerCase().endsWith('.zip'));
-    const pdfFiles = files.filter(f => !f.name.toLowerCase().endsWith('.zip'));
+    // Optional custom name only applies to a single-file upload; multi-file
+    // batches keep each file's original name. Preserve the original extension.
+    const singleUpload = files.length === 1;
+    const resolveName = (file) => {
+      const custom = customFileName.trim();
+      if (!singleUpload || !custom) return file.name;
+      const dot = file.name.lastIndexOf('.');
+      const ext = dot > 0 ? file.name.slice(dot) : '';
+      return ext && !custom.toLowerCase().endsWith(ext.toLowerCase()) ? `${custom}${ext}` : custom;
+    };
 
-    // Handle ZIP files first
-    for (let i = 0; i < zipFiles.length; i++) {
-      const zip = zipFiles[i];
+    // Both PDFs and ZIPs are stored as content items via the same endpoint.
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const isZip = file.name.toLowerCase().endsWith('.zip');
       try {
-        setUploadProgress(Math.floor((i / files.length) * 80) + 5);
-        const formData = new FormData();
-        formData.append('categoryId', uploadProgram);
-        formData.append('classId', uploadClass);
-        if (uploadSubject) formData.append('subjectId', uploadSubject);
-        formData.append('versionNotes', versionNotes || 'Extracted from ZIP');
-        formData.append('file', zip);
+        setUploadProgress(Math.floor((i / files.length) * 80) + 10);
 
-        const token = getToken();
-        const res = await fetch('/api/pdfs/upload-zip', {
-          method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: formData
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ detail: res.statusText }));
-          throw new Error(err.detail || 'ZIP upload failed');
+        // Same-name → new version only applies to PDFs (zips are always new items).
+        let existingPdf = null;
+        if (!isZip) {
+          const checkParams = new URLSearchParams({ categoryId: uploadProgram, classId: uploadClass });
+          if (uploadSubject) checkParams.set('subjectId', uploadSubject);
+          const existingRes = await apiFetch(`/api/pdfs?${checkParams}`);
+          existingPdf = (existingRes?.items ?? []).find(p =>
+            (p.fileName || p.file_name) === resolveName(file)
+          );
         }
-        const result = await res.json();
-        successCount += result.created ?? 0;
-        if (result.created > 0) {
-          toast.success(`Extracted ${result.created} PDF(s) from ${zip.name}`);
-        }
-        if (result.skipped?.length > 0) {
-          toast.warning(`${result.skipped.length} file(s) skipped (not PDFs or failed)`);
-        }
-      } catch (err) {
-        toast.error(`Failed to process ${zip.name}: ${err.message || 'Unknown error'}`);
-      }
-    }
-
-    // Handle individual PDF files
-    for (let i = 0; i < pdfFiles.length; i++) {
-      const file = pdfFiles[i];
-      try {
-        setUploadProgress(Math.floor(((zipFiles.length + i) / files.length) * 80) + 10);
-
-        // Check for existing PDF with same name in this combination
-        const checkParams = new URLSearchParams({ categoryId: uploadProgram, classId: uploadClass });
-        if (uploadSubject) checkParams.set('subjectId', uploadSubject);
-        const existingRes = await apiFetch(`/api/pdfs?${checkParams}`);
-        const existingPdf = (existingRes?.items ?? []).find(p =>
-          (p.fileName || p.file_name) === file.name
-        );
 
         if (existingPdf) {
           await uploadNewVersion(existingPdf.id, file, versionNotes, currentUser.id);
           successCount++;
-          if (i === pdfFiles.length - 1 && zipFiles.length === 0) {
+          if (i === files.length - 1) {
             const fullRecord = await apiFetch(`/api/pdfs/${existingPdf.id}`);
             setSelectedPdf(fullRecord);
             setIsUploadMode(false);
           }
         } else {
           const formData = new FormData();
-          formData.append('fileName', file.name);
+          formData.append('fileName', resolveName(file));
           formData.append('categoryId', uploadProgram);
           formData.append('classId', uploadClass);
           if (uploadSubject) formData.append('subjectId', uploadSubject);
@@ -249,7 +227,7 @@ const PDFUploadManagement = () => {
           const newRecord = await pb.uploadPdf(formData);
           successCount++;
 
-          if (i === pdfFiles.length - 1 && zipFiles.length === 0) {
+          if (i === files.length - 1) {
             const fullRecord = await apiFetch(`/api/pdfs/${newRecord.id}`);
             setSelectedPdf(fullRecord);
             setIsUploadMode(false);
@@ -265,6 +243,7 @@ const PDFUploadManagement = () => {
       setUploading(false);
       setUploadProgress(0);
       setVersionNotes('');
+      setCustomFileName('');
       if (successCount > 0) {
         toast.success(`Successfully processed ${successCount} file(s)`);
         fetchPdfs();
@@ -408,6 +387,21 @@ const PDFUploadManagement = () => {
                     )}
                   </div>
                 )}
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-foreground">
+                    File Name <span className="font-normal text-muted-foreground">(optional)</span>
+                  </label>
+                  <Input
+                    placeholder="Custom name — applied to single-file uploads"
+                    value={customFileName}
+                    onChange={e => setCustomFileName(e.target.value)}
+                    className="bg-background border-border/50"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank to keep the original filename. Ignored when uploading multiple files at once.
+                  </p>
+                </div>
 
                 <div className="space-y-1.5">
                   <label className="text-sm font-semibold text-foreground">Version Notes</label>

@@ -9,7 +9,26 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 
-const BRAND = '#5b5ff1';
+/* Design tokens mirrored from apps/web (index.css / tailwind.config.js) */
+const BRAND = '#5b5ff1';            // --brand-500 / --primary
+const BG = '#fbfcff';               // --background  hsl(220 33% 99%)
+const FG = '#111827';               // --foreground
+const MUTED_FG = '#6b7280';         // --muted-foreground
+const BORDER = '#e5e7eb';           // --border
+const CARD_BORDER = '#e8ebf0';      // border/60
+const ICON = '#9ca3af';
+const DESTRUCTIVE = '#e11d48';      // --destructive hsl(349 89% 60%)
+const RADIUS_LG = 16;               // --radius-lg  1rem
+const RADIUS_XL = 24;               // --radius-xl  1.5rem
+
+// shadow-soft-xl approximation
+const SOFT_XL = {
+    shadowColor: '#111a2e',
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
+};
 
 export default function LoginScreen() {
     const { login } = useAuth();
@@ -19,11 +38,12 @@ export default function LoginScreen() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPwd, setShowPwd] = useState(false);
+    const [remember, setRemember] = useState(false);
     const [error, setError] = useState('');
 
     const handleLogin = async () => {
         if (!email.trim() || !password) {
-            setError('Please enter your email and password.');
+            setError('Please enter your email / mobile and password.');
             return;
         }
         setError('');
@@ -37,7 +57,7 @@ export default function LoginScreen() {
                 router.replace('/(school)');
             }
         } catch (err: any) {
-            setError(err.message || 'Invalid credentials. Please try again.');
+            setError(err.message || 'Invalid credentials. Please check your email / mobile and password.');
         } finally {
             setLoading(false);
         }
@@ -45,151 +65,181 @@ export default function LoginScreen() {
 
     return (
         <KeyboardAvoidingView
-            style={{ flex: 1, backgroundColor: '#f9fafb' }}
+            style={{ flex: 1, backgroundColor: BG }}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-            <StatusBar barStyle="light-content" backgroundColor={BRAND} />
-
-            {/* Brand header */}
-            <View style={{
-                backgroundColor: BRAND,
-                paddingTop: insets.top + 28,
-                paddingBottom: 36,
-                paddingHorizontal: 24,
-                alignItems: 'center',
-            }}>
-                <View style={{
-                    backgroundColor: 'white',
-                    borderRadius: 18,
-                    paddingHorizontal: 22,
-                    paddingVertical: 14,
-                    shadowColor: '#000',
-                    shadowOpacity: 0.15,
-                    shadowRadius: 16,
-                    shadowOffset: { width: 0, height: 4 },
-                    elevation: 8,
-                }}>
-                    <Image
-                        source={require('../../assets/logo-mark.png')}
-                        style={{ width: 168, height: 52, resizeMode: 'contain' }}
-                    />
-                </View>
-                <Text style={{
-                    color: 'rgba(255,255,255,0.85)',
-                    fontSize: 13,
-                    marginTop: 18,
-                    textAlign: 'center',
-                    lineHeight: 19,
-                    maxWidth: 280,
-                }}>
-                    A trusted pioneer in IIT Foundation &amp; JEE preparation
-                </Text>
-            </View>
+            <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
             <ScrollView
-                contentContainerStyle={{ flexGrow: 1 }}
+                contentContainerStyle={{
+                    flexGrow: 1,
+                    justifyContent: 'center',
+                    paddingHorizontal: 24,
+                    paddingTop: insets.top + 24,
+                    paddingBottom: insets.bottom + 32,
+                }}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
             >
-                <View style={{ paddingHorizontal: 24, paddingTop: 32, paddingBottom: 40 }}>
-                    <Text style={{ fontSize: 24, fontWeight: '700', color: '#111827', marginBottom: 4 }}>
-                        Welcome back
-                    </Text>
-                    <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 28 }}>
-                        Sign in to your i-iCON Academy portal
-                    </Text>
-
-                    {error ? (
-                        <View style={{
-                            backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca',
-                            borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
-                            marginBottom: 16, flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-                        }}>
-                            <Ionicons name="alert-circle" size={16} color="#ef4444" style={{ marginTop: 1 }} />
-                            <Text style={{ color: '#dc2626', fontSize: 13, flex: 1, lineHeight: 18 }}>{error}</Text>
-                        </View>
-                    ) : null}
-
-                    {/* Email */}
-                    <View style={{ marginBottom: 16 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 6 }}>
-                            Email or Mobile Number
-                        </Text>
-                        <View style={{
-                            flexDirection: 'row', alignItems: 'center',
-                            backgroundColor: 'white', borderWidth: 1, borderColor: '#e5e7eb',
-                            borderRadius: 12, paddingHorizontal: 14,
-                        }}>
-                            <Ionicons name="mail-outline" size={18} color="#9ca3af" />
-                            <TextInput
-                                style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 10, fontSize: 15, color: '#111827' }}
-                                placeholder="name@iiconacademy.in"
-                                placeholderTextColor="#9ca3af"
-                                value={email}
-                                onChangeText={setEmail}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                                autoCorrect={false}
+                <View style={{ width: '100%', maxWidth: 440, alignSelf: 'center' }}>
+                    {/* Brand */}
+                    <View style={{ alignItems: 'center', marginBottom: 32 }}>
+                        <View style={[{
+                            backgroundColor: 'white',
+                            borderRadius: RADIUS_LG,
+                            paddingHorizontal: 24,
+                            paddingVertical: 16,
+                            marginBottom: 20,
+                        }, SOFT_XL]}>
+                            <Image
+                                source={require('../../assets/logo-mark.png')}
+                                style={{ width: 190, height: 88, resizeMode: 'contain' }}
                             />
                         </View>
-                    </View>
-
-                    {/* Password */}
-                    <View style={{ marginBottom: 8 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 6 }}>
-                            Password
+                        <Text style={{ fontSize: 14, color: MUTED_FG, textAlign: 'center' }}>
+                            Sign in to your learning portal
                         </Text>
-                        <View style={{
-                            flexDirection: 'row', alignItems: 'center',
-                            backgroundColor: 'white', borderWidth: 1, borderColor: '#e5e7eb',
-                            borderRadius: 12, paddingHorizontal: 14,
-                        }}>
-                            <Ionicons name="lock-closed-outline" size={18} color="#9ca3af" />
-                            <TextInput
-                                style={{ flex: 1, paddingVertical: 14, paddingHorizontal: 10, fontSize: 15, color: '#111827' }}
-                                placeholder="••••••••"
-                                placeholderTextColor="#9ca3af"
-                                value={password}
-                                onChangeText={setPassword}
-                                secureTextEntry={!showPwd}
-                                autoCapitalize="none"
-                            />
-                            <TouchableOpacity onPress={() => setShowPwd(!showPwd)} style={{ padding: 4 }}>
-                                <Ionicons name={showPwd ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9ca3af" />
-                            </TouchableOpacity>
-                        </View>
                     </View>
 
-                    {/* Forgot password */}
-                    <TouchableOpacity
-                        style={{ alignSelf: 'flex-end', marginBottom: 24, paddingVertical: 4 }}
-                        onPress={() => router.push('/(auth)/forgot-password')}
-                    >
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: BRAND }}>Forgot password?</Text>
-                    </TouchableOpacity>
+                    {/* Form card */}
+                    <View style={[{
+                        backgroundColor: 'white',
+                        borderRadius: RADIUS_LG,
+                        borderWidth: 1,
+                        borderColor: CARD_BORDER,
+                        padding: 24,
+                    }, SOFT_XL]}>
+                        {error ? (
+                            <View style={{
+                                backgroundColor: 'rgba(225,29,72,0.10)',
+                                borderWidth: 1,
+                                borderColor: 'rgba(225,29,72,0.20)',
+                                borderRadius: 12,
+                                paddingHorizontal: 14,
+                                paddingVertical: 12,
+                                marginBottom: 20,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 12,
+                            }}>
+                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: DESTRUCTIVE }} />
+                                <Text style={{ color: DESTRUCTIVE, fontSize: 13, fontWeight: '500', flex: 1, lineHeight: 18 }}>
+                                    {error}
+                                </Text>
+                            </View>
+                        ) : null}
 
-                    {/* Sign in button */}
-                    <TouchableOpacity
-                        style={{
-                            backgroundColor: loading ? '#8b8ef5' : BRAND,
-                            borderRadius: 14, paddingVertical: 16,
-                            alignItems: 'center', shadowColor: BRAND,
-                            shadowOpacity: 0.35, shadowRadius: 10,
-                            shadowOffset: { width: 0, height: 4 }, elevation: 4,
-                        }}
-                        onPress={handleLogin}
-                        disabled={loading}
-                        activeOpacity={0.85}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color="#fff" />
-                        ) : (
-                            <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Sign In</Text>
-                        )}
-                    </TouchableOpacity>
+                        {/* Email / Mobile */}
+                        <View style={{ marginBottom: 20 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '500', color: FG, marginBottom: 8 }}>
+                                Email or Mobile Number
+                            </Text>
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center',
+                                backgroundColor: 'rgba(251,252,255,0.6)',
+                                borderWidth: 1, borderColor: BORDER,
+                                borderRadius: 12, paddingHorizontal: 14, height: 48,
+                            }}>
+                                <Ionicons name="at-outline" size={18} color={ICON} />
+                                <TextInput
+                                    style={{ flex: 1, paddingHorizontal: 10, fontSize: 16, color: FG, height: '100%' }}
+                                    placeholder="name@iiconacademy.in or 9876543210"
+                                    placeholderTextColor={ICON}
+                                    value={email}
+                                    onChangeText={setEmail}
+                                    keyboardType="email-address"
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    autoComplete="username"
+                                />
+                            </View>
+                        </View>
 
-                    <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 11, marginTop: 36 }}>
-                        © {new Date().getFullYear()} i-iCON Academy. All rights reserved.
+                        {/* Password */}
+                        <View style={{ marginBottom: 20 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                <Text style={{ fontSize: 14, fontWeight: '500', color: FG }}>
+                                    Password
+                                </Text>
+                                <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password' as any)} hitSlop={8}>
+                                    <Text style={{ fontSize: 14, fontWeight: '500', color: BRAND }}>Forgot password?</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center',
+                                backgroundColor: 'rgba(251,252,255,0.6)',
+                                borderWidth: 1, borderColor: BORDER,
+                                borderRadius: 12, paddingHorizontal: 14, height: 48,
+                            }}>
+                                <Ionicons name="lock-closed-outline" size={18} color={ICON} />
+                                <TextInput
+                                    style={{ flex: 1, paddingHorizontal: 10, fontSize: 16, color: FG, height: '100%' }}
+                                    placeholder="••••••••"
+                                    placeholderTextColor={ICON}
+                                    value={password}
+                                    onChangeText={setPassword}
+                                    secureTextEntry={!showPwd}
+                                    autoCapitalize="none"
+                                    autoComplete="current-password"
+                                />
+                                <TouchableOpacity onPress={() => setShowPwd(!showPwd)} style={{ padding: 4 }} hitSlop={8}>
+                                    <Ionicons name={showPwd ? 'eye-off-outline' : 'eye-outline'} size={18} color={ICON} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* Remember me */}
+                        <TouchableOpacity
+                            onPress={() => setRemember(!remember)}
+                            activeOpacity={0.7}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4, marginBottom: 20 }}
+                        >
+                            <View style={{
+                                width: 18, height: 18, borderRadius: 4,
+                                borderWidth: 1.5,
+                                borderColor: remember ? BRAND : MUTED_FG,
+                                backgroundColor: remember ? BRAND : 'transparent',
+                                alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                {remember && <Ionicons name="checkmark" size={13} color="white" />}
+                            </View>
+                            <Text style={{ fontSize: 14, color: MUTED_FG }}>Remember me for 30 days</Text>
+                        </TouchableOpacity>
+
+                        {/* Sign in */}
+                        <TouchableOpacity
+                            style={{
+                                backgroundColor: loading ? '#8b8ef5' : BRAND,
+                                borderRadius: 12, height: 48,
+                                flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                shadowColor: BRAND, shadowOpacity: 0.35, shadowRadius: 10,
+                                shadowOffset: { width: 0, height: 4 }, elevation: 4,
+                            }}
+                            onPress={handleLogin}
+                            disabled={loading}
+                            activeOpacity={0.85}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <Text style={{ color: 'white', fontWeight: '600', fontSize: 16 }}>Sign in</Text>
+                                    <Ionicons name="arrow-forward" size={20} color="white" />
+                                </>
+                            )}
+                        </TouchableOpacity>
+
+                        {/* Verify email (screen not yet built on mobile) */}
+                        <Text style={{ textAlign: 'center', fontSize: 14, color: MUTED_FG, marginTop: 20 }}>
+                            Need to verify your account?{' '}
+                            <Text style={{ color: BRAND, fontWeight: '500' }}>Verify email</Text>
+                        </Text>
+                    </View>
+
+                    {/* Request access (signup screen not yet built on mobile) */}
+                    <Text style={{ textAlign: 'center', fontSize: 14, color: MUTED_FG, marginTop: 24 }}>
+                        Don&apos;t have an account?{' '}
+                        <Text style={{ color: FG, fontWeight: '600', textDecorationLine: 'underline' }}>Request access</Text>
                     </Text>
                 </View>
             </ScrollView>

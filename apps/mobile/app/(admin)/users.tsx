@@ -5,10 +5,19 @@ import {
     KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usersApi, schoolsApi } from '@shared/api/index.js';
 import { ROLE_LABELS } from '@shared/constants/roles.js';
 
-interface User { id: string; name: string; email: string; role: string; isActive: boolean; schoolId?: string; }
+/* Design tokens mirrored from apps/web (index.css / tailwind.config.js) */
+const BRAND = '#5b5ff1';
+const BG = '#fbfcff';
+const FG = '#111827';
+const MUTED_FG = '#6b7280';
+const BORDER = '#e5e7eb';
+const CARD_BORDER = '#eef0f3';
+
+interface User { id: string; name: string; email: string; role: string; isActive: boolean; schoolId?: string; lastLogin?: string; }
 interface School { id: string; schoolName: string; }
 
 const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
@@ -28,11 +37,13 @@ const SCHOOL_ROLES = ['school_admin', 'school_viewer', 'teacher'];
 const EMPTY_FORM = { name: '', email: '', password: '', role: 'school_admin', schoolId: '' };
 
 export default function UsersScreen() {
+    const insets = useSafeAreaInsets();
     const [users, setUsers] = useState<User[]>([]);
     const [schools, setSchools] = useState<School[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [search, setSearch] = useState('');
+    const [roleFilter, setRoleFilter] = useState<'all' | 'platform' | 'school'>('all');
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState(EMPTY_FORM);
     const [submitting, setSubmitting] = useState(false);
@@ -117,46 +128,60 @@ export default function UsersScreen() {
         ]);
     };
 
-    const filtered = users.filter(u =>
-        u.name?.toLowerCase().includes(search.toLowerCase()) ||
-        u.email?.toLowerCase().includes(search.toLowerCase())
-    );
+    const filtered = users.filter(u => {
+        const matchesSearch =
+            u.name?.toLowerCase().includes(search.toLowerCase()) ||
+            u.email?.toLowerCase().includes(search.toLowerCase());
+        const isSchoolRole = SCHOOL_ROLES.includes(u.role) || u.role === 'school';
+        const matchesRole =
+            roleFilter === 'all' || (roleFilter === 'school' ? isSchoolRole : !isSchoolRole);
+        return matchesSearch && matchesRole;
+    });
 
     const selectedSchoolName = schools.find(s => s.id === form.schoolId)?.schoolName ?? 'Select school...';
+
+    const ROLE_TABS: { label: string; value: 'all' | 'platform' | 'school' }[] = [
+        { label: 'All', value: 'all' },
+        { label: 'Platform', value: 'platform' },
+        { label: 'School', value: 'school' },
+    ];
 
     const renderItem = ({ item }: { item: User }) => {
         const roleStyle = ROLE_COLORS[item.role] ?? { bg: '#f3f4f6', text: '#374151' };
         return (
-            <View className="bg-white mx-4 mb-3 rounded-2xl p-4 border border-border">
-                <View className="flex-row items-center gap-3">
-                    <View className="w-10 h-10 rounded-full bg-primary/10 items-center justify-center">
-                        <Text className="text-primary font-bold text-base">{(item.name || item.email || 'U').charAt(0).toUpperCase()}</Text>
+            <View style={{ backgroundColor: 'white', marginHorizontal: 16, marginBottom: 12, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: CARD_BORDER }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: BRAND + '1a', alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ color: BRAND, fontWeight: '700', fontSize: 16 }}>{(item.name || item.email || 'U').charAt(0).toUpperCase()}</Text>
                     </View>
-                    <View className="flex-1 min-w-0">
-                        <Text className="font-semibold text-foreground" numberOfLines={1}>{item.name || 'Unnamed'}</Text>
-                        <Text className="text-xs text-muted" numberOfLines={1}>{item.email}</Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={{ fontWeight: '600', color: FG, fontSize: 14 }} numberOfLines={1}>{item.name || 'Unnamed'}</Text>
+                        <Text style={{ fontSize: 12, color: MUTED_FG }} numberOfLines={1}>{item.email}</Text>
                     </View>
-                    <View className="items-end gap-1.5">
-                        <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: roleStyle.bg }}>
-                            <Text className="text-xs font-medium" style={{ color: roleStyle.text }}>{ROLE_LABELS[item.role] ?? item.role}</Text>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                        <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: roleStyle.bg }}>
+                            <Text style={{ fontSize: 11, fontWeight: '500', color: roleStyle.text }}>{ROLE_LABELS[item.role] ?? item.role}</Text>
                         </View>
-                        <View className={`px-2 py-0.5 rounded-full ${item.isActive ? 'bg-emerald-100' : 'bg-gray-100'}`}>
-                            <Text className={`text-xs ${item.isActive ? 'text-emerald-700' : 'text-gray-500'}`}>{item.isActive ? 'Active' : 'Inactive'}</Text>
+                        <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: item.isActive ? '#d1fae5' : '#f3f4f6' }}>
+                            <Text style={{ fontSize: 11, color: item.isActive ? '#047857' : '#6b7280' }}>{item.isActive ? 'Active' : 'Inactive'}</Text>
                         </View>
                     </View>
                 </View>
-                <View className="flex-row gap-2 mt-3">
-                    <TouchableOpacity className="flex-1 py-2 rounded-xl bg-gray-50 border border-border items-center flex-row justify-center gap-1" onPress={() => handleResetPassword(item)}>
-                        <Ionicons name="key-outline" size={13} color="#6b7280" />
-                        <Text className="text-xs text-muted font-medium">Reset Pwd</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    <TouchableOpacity style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: BORDER, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 4 }} onPress={() => handleResetPassword(item)}>
+                        <Ionicons name="key-outline" size={13} color={MUTED_FG} />
+                        <Text style={{ fontSize: 12, color: MUTED_FG, fontWeight: '500' }}>Reset Pwd</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        className={`flex-1 py-2 rounded-xl border items-center ${item.isActive ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}
+                        style={{
+                            flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1, alignItems: 'center',
+                            borderColor: item.isActive ? '#fde68a' : '#a7f3d0', backgroundColor: item.isActive ? '#fffbeb' : '#ecfdf5',
+                        }}
                         onPress={() => handleToggleActive(item)}
                     >
-                        <Text className={`text-xs font-semibold ${item.isActive ? 'text-amber-600' : 'text-emerald-600'}`}>{item.isActive ? 'Deactivate' : 'Activate'}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: item.isActive ? '#d97706' : '#059669' }}>{item.isActive ? 'Deactivate' : 'Activate'}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity className="w-9 h-9 rounded-xl bg-red-50 border border-red-200 items-center justify-center" onPress={() => handleDelete(item)}>
+                    <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', alignItems: 'center', justifyContent: 'center' }} onPress={() => handleDelete(item)}>
                         <Ionicons name="trash-outline" size={16} color="#ef4444" />
                     </TouchableOpacity>
                 </View>
@@ -165,31 +190,43 @@ export default function UsersScreen() {
     };
 
     return (
-        <View className="flex-1 bg-background">
-            <View className="bg-white px-5 pt-14 pb-4 border-b border-border">
-                <View className="flex-row items-center justify-between mb-3">
-                    <Text className="text-2xl font-bold text-foreground">Users</Text>
-                    <TouchableOpacity className="w-9 h-9 rounded-xl bg-primary items-center justify-center" onPress={() => { setForm(EMPTY_FORM); setShowForm(true); }}>
+        <View style={{ flex: 1, backgroundColor: BG }}>
+            <View style={{ backgroundColor: 'white', paddingTop: insets.top + 12, paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: CARD_BORDER }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 24, fontWeight: '700', color: FG }}>User Management</Text>
+                    <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: BRAND, alignItems: 'center', justifyContent: 'center' }} onPress={() => { setForm(EMPTY_FORM); setShowForm(true); }}>
                         <Ionicons name="add" size={20} color="white" />
                     </TouchableOpacity>
                 </View>
-                <View className="flex-row items-center bg-gray-100 rounded-xl px-3">
+                <Text style={{ fontSize: 13, color: MUTED_FG, marginBottom: 12 }}>Manage platform users, roles, and access permissions.</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 12, paddingHorizontal: 12 }}>
                     <Ionicons name="search" size={16} color="#9ca3af" />
-                    <TextInput className="flex-1 py-2.5 px-2 text-foreground text-sm" placeholder="Search by name or email..." placeholderTextColor="#9ca3af" value={search} onChangeText={setSearch} />
+                    <TextInput style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 8, color: FG, fontSize: 14 }} placeholder="Search by name or email..." placeholderTextColor="#9ca3af" value={search} onChangeText={setSearch} />
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    {ROLE_TABS.map(tab => {
+                        const active = roleFilter === tab.value;
+                        return (
+                            <TouchableOpacity key={tab.value} onPress={() => setRoleFilter(tab.value)}
+                                style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, backgroundColor: active ? BRAND : '#f3f4f6' }}>
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: active ? 'white' : MUTED_FG }}>{tab.label}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
             </View>
 
             {loading ? (
-                <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#4f46e5" /></View>
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator size="large" color={BRAND} /></View>
             ) : (
                 <FlatList
                     data={filtered} keyExtractor={item => item.id} renderItem={renderItem}
-                    contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 }}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAll(); }} tintColor="#4f46e5" />}
+                    contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 24 }}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAll(); }} tintColor={BRAND} />}
                     ListEmptyComponent={
-                        <View className="items-center justify-center py-20">
+                        <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80 }}>
                             <Ionicons name="people-outline" size={48} color="#d1d5db" />
-                            <Text className="text-muted mt-3">No users found</Text>
+                            <Text style={{ color: MUTED_FG, marginTop: 12 }}>No users found</Text>
                         </View>
                     }
                 />
@@ -197,12 +234,12 @@ export default function UsersScreen() {
 
             {/* Create User Modal */}
             <Modal visible={showForm} transparent animationType="slide">
-                <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                    <View className="flex-1 bg-black/50 justify-end">
-                        <View className="bg-white rounded-t-3xl px-6 pt-6 pb-8" style={{ maxHeight: '92%' }}>
-                            <View className="flex-row items-center justify-between mb-5">
-                                <Text className="text-lg font-bold text-foreground">Create User</Text>
-                                <TouchableOpacity onPress={() => setShowForm(false)}><Ionicons name="close" size={24} color="#6b7280" /></TouchableOpacity>
+                <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                        <View style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24, maxHeight: '92%' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                                <Text style={{ fontSize: 18, fontWeight: '700', color: FG }}>Add User</Text>
+                                <TouchableOpacity onPress={() => setShowForm(false)}><Ionicons name="close" size={24} color={MUTED_FG} /></TouchableOpacity>
                             </View>
                             <ScrollView showsVerticalScrollIndicator={false}>
                                 {[
@@ -210,10 +247,10 @@ export default function UsersScreen() {
                                     { key: 'email', label: 'Email *', placeholder: 'user@example.com', keyboard: 'email-address' },
                                     { key: 'password', label: 'Password *', placeholder: 'Min 8 characters', keyboard: 'default', secure: true },
                                 ].map(f => (
-                                    <View key={f.key} className="mb-4">
-                                        <Text className="text-sm font-medium text-foreground mb-1.5">{f.label}</Text>
+                                    <View key={f.key} style={{ marginBottom: 16 }}>
+                                        <Text style={{ fontSize: 13, fontWeight: '500', color: FG, marginBottom: 6 }}>{f.label}</Text>
                                         <TextInput
-                                            className="bg-gray-50 border border-border rounded-xl px-4 py-3 text-foreground text-sm"
+                                            style={{ backgroundColor: '#f9fafb', borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: FG, fontSize: 14 }}
                                             placeholder={f.placeholder} placeholderTextColor="#9ca3af"
                                             value={form[f.key as keyof typeof form]}
                                             onChangeText={v => setForm(p => ({ ...p, [f.key]: v }))}
@@ -225,30 +262,30 @@ export default function UsersScreen() {
                                 ))}
 
                                 {/* Role picker */}
-                                <View className="mb-4">
-                                    <Text className="text-sm font-medium text-foreground mb-1.5">Role *</Text>
-                                    <TouchableOpacity className="bg-gray-50 border border-border rounded-xl px-4 py-3 flex-row items-center justify-between" onPress={() => setShowRolePicker(true)}>
-                                        <Text className="text-foreground text-sm">{ROLE_LABELS[form.role] ?? form.role}</Text>
-                                        <Ionicons name="chevron-down" size={16} color="#6b7280" />
+                                <View style={{ marginBottom: 16 }}>
+                                    <Text style={{ fontSize: 13, fontWeight: '500', color: FG, marginBottom: 6 }}>Role *</Text>
+                                    <TouchableOpacity style={{ backgroundColor: '#f9fafb', borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} onPress={() => setShowRolePicker(true)}>
+                                        <Text style={{ color: FG, fontSize: 14 }}>{ROLE_LABELS[form.role] ?? form.role}</Text>
+                                        <Ionicons name="chevron-down" size={16} color={MUTED_FG} />
                                     </TouchableOpacity>
                                 </View>
 
                                 {/* School picker (only for school roles) */}
                                 {SCHOOL_ROLES.includes(form.role) && (
-                                    <View className="mb-4">
-                                        <Text className="text-sm font-medium text-foreground mb-1.5">School *</Text>
-                                        <TouchableOpacity className="bg-gray-50 border border-border rounded-xl px-4 py-3 flex-row items-center justify-between" onPress={() => setShowSchoolPicker(true)}>
-                                            <Text className={`text-sm ${form.schoolId ? 'text-foreground' : 'text-gray-400'}`}>{selectedSchoolName}</Text>
-                                            <Ionicons name="chevron-down" size={16} color="#6b7280" />
+                                    <View style={{ marginBottom: 16 }}>
+                                        <Text style={{ fontSize: 13, fontWeight: '500', color: FG, marginBottom: 6 }}>School *</Text>
+                                        <TouchableOpacity style={{ backgroundColor: '#f9fafb', borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} onPress={() => setShowSchoolPicker(true)}>
+                                            <Text style={{ fontSize: 14, color: form.schoolId ? FG : '#9ca3af' }}>{selectedSchoolName}</Text>
+                                            <Ionicons name="chevron-down" size={16} color={MUTED_FG} />
                                         </TouchableOpacity>
                                     </View>
                                 )}
 
                                 <TouchableOpacity
-                                    className={`mt-2 rounded-xl py-4 items-center ${submitting ? 'bg-primary/60' : 'bg-primary'}`}
+                                    style={{ marginTop: 8, borderRadius: 12, paddingVertical: 15, alignItems: 'center', backgroundColor: submitting ? BRAND + '99' : BRAND }}
                                     onPress={handleCreate} disabled={submitting}
                                 >
-                                    {submitting ? <ActivityIndicator color="white" /> : <Text className="text-white font-semibold text-base">Create User</Text>}
+                                    {submitting ? <ActivityIndicator color="white" /> : <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Create User</Text>}
                                 </TouchableOpacity>
                             </ScrollView>
                         </View>
@@ -258,14 +295,14 @@ export default function UsersScreen() {
 
             {/* Role Picker Modal */}
             <Modal visible={showRolePicker} transparent animationType="fade">
-                <TouchableOpacity className="flex-1 bg-black/50 justify-center px-6" activeOpacity={1} onPress={() => setShowRolePicker(false)}>
-                    <View className="bg-white rounded-2xl overflow-hidden">
-                        <Text className="text-base font-bold text-foreground px-5 py-4 border-b border-border">Select Role</Text>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 24 }} activeOpacity={1} onPress={() => setShowRolePicker(false)}>
+                    <View style={{ backgroundColor: 'white', borderRadius: 16, overflow: 'hidden' }}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: FG, paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>Select Role</Text>
                         {ALL_ROLES.map(role => (
-                            <TouchableOpacity key={role} className={`px-5 py-3.5 border-b border-border/50 flex-row items-center justify-between ${form.role === role ? 'bg-primary/5' : ''}`}
+                            <TouchableOpacity key={role} style={{ paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: form.role === role ? BRAND + '0d' : 'white' }}
                                 onPress={() => { setForm(p => ({ ...p, role, schoolId: '' })); setShowRolePicker(false); }}>
-                                <Text className={`text-sm ${form.role === role ? 'text-primary font-semibold' : 'text-foreground'}`}>{ROLE_LABELS[role] ?? role}</Text>
-                                {form.role === role && <Ionicons name="checkmark" size={18} color="#4f46e5" />}
+                                <Text style={{ fontSize: 14, color: form.role === role ? BRAND : FG, fontWeight: form.role === role ? '600' : '400' }}>{ROLE_LABELS[role] ?? role}</Text>
+                                {form.role === role && <Ionicons name="checkmark" size={18} color={BRAND} />}
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -274,15 +311,15 @@ export default function UsersScreen() {
 
             {/* School Picker Modal */}
             <Modal visible={showSchoolPicker} transparent animationType="fade">
-                <TouchableOpacity className="flex-1 bg-black/50 justify-center px-6" activeOpacity={1} onPress={() => setShowSchoolPicker(false)}>
-                    <View className="bg-white rounded-2xl overflow-hidden" style={{ maxHeight: '60%' }}>
-                        <Text className="text-base font-bold text-foreground px-5 py-4 border-b border-border">Select School</Text>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 24 }} activeOpacity={1} onPress={() => setShowSchoolPicker(false)}>
+                    <View style={{ backgroundColor: 'white', borderRadius: 16, overflow: 'hidden', maxHeight: '60%' }}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: FG, paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>Select School</Text>
                         <ScrollView>
                             {schools.map(s => (
-                                <TouchableOpacity key={s.id} className={`px-5 py-3.5 border-b border-border/50 flex-row items-center justify-between ${form.schoolId === s.id ? 'bg-primary/5' : ''}`}
+                                <TouchableOpacity key={s.id} style={{ paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: form.schoolId === s.id ? BRAND + '0d' : 'white' }}
                                     onPress={() => { setForm(p => ({ ...p, schoolId: s.id })); setShowSchoolPicker(false); }}>
-                                    <Text className={`text-sm ${form.schoolId === s.id ? 'text-primary font-semibold' : 'text-foreground'}`}>{s.schoolName}</Text>
-                                    {form.schoolId === s.id && <Ionicons name="checkmark" size={18} color="#4f46e5" />}
+                                    <Text style={{ fontSize: 14, color: form.schoolId === s.id ? BRAND : FG, fontWeight: form.schoolId === s.id ? '600' : '400' }}>{s.schoolName}</Text>
+                                    {form.schoolId === s.id && <Ionicons name="checkmark" size={18} color={BRAND} />}
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>

@@ -4,11 +4,25 @@ import {
     Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { categoriesApi } from '@shared/api/index.js';
+
+/* Design tokens mirrored from apps/web (index.css / tailwind.config.js) */
+const BRAND = '#5b5ff1';
+const BG = '#fbfcff';
+const FG = '#111827';
+const MUTED_FG = '#6b7280';
+const BORDER = '#e5e7eb';
+const CARD_BORDER = '#eef0f3';
+const ROSE = '#f43f5e';
+const SOFT_SM = {
+    shadowColor: '#111a2e', shadowOpacity: 0.06, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 2,
+};
 
 interface Category { id: string; name: string; }
 interface SubCategory { id: string; name: string; categoryId: string; }
@@ -22,8 +36,15 @@ const EMPTY_FORM = {
     subCategoryId: '',
 };
 
+const inputStyle = {
+    backgroundColor: '#f9fafb', borderWidth: 1, borderColor: BORDER, borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 12, color: FG, fontSize: 14,
+};
+const labelStyle = { fontSize: 13, fontWeight: '600' as const, color: FG, marginBottom: 6 };
+
 export default function UploadScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const [form, setForm] = useState(EMPTY_FORM);
     const [categories, setCategories] = useState<Category[]>([]);
     const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
@@ -54,7 +75,6 @@ export default function UploadScreen() {
                 categoriesApi.listCategories(),
                 categoriesApi.listSubCategories(null),
             ]);
-            // Backend returns categoryName / subCategoryName (camelCase via serializeDoc)
             const catItems = (cats.items ?? cats ?? []).map((c: any) => ({
                 id: c.id,
                 name: c.categoryName ?? c.name ?? '',
@@ -74,7 +94,7 @@ export default function UploadScreen() {
     const handlePickFile = async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
-                type: 'application/pdf',
+                type: ['application/pdf', 'application/zip', 'application/x-zip-compressed'],
                 copyToCacheDirectory: true,
             });
             if (result.canceled) return;
@@ -86,7 +106,8 @@ export default function UploadScreen() {
                 mimeType: asset.mimeType ?? 'application/pdf',
                 size: asset.size,
             });
-            setForm(p => ({ ...p, fileName: asset.name.replace(/\.pdf$/i, '') }));
+            // Pre-fill the (optional) display name with the file's base name.
+            setForm(p => ({ ...p, fileName: asset.name.replace(/\.(pdf|zip)$/i, '') }));
         } catch (err: any) {
             Alert.alert('Error', err.message ?? 'Failed to pick file.');
         }
@@ -94,17 +115,22 @@ export default function UploadScreen() {
 
     const handleUpload = async () => {
         if (!pickedFile) {
-            Alert.alert('No File', 'Please select a PDF file first.');
-            return;
-        }
-        if (!form.fileName.trim()) {
-            Alert.alert('Validation', 'File name is required.');
+            Alert.alert('No File', 'Please select a file first.');
             return;
         }
         if (!form.categoryId) {
             Alert.alert('Validation', 'Please select a category.');
             return;
         }
+
+        // File name is optional — fall back to the picked file's name, preserving
+        // its extension so the stored name (and download) keeps .pdf / .zip.
+        const custom = form.fileName.trim();
+        const dot = pickedFile.name.lastIndexOf('.');
+        const ext = dot > 0 ? pickedFile.name.slice(dot) : '';
+        const effectiveFileName = !custom
+            ? pickedFile.name
+            : (ext && !custom.toLowerCase().endsWith(ext.toLowerCase()) ? `${custom}${ext}` : custom);
 
         setUploading(true);
         setUploadProgress(0);
@@ -116,7 +142,7 @@ export default function UploadScreen() {
             const formData = new FormData();
             // All text fields MUST come before the file field so @fastify/multipart
             // can read them before it hits the file boundary in the stream.
-            formData.append('fileName', form.fileName.trim());
+            formData.append('fileName', effectiveFileName);
             formData.append('categoryId', form.categoryId);
             if (form.subCategoryId) formData.append('subCategoryId', form.subCategoryId);
             if (form.description.trim()) formData.append('description', form.description.trim());
@@ -164,126 +190,123 @@ export default function UploadScreen() {
     const selectedCatName = categories.find(c => c.id === form.categoryId)?.name ?? 'Select category...';
     const selectedSubName = filteredSubs.find(s => s.id === form.subCategoryId)?.name ?? 'Select sub-category...';
 
+    const card = [{ backgroundColor: 'white', marginBottom: 12, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: CARD_BORDER }, SOFT_SM];
+
     return (
-        <View className="flex-1 bg-background">
-            <View className="bg-white px-5 pt-14 pb-4 border-b border-border">
-                <View className="flex-row items-center gap-3">
-                    <TouchableOpacity onPress={() => router.back()} className="w-9 h-9 rounded-xl bg-gray-100 items-center justify-center">
+        <View style={{ flex: 1, backgroundColor: BG }}>
+            <View style={{ backgroundColor: 'white', paddingHorizontal: 20, paddingTop: insets.top + 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <TouchableOpacity onPress={() => router.back()} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
                         <Ionicons name="arrow-back" size={20} color="#374151" />
                     </TouchableOpacity>
-                    <Text className="text-2xl font-bold text-foreground">Upload PDF</Text>
+                    <View>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND, textTransform: 'uppercase', letterSpacing: 2 }}>Content Management</Text>
+                        <Text style={{ fontSize: 22, fontWeight: '700', color: FG }}>Upload PDF</Text>
+                    </View>
                 </View>
             </View>
 
-            <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
 
                     {/* File Picker */}
-                    <View className="bg-white mx-0 mb-3 rounded-2xl p-4 border border-border">
-                        <Text className="text-sm font-semibold text-foreground mb-3">PDF File</Text>
+                    <View style={card}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: FG, marginBottom: 12 }}>PDF File</Text>
                         <TouchableOpacity
-                            className="border-2 border-dashed border-primary/30 rounded-xl p-6 items-center bg-primary/5"
+                            style={{ borderWidth: 2, borderStyle: 'dashed', borderColor: BRAND + '4d', borderRadius: 12, padding: 24, alignItems: 'center', backgroundColor: BRAND + '0d' }}
                             onPress={handlePickFile}
                         >
                             {pickedFile ? (
                                 <>
-                                    <View className="w-12 h-12 rounded-xl bg-red-100 items-center justify-center mb-2">
-                                        <Ionicons name="document-text" size={24} color="#ef4444" />
+                                    <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: ROSE + '1a', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                                        <Ionicons name="document-text" size={24} color={ROSE} />
                                     </View>
-                                    <Text className="text-sm font-semibold text-foreground text-center" numberOfLines={2}>{pickedFile.name}</Text>
-                                    {pickedFile.size && (
-                                        <Text className="text-xs text-muted mt-1">{(pickedFile.size / 1024).toFixed(1)} KB</Text>
-                                    )}
-                                    <Text className="text-xs text-primary mt-2 font-medium">Tap to change file</Text>
+                                    <Text style={{ fontSize: 14, fontWeight: '600', color: FG, textAlign: 'center' }} numberOfLines={2}>{pickedFile.name}</Text>
+                                    {pickedFile.size ? (
+                                        <Text style={{ fontSize: 12, color: MUTED_FG, marginTop: 4 }}>{(pickedFile.size / 1024).toFixed(1)} KB</Text>
+                                    ) : null}
+                                    <Text style={{ fontSize: 12, color: BRAND, marginTop: 8, fontWeight: '600' }}>Tap to change file</Text>
                                 </>
                             ) : (
                                 <>
-                                    <View className="w-12 h-12 rounded-xl bg-primary/10 items-center justify-center mb-2">
-                                        <Ionicons name="cloud-upload-outline" size={24} color="#4f46e5" />
+                                    <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: BRAND + '1a', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                                        <Ionicons name="cloud-upload-outline" size={24} color={BRAND} />
                                     </View>
-                                    <Text className="text-sm font-semibold text-foreground">Tap to select PDF</Text>
-                                    <Text className="text-xs text-muted mt-1">PDF files only</Text>
+                                    <Text style={{ fontSize: 14, fontWeight: '600', color: FG }}>Tap to select file</Text>
+                                    <Text style={{ fontSize: 12, color: MUTED_FG, marginTop: 4 }}>PDF or ZIP files</Text>
                                 </>
                             )}
                         </TouchableOpacity>
                     </View>
 
                     {/* Form Fields */}
-                    <View className="bg-white mb-3 rounded-2xl p-4 border border-border">
-                        <Text className="text-sm font-semibold text-foreground mb-3">File Details</Text>
+                    <View style={card}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: FG, marginBottom: 12 }}>File Details</Text>
 
-                        {/* File Name */}
-                        <View className="mb-4">
-                            <Text className="text-sm font-medium text-foreground mb-1.5">File Name *</Text>
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={labelStyle}>File Name (optional)</Text>
                             <TextInput
-                                className="bg-gray-50 border border-border rounded-xl px-4 py-3 text-foreground text-sm"
-                                placeholder="Enter file name"
+                                style={inputStyle}
+                                placeholder="Leave blank to keep original name"
                                 placeholderTextColor="#9ca3af"
                                 value={form.fileName}
                                 onChangeText={v => setForm(p => ({ ...p, fileName: v }))}
                             />
                         </View>
 
-                        {/* Category */}
-                        <View className="mb-4">
-                            <Text className="text-sm font-medium text-foreground mb-1.5">Category *</Text>
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={labelStyle}>Category *</Text>
                             <TouchableOpacity
-                                className="bg-gray-50 border border-border rounded-xl px-4 py-3 flex-row items-center justify-between"
+                                style={{ ...inputStyle, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
                                 onPress={() => setShowCatPicker(true)}
                             >
-                                <Text className={`text-sm ${form.categoryId ? 'text-foreground' : 'text-gray-400'}`}>{selectedCatName}</Text>
-                                <Ionicons name="chevron-down" size={16} color="#6b7280" />
+                                <Text style={{ fontSize: 14, color: form.categoryId ? FG : '#9ca3af' }}>{selectedCatName}</Text>
+                                <Ionicons name="chevron-down" size={16} color={MUTED_FG} />
                             </TouchableOpacity>
                         </View>
 
-                        {/* Sub-Category */}
                         {filteredSubs.length > 0 && (
-                            <View className="mb-4">
-                                <Text className="text-sm font-medium text-foreground mb-1.5">Sub-Category</Text>
+                            <View style={{ marginBottom: 16 }}>
+                                <Text style={labelStyle}>Sub-Category</Text>
                                 <TouchableOpacity
-                                    className="bg-gray-50 border border-border rounded-xl px-4 py-3 flex-row items-center justify-between"
+                                    style={{ ...inputStyle, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
                                     onPress={() => setShowSubPicker(true)}
                                 >
-                                    <Text className={`text-sm ${form.subCategoryId ? 'text-foreground' : 'text-gray-400'}`}>{selectedSubName}</Text>
-                                    <Ionicons name="chevron-down" size={16} color="#6b7280" />
+                                    <Text style={{ fontSize: 14, color: form.subCategoryId ? FG : '#9ca3af' }}>{selectedSubName}</Text>
+                                    <Ionicons name="chevron-down" size={16} color={MUTED_FG} />
                                 </TouchableOpacity>
                             </View>
                         )}
 
-                        {/* Description */}
-                        <View className="mb-4">
-                            <Text className="text-sm font-medium text-foreground mb-1.5">Description</Text>
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={labelStyle}>Description</Text>
                             <TextInput
-                                className="bg-gray-50 border border-border rounded-xl px-4 py-3 text-foreground text-sm"
+                                style={{ ...inputStyle, textAlignVertical: 'top', minHeight: 80 }}
                                 placeholder="Brief description of the PDF..."
                                 placeholderTextColor="#9ca3af"
                                 value={form.description}
                                 onChangeText={v => setForm(p => ({ ...p, description: v }))}
                                 multiline
                                 numberOfLines={3}
-                                textAlignVertical="top"
-                                style={{ minHeight: 80 }}
                             />
                         </View>
 
-                        {/* Tags */}
-                        <View className="mb-4">
-                            <Text className="text-sm font-medium text-foreground mb-1.5">Tags</Text>
+                        <View style={{ marginBottom: 16 }}>
+                            <Text style={labelStyle}>Tags</Text>
                             <TextInput
-                                className="bg-gray-50 border border-border rounded-xl px-4 py-3 text-foreground text-sm"
+                                style={inputStyle}
                                 placeholder="e.g. math, grade-10, science"
                                 placeholderTextColor="#9ca3af"
                                 value={form.tags}
                                 onChangeText={v => setForm(p => ({ ...p, tags: v }))}
                             />
-                            <Text className="text-xs text-muted mt-1">Comma-separated tags</Text>
+                            <Text style={{ fontSize: 12, color: MUTED_FG, marginTop: 4 }}>Comma-separated tags</Text>
                         </View>
 
-                        {/* Email */}
-                        <View className="mb-2">
-                            <Text className="text-sm font-medium text-foreground mb-1.5">Notification Email</Text>
+                        <View>
+                            <Text style={labelStyle}>Notification Email</Text>
                             <TextInput
-                                className="bg-gray-50 border border-border rounded-xl px-4 py-3 text-foreground text-sm"
+                                style={inputStyle}
                                 placeholder="email@example.com"
                                 placeholderTextColor="#9ca3af"
                                 value={form.email}
@@ -296,23 +319,20 @@ export default function UploadScreen() {
 
                     {/* Upload Progress */}
                     {uploading && (
-                        <View className="bg-white mb-3 rounded-2xl p-4 border border-border">
-                            <View className="flex-row items-center gap-3 mb-3">
-                                <ActivityIndicator size="small" color="#4f46e5" />
-                                <Text className="text-sm font-medium text-foreground">Uploading... {uploadProgress}%</Text>
+                        <View style={card}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                                <ActivityIndicator size="small" color={BRAND} />
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: FG }}>Uploading... {uploadProgress}%</Text>
                             </View>
-                            <View className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <View
-                                    className="h-full bg-primary rounded-full"
-                                    style={{ width: `${uploadProgress}%` }}
-                                />
+                            <View style={{ height: 8, backgroundColor: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
+                                <View style={{ height: '100%', backgroundColor: BRAND, borderRadius: 4, width: `${uploadProgress}%` }} />
                             </View>
                         </View>
                     )}
 
                     {/* Upload Button */}
                     <TouchableOpacity
-                        className={`rounded-2xl py-4 items-center flex-row justify-center gap-2 ${uploading || !pickedFile ? 'bg-primary/50' : 'bg-primary'}`}
+                        style={{ borderRadius: 12, height: 50, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, backgroundColor: (uploading || !pickedFile) ? BRAND + '80' : BRAND }}
                         onPress={handleUpload}
                         disabled={uploading || !pickedFile}
                     >
@@ -321,7 +341,7 @@ export default function UploadScreen() {
                         ) : (
                             <>
                                 <Ionicons name="cloud-upload-outline" size={20} color="white" />
-                                <Text className="text-white font-semibold text-base">Upload PDF</Text>
+                                <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Upload PDF</Text>
                             </>
                         )}
                     </TouchableOpacity>
@@ -330,23 +350,26 @@ export default function UploadScreen() {
 
             {/* Category Picker Modal */}
             <Modal visible={showCatPicker} transparent animationType="fade">
-                <TouchableOpacity className="flex-1 bg-black/50 justify-center px-6" activeOpacity={1} onPress={() => setShowCatPicker(false)}>
-                    <View className="bg-white rounded-2xl overflow-hidden" style={{ maxHeight: '60%' }}>
-                        <Text className="text-base font-bold text-foreground px-5 py-4 border-b border-border">Select Category</Text>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 24 }} activeOpacity={1} onPress={() => setShowCatPicker(false)}>
+                    <View style={{ backgroundColor: 'white', borderRadius: 16, overflow: 'hidden', maxHeight: '60%' }}>
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: FG, paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>Select Category</Text>
                         <ScrollView>
-                            {categories.map(cat => (
-                                <TouchableOpacity
-                                    key={cat.id}
-                                    className={`px-5 py-3.5 border-b border-border/50 flex-row items-center justify-between ${form.categoryId === cat.id ? 'bg-primary/5' : ''}`}
-                                    onPress={() => { setForm(p => ({ ...p, categoryId: cat.id })); setShowCatPicker(false); }}
-                                >
-                                    <Text className={`text-sm ${form.categoryId === cat.id ? 'text-primary font-semibold' : 'text-foreground'}`}>{cat.name}</Text>
-                                    {form.categoryId === cat.id && <Ionicons name="checkmark" size={18} color="#4f46e5" />}
-                                </TouchableOpacity>
-                            ))}
+                            {categories.map(cat => {
+                                const active = form.categoryId === cat.id;
+                                return (
+                                    <TouchableOpacity
+                                        key={cat.id}
+                                        style={{ paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: active ? BRAND + '0d' : 'transparent' }}
+                                        onPress={() => { setForm(p => ({ ...p, categoryId: cat.id })); setShowCatPicker(false); }}
+                                    >
+                                        <Text style={{ fontSize: 14, color: active ? BRAND : FG, fontWeight: active ? '600' : '400' }}>{cat.name}</Text>
+                                        {active && <Ionicons name="checkmark" size={18} color={BRAND} />}
+                                    </TouchableOpacity>
+                                );
+                            })}
                             {categories.length === 0 && (
-                                <View className="py-8 items-center">
-                                    <Text className="text-muted text-sm">No categories found</Text>
+                                <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                                    <Text style={{ color: MUTED_FG, fontSize: 14 }}>No categories found</Text>
                                 </View>
                             )}
                         </ScrollView>
@@ -356,27 +379,30 @@ export default function UploadScreen() {
 
             {/* Sub-Category Picker Modal */}
             <Modal visible={showSubPicker} transparent animationType="fade">
-                <TouchableOpacity className="flex-1 bg-black/50 justify-center px-6" activeOpacity={1} onPress={() => setShowSubPicker(false)}>
-                    <View className="bg-white rounded-2xl overflow-hidden" style={{ maxHeight: '60%' }}>
-                        <Text className="text-base font-bold text-foreground px-5 py-4 border-b border-border">Select Sub-Category</Text>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 24 }} activeOpacity={1} onPress={() => setShowSubPicker(false)}>
+                    <View style={{ backgroundColor: 'white', borderRadius: 16, overflow: 'hidden', maxHeight: '60%' }}>
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: FG, paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>Select Sub-Category</Text>
                         <ScrollView>
                             <TouchableOpacity
-                                className={`px-5 py-3.5 border-b border-border/50 flex-row items-center justify-between ${!form.subCategoryId ? 'bg-primary/5' : ''}`}
+                                style={{ paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: !form.subCategoryId ? BRAND + '0d' : 'transparent' }}
                                 onPress={() => { setForm(p => ({ ...p, subCategoryId: '' })); setShowSubPicker(false); }}
                             >
-                                <Text className={`text-sm ${!form.subCategoryId ? 'text-primary font-semibold' : 'text-muted'}`}>None</Text>
-                                {!form.subCategoryId && <Ionicons name="checkmark" size={18} color="#4f46e5" />}
+                                <Text style={{ fontSize: 14, color: !form.subCategoryId ? BRAND : MUTED_FG, fontWeight: !form.subCategoryId ? '600' : '400' }}>None</Text>
+                                {!form.subCategoryId && <Ionicons name="checkmark" size={18} color={BRAND} />}
                             </TouchableOpacity>
-                            {filteredSubs.map(sub => (
-                                <TouchableOpacity
-                                    key={sub.id}
-                                    className={`px-5 py-3.5 border-b border-border/50 flex-row items-center justify-between ${form.subCategoryId === sub.id ? 'bg-primary/5' : ''}`}
-                                    onPress={() => { setForm(p => ({ ...p, subCategoryId: sub.id })); setShowSubPicker(false); }}
-                                >
-                                    <Text className={`text-sm ${form.subCategoryId === sub.id ? 'text-primary font-semibold' : 'text-foreground'}`}>{sub.name}</Text>
-                                    {form.subCategoryId === sub.id && <Ionicons name="checkmark" size={18} color="#4f46e5" />}
-                                </TouchableOpacity>
-                            ))}
+                            {filteredSubs.map(sub => {
+                                const active = form.subCategoryId === sub.id;
+                                return (
+                                    <TouchableOpacity
+                                        key={sub.id}
+                                        style={{ paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: active ? BRAND + '0d' : 'transparent' }}
+                                        onPress={() => { setForm(p => ({ ...p, subCategoryId: sub.id })); setShowSubPicker(false); }}
+                                    >
+                                        <Text style={{ fontSize: 14, color: active ? BRAND : FG, fontWeight: active ? '600' : '400' }}>{sub.name}</Text>
+                                        {active && <Ionicons name="checkmark" size={18} color={BRAND} />}
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </ScrollView>
                     </View>
                 </TouchableOpacity>

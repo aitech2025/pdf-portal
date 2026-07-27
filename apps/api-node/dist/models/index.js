@@ -106,6 +106,7 @@ SubCategorySchema.index({ category_id: 1, sub_category_code: 1 }, { unique: true
 const PdfSchema = new Schema({
     id: { type: String, default: genId, unique: true, index: true },
     file_name: { type: String, required: true },
+    file_type: { type: String, default: "pdf" }, // "pdf" | "zip" — controls download Content-Type & preview handling
     file_path: { type: String, default: "" },
     file_data: Buffer,
     file_size: Number,

@@ -5,21 +5,32 @@ import {
     KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { schoolsApi } from '@shared/api/index.js';
+
+/* Design tokens mirrored from apps/web (index.css / tailwind.config.js) */
+const BRAND = '#5b5ff1';
+const BG = '#fbfcff';
+const FG = '#111827';
+const MUTED_FG = '#6b7280';
+const BORDER = '#e5e7eb';
+const CARD_BORDER = '#eef0f3';
 
 interface School {
     id: string; schoolName: string; schoolId: string;
     location?: string; email?: string; isActive: boolean;
-    phone?: string; address?: string;
+    phone?: string; address?: string; pointOfContactName?: string;
 }
 
 const EMPTY_FORM = { schoolName: '', schoolId: '', email: '', location: '', phone: '', address: '' };
 
 export default function SchoolsScreen() {
+    const insets = useSafeAreaInsets();
     const [schools, setSchools] = useState<School[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
     const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
     const [showForm, setShowForm] = useState(false);
     const [editSchool, setEditSchool] = useState<School | null>(null);
@@ -39,7 +50,7 @@ export default function SchoolsScreen() {
     const openCreate = () => { setEditSchool(null); setForm(EMPTY_FORM); setShowForm(true); };
     const openEdit = (s: School) => {
         setEditSchool(s);
-        setForm({ schoolName: s.schoolName, schoolId: s.schoolId, email: s.email ?? '', location: s.location ?? '', phone: (s as any).phone ?? '', address: (s as any).address ?? '' });
+        setForm({ schoolName: s.schoolName, schoolId: s.schoolId, email: s.email ?? '', location: s.location ?? '', phone: s.phone ?? '', address: s.address ?? '' });
         setShowForm(true);
     };
 
@@ -99,10 +110,13 @@ export default function SchoolsScreen() {
         );
     };
 
-    const filtered = schools.filter(s =>
-        s.schoolName.toLowerCase().includes(search.toLowerCase()) ||
-        s.schoolId.toLowerCase().includes(search.toLowerCase())
-    );
+    const filtered = schools.filter(s => {
+        const matchesSearch =
+            s.schoolName.toLowerCase().includes(search.toLowerCase()) ||
+            s.schoolId.toLowerCase().includes(search.toLowerCase());
+        const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? s.isActive : !s.isActive);
+        return matchesSearch && matchesStatus;
+    });
 
     const FIELDS = [
         { key: 'schoolName', label: 'School Name *', placeholder: 'e.g. Springfield High', keyboard: 'default' },
@@ -113,40 +127,49 @@ export default function SchoolsScreen() {
         { key: 'address', label: 'Address', placeholder: 'Full address', keyboard: 'default' },
     ];
 
+    const STATUS_TABS: { label: string; value: 'all' | 'active' | 'inactive' }[] = [
+        { label: 'All', value: 'all' },
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' },
+    ];
+
     const renderItem = ({ item }: { item: School }) => (
-        <View className="bg-white mx-4 mb-3 rounded-2xl p-4 border border-border">
-            <View className="flex-row items-start justify-between">
-                <View className="flex-1 mr-3">
-                    <View className="flex-row items-center gap-2 mb-1">
-                        <View className="w-8 h-8 rounded-lg bg-primary/10 items-center justify-center">
-                            <Ionicons name="business" size={16} color="#4f46e5" />
+        <View style={{ backgroundColor: 'white', marginHorizontal: 16, marginBottom: 12, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: CARD_BORDER }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <View style={{ flex: 1, marginRight: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: BRAND + '1a', alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="business" size={16} color={BRAND} />
                         </View>
-                        <Text className="text-base font-semibold text-foreground flex-1" numberOfLines={1}>{item.schoolName}</Text>
+                        <Text style={{ fontSize: 15, fontWeight: '600', color: FG, flex: 1 }} numberOfLines={1}>{item.schoolName}</Text>
                     </View>
-                    <Text className="text-xs font-mono text-muted ml-10">{item.schoolId}</Text>
-                    {item.location && <Text className="text-xs text-muted ml-10 mt-0.5" numberOfLines={1}>{item.location}</Text>}
-                    {item.email && <Text className="text-xs text-muted ml-10" numberOfLines={1}>{item.email}</Text>}
+                    <Text style={{ fontSize: 12, fontFamily: 'monospace', color: MUTED_FG, marginLeft: 40 }}>{item.schoolId}</Text>
+                    {item.location ? <Text style={{ fontSize: 12, color: MUTED_FG, marginLeft: 40, marginTop: 2 }} numberOfLines={1}>{item.location}</Text> : null}
+                    {item.email ? <Text style={{ fontSize: 12, color: MUTED_FG, marginLeft: 40 }} numberOfLines={1}>{item.email}</Text> : null}
                 </View>
-                <View className={`px-2 py-0.5 rounded-full ${item.isActive ? 'bg-emerald-100' : 'bg-gray-100'}`}>
-                    <Text className={`text-xs font-medium ${item.isActive ? 'text-emerald-700' : 'text-gray-500'}`}>
+                <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: item.isActive ? '#d1fae5' : '#f3f4f6' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '500', color: item.isActive ? '#047857' : '#6b7280' }}>
                         {item.isActive ? 'Active' : 'Inactive'}
                     </Text>
                 </View>
             </View>
 
-            <View className="flex-row gap-2 mt-3">
-                <TouchableOpacity className="flex-1 py-2 rounded-xl bg-primary/10 items-center" onPress={() => openEdit(item)}>
-                    <Text className="text-xs font-semibold text-primary">Edit</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                <TouchableOpacity style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: BRAND + '14', alignItems: 'center' }} onPress={() => openEdit(item)}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: BRAND }}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                    className={`flex-1 py-2 rounded-xl border items-center ${item.isActive ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}
+                    style={{
+                        flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1, alignItems: 'center',
+                        borderColor: item.isActive ? '#fecaca' : '#a7f3d0', backgroundColor: item.isActive ? '#fef2f2' : '#ecfdf5',
+                    }}
                     onPress={() => handleToggle(item)} disabled={!!actionLoading[item.id]}
                 >
                     {actionLoading[item.id]
                         ? <ActivityIndicator size="small" color={item.isActive ? '#ef4444' : '#059669'} />
-                        : <Text className={`text-xs font-semibold ${item.isActive ? 'text-red-600' : 'text-emerald-600'}`}>{item.isActive ? 'Deactivate' : 'Activate'}</Text>}
+                        : <Text style={{ fontSize: 12, fontWeight: '600', color: item.isActive ? '#dc2626' : '#059669' }}>{item.isActive ? 'Deactivate' : 'Activate'}</Text>}
                 </TouchableOpacity>
-                <TouchableOpacity className="w-9 h-9 rounded-xl bg-red-50 border border-red-200 items-center justify-center" onPress={() => handleDelete(item)}>
+                <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', alignItems: 'center', justifyContent: 'center' }} onPress={() => handleDelete(item)}>
                     <Ionicons name="trash-outline" size={16} color="#ef4444" />
                 </TouchableOpacity>
             </View>
@@ -154,50 +177,62 @@ export default function SchoolsScreen() {
     );
 
     return (
-        <View className="flex-1 bg-background">
-            <View className="bg-white px-5 pt-14 pb-4 border-b border-border">
-                <View className="flex-row items-center justify-between mb-3">
-                    <Text className="text-2xl font-bold text-foreground">Schools</Text>
-                    <TouchableOpacity className="w-9 h-9 rounded-xl bg-primary items-center justify-center" onPress={openCreate}>
+        <View style={{ flex: 1, backgroundColor: BG }}>
+            <View style={{ backgroundColor: 'white', paddingTop: insets.top + 12, paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: CARD_BORDER }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 24, fontWeight: '700', color: FG }}>School Network</Text>
+                    <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: BRAND, alignItems: 'center', justifyContent: 'center' }} onPress={openCreate}>
                         <Ionicons name="add" size={20} color="white" />
                     </TouchableOpacity>
                 </View>
-                <View className="flex-row items-center bg-gray-100 rounded-xl px-3">
+                <Text style={{ fontSize: 13, color: MUTED_FG, marginBottom: 12 }}>Manage participating institutions and their access.</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 12, paddingHorizontal: 12 }}>
                     <Ionicons name="search" size={16} color="#9ca3af" />
-                    <TextInput className="flex-1 py-2.5 px-2 text-foreground text-sm" placeholder="Search by name or ID..." placeholderTextColor="#9ca3af" value={search} onChangeText={setSearch} />
+                    <TextInput style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 8, color: FG, fontSize: 14 }} placeholder="Search by name or ID..." placeholderTextColor="#9ca3af" value={search} onChangeText={setSearch} />
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                    {STATUS_TABS.map(tab => {
+                        const active = statusFilter === tab.value;
+                        return (
+                            <TouchableOpacity key={tab.value} onPress={() => setStatusFilter(tab.value)}
+                                style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, backgroundColor: active ? BRAND : '#f3f4f6' }}>
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: active ? 'white' : MUTED_FG }}>{tab.label}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
             </View>
 
             {loading ? (
-                <View className="flex-1 items-center justify-center"><ActivityIndicator size="large" color="#4f46e5" /></View>
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator size="large" color={BRAND} /></View>
             ) : (
                 <FlatList
                     data={filtered} keyExtractor={item => item.id} renderItem={renderItem}
-                    contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 }}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchSchools(); }} tintColor="#4f46e5" />}
+                    contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 24 }}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchSchools(); }} tintColor={BRAND} />}
                     ListEmptyComponent={
-                        <View className="items-center justify-center py-20">
+                        <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80 }}>
                             <Ionicons name="business-outline" size={48} color="#d1d5db" />
-                            <Text className="text-muted mt-3">No schools found</Text>
+                            <Text style={{ color: MUTED_FG, marginTop: 12 }}>No schools found</Text>
                         </View>
                     }
                 />
             )}
 
             <Modal visible={showForm} transparent animationType="slide">
-                <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                    <View className="flex-1 bg-black/50 justify-end">
-                        <View className="bg-white rounded-t-3xl px-6 pt-6 pb-8" style={{ maxHeight: '90%' }}>
-                            <View className="flex-row items-center justify-between mb-5">
-                                <Text className="text-lg font-bold text-foreground">{editSchool ? 'Edit School' : 'Add School'}</Text>
-                                <TouchableOpacity onPress={() => setShowForm(false)}><Ionicons name="close" size={24} color="#6b7280" /></TouchableOpacity>
+                <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                        <View style={{ backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24, maxHeight: '90%' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                                <Text style={{ fontSize: 18, fontWeight: '700', color: FG }}>{editSchool ? 'Edit School' : 'Register School'}</Text>
+                                <TouchableOpacity onPress={() => setShowForm(false)}><Ionicons name="close" size={24} color={MUTED_FG} /></TouchableOpacity>
                             </View>
                             <ScrollView showsVerticalScrollIndicator={false}>
                                 {FIELDS.map(f => (
-                                    <View key={f.key} className="mb-4">
-                                        <Text className="text-sm font-medium text-foreground mb-1.5">{f.label}</Text>
+                                    <View key={f.key} style={{ marginBottom: 16 }}>
+                                        <Text style={{ fontSize: 13, fontWeight: '500', color: FG, marginBottom: 6 }}>{f.label}</Text>
                                         <TextInput
-                                            className={`border border-border rounded-xl px-4 py-3 text-foreground text-sm ${f.disabled ? 'bg-gray-100' : 'bg-gray-50'}`}
+                                            style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: FG, fontSize: 14, backgroundColor: f.disabled ? '#f3f4f6' : '#f9fafb' }}
                                             placeholder={f.placeholder} placeholderTextColor="#9ca3af"
                                             value={form[f.key as keyof typeof form]}
                                             onChangeText={v => setForm(p => ({ ...p, [f.key]: v }))}
@@ -208,10 +243,10 @@ export default function SchoolsScreen() {
                                     </View>
                                 ))}
                                 <TouchableOpacity
-                                    className={`mt-2 rounded-xl py-4 items-center ${submitting ? 'bg-primary/60' : 'bg-primary'}`}
+                                    style={{ marginTop: 8, borderRadius: 12, paddingVertical: 15, alignItems: 'center', backgroundColor: submitting ? BRAND + '99' : BRAND }}
                                     onPress={handleSubmit} disabled={submitting}
                                 >
-                                    {submitting ? <ActivityIndicator color="white" /> : <Text className="text-white font-semibold text-base">{editSchool ? 'Save Changes' : 'Create School'}</Text>}
+                                    {submitting ? <ActivityIndicator color="white" /> : <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>{editSchool ? 'Save Changes' : 'Create School'}</Text>}
                                 </TouchableOpacity>
                             </ScrollView>
                         </View>

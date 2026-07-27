@@ -166,7 +166,7 @@ export const registerPdfRoutes = async (app) => {
             });
         }
         const wm = watermarkHeaders();
-        reply.header("Content-Type", "application/pdf");
+        reply.header("Content-Type", pdf.file_type === "zip" ? "application/zip" : "application/pdf");
         reply.header("Content-Disposition", `${disposition}; filename="${pdf.file_name}"`);
         reply.header("Cache-Control", "private, no-store");
         for (const [k, v] of Object.entries(wm))
@@ -490,8 +490,10 @@ export const registerPdfRoutes = async (app) => {
             : requestedIsActive === "true" || requestedIsActive === "1";
         const status = requestedStatus ?? (isPlatformRole(user.role) ? "approved" : "pending");
         const checksum = createHash("sha256").update(data).digest("hex");
+        const fileType = originalFilename.toLowerCase().endsWith(".zip") ? "zip" : "pdf";
         const doc = await Pdf.create({
             file_name: requestedFileName,
+            file_type: fileType,
             original_file_name: originalFilename,
             file_path: "",
             file_data: data,
@@ -543,7 +545,9 @@ export const registerPdfRoutes = async (app) => {
                     for (const admin of admins) {
                         createAndSendNotification({
                             recipient: { id: admin.id, email: admin.email, mobile_number: admin.mobile_number, name: admin.name },
-                            channels: ["email", "whatsapp", "in_app"],
+                            // Content updates notify via WhatsApp + in-app only. Email is reserved for
+                            // account events (new school/user creation) — see users.ts / schools.ts.
+                            channels: ["whatsapp", "in_app"],
                             type: "new_content",
                             subject: `New content available: ${pdfTitle}`,
                             message: `A new PDF "${pdfTitle}" has been added to the ${categoryName} program. Log in to your i-iCON Academy portal to access it.`,

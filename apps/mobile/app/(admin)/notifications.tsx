@@ -1,11 +1,26 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
     View, Text, FlatList, TouchableOpacity, RefreshControl,
-    ActivityIndicator, Alert,
+    ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { notificationsApi } from '@shared/api/index.js';
 import { timeAgo } from '@shared/utils/format.js';
+
+/* Design tokens mirrored from apps/web */
+const BRAND = '#5b5ff1';
+const BG = '#fbfcff';
+const FG = '#111827';
+const MUTED_FG = '#6b7280';
+const BORDER = '#e8ebf0';
+const RADIUS_LG = 16;
+const SOFT_SM = {
+    shadowColor: '#111a2e', shadowOpacity: 0.06, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 2,
+};
+
+type Filter = 'all' | 'unread' | 'read';
 
 interface Notification {
     id: string;
@@ -16,39 +31,42 @@ interface Notification {
     created: string;
 }
 
-const TYPE_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
-    pdf_approval: { icon: 'document-text', color: '#059669', bg: '#d1fae5' },
-    pdf_rejection: { icon: 'document-text', color: '#dc2626', bg: '#fee2e2' },
-    user_request: { icon: 'person-add', color: '#4f46e5', bg: '#ede9fe' },
-    onboarding: { icon: 'business', color: '#2563eb', bg: '#dbeafe' },
-    password_reset: { icon: 'key', color: '#d97706', bg: '#fef3c7' },
-    default: { icon: 'notifications', color: '#6b7280', bg: '#f3f4f6' },
+/* mirrors web getNotificationConfig */
+const TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+    onboarding_submission: { icon: 'information-circle', color: '#3b82f6', bg: '#dbeafe', label: 'Info' },
+    onboarding_approval: { icon: 'checkmark-circle', color: '#059669', bg: '#d1fae5', label: 'Success' },
+    onboarding_rejection: { icon: 'close-circle', color: '#f43f5e', bg: '#ffe4e6', label: 'Error' },
+    user_request_submission: { icon: 'information-circle', color: '#3b82f6', bg: '#dbeafe', label: 'Info' },
+    user_request_approval: { icon: 'checkmark-circle', color: '#059669', bg: '#d1fae5', label: 'Success' },
+    user_request_rejection: { icon: 'close-circle', color: '#f43f5e', bg: '#ffe4e6', label: 'Error' },
+    password_reset: { icon: 'shield-half', color: '#f59e0b', bg: '#fef3c7', label: 'Warning' },
+    school_deactivation: { icon: 'warning', color: '#f43f5e', bg: '#ffe4e6', label: 'Error' },
+    default: { icon: 'notifications', color: BRAND, bg: '#ede9fe', label: 'Notification' },
 };
 
-function getTypeStyle(type: string) {
-    const key = Object.keys(TYPE_ICONS).find(k => type?.includes(k)) ?? 'default';
-    return TYPE_ICONS[key] ?? TYPE_ICONS.default;
+function getTypeConfig(type: string) {
+    const key = Object.keys(TYPE_CONFIG).find(k => k !== 'default' && type?.includes(k)) ?? 'default';
+    return TYPE_CONFIG[key];
 }
 
 export default function NotificationsScreen() {
+    const insets = useSafeAreaInsets();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [markingAll, setMarkingAll] = useState(false);
+    const [filter, setFilter] = useState<Filter>('all');
+    const [search, setSearch] = useState('');
 
     const fetchNotifications = useCallback(async () => {
         try {
             const res = await notificationsApi.listNotifications({ per_page: 100 });
             setNotifications(res.items ?? []);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); setRefreshing(false); }
     }, []);
 
-    useEffect(() => { fetchNotifications(); }, []);
+    useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
     const handleMarkRead = async (n: Notification) => {
         if (n.read) return;
@@ -84,40 +102,45 @@ export default function NotificationsScreen() {
 
     const unreadCount = notifications.filter(n => !n.read).length;
 
+    const filtered = useMemo(() => {
+        const term = search.trim().toLowerCase();
+        return notifications
+            .filter(n => filter === 'unread' ? !n.read : filter === 'read' ? n.read : true)
+            .filter(n => !term || [n.subject, n.message, n.type].some(v => v && String(v).toLowerCase().includes(term)));
+    }, [notifications, filter, search]);
+
     const renderItem = ({ item }: { item: Notification }) => {
-        const style = getTypeStyle(item.type);
+        const cfg = getTypeConfig(item.type);
         return (
             <TouchableOpacity
-                className={`mx-4 mb-2 rounded-2xl p-4 border ${item.read ? 'bg-white border-border/50' : 'bg-primary/5 border-primary/20'}`}
+                style={[{
+                    marginBottom: 10, borderRadius: RADIUS_LG, padding: 14, borderWidth: 1,
+                    backgroundColor: item.read ? 'white' : '#f5f6ff',
+                    borderColor: item.read ? '#eef0f3' : '#d6d9fb',
+                    overflow: 'hidden',
+                }, item.read ? null : SOFT_SM]}
                 onPress={() => handleMarkRead(item)}
                 activeOpacity={0.7}
             >
-                <View className="flex-row items-start gap-3">
-                    <View
-                        className="w-10 h-10 rounded-xl items-center justify-center mt-0.5 shrink-0"
-                        style={{ backgroundColor: style.bg }}
-                    >
-                        <Ionicons name={style.icon as any} size={18} color={style.color} />
+                {!item.read && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: BRAND }} />}
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+                    <View style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: cfg.bg, alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name={cfg.icon as any} size={18} color={cfg.color} />
                     </View>
-                    <View className="flex-1 min-w-0">
-                        <View className="flex-row items-center justify-between gap-2">
-                            <Text
-                                className={`flex-1 text-sm font-semibold ${item.read ? 'text-foreground' : 'text-primary'}`}
-                                numberOfLines={1}
-                            >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                            <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: item.read ? FG : BRAND }} numberOfLines={1}>
                                 {item.subject}
                             </Text>
-                            {!item.read && (
-                                <View className="w-2 h-2 rounded-full bg-primary shrink-0" />
-                            )}
+                            <View style={{ backgroundColor: cfg.bg, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                <Text style={{ fontSize: 9, fontWeight: '700', color: cfg.color, textTransform: 'uppercase' }}>{cfg.label}</Text>
+                            </View>
                         </View>
-                        <Text className="text-xs text-muted mt-0.5" numberOfLines={2}>
-                            {item.message}
-                        </Text>
-                        <Text className="text-xs text-muted/60 mt-1.5">{timeAgo(item.created)}</Text>
+                        <Text style={{ fontSize: 12, color: MUTED_FG }} numberOfLines={2}>{item.message}</Text>
+                        <Text style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>{timeAgo(item.created)}</Text>
                     </View>
                     <TouchableOpacity
-                        className="p-1.5 rounded-lg"
+                        style={{ padding: 6 }}
                         onPress={() => handleDelete(item)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
@@ -129,55 +152,102 @@ export default function NotificationsScreen() {
     };
 
     return (
-        <View className="flex-1 bg-background">
-            <View className="bg-white px-5 pt-14 pb-4 border-b border-border">
-                <View className="flex-row items-center justify-between">
-                    <View>
-                        <Text className="text-2xl font-bold text-foreground">Notifications</Text>
-                        {unreadCount > 0 && (
-                            <Text className="text-xs text-muted mt-0.5">{unreadCount} unread</Text>
-                        )}
-                    </View>
-                    {unreadCount > 0 && (
-                        <TouchableOpacity
-                            className="flex-row items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10"
-                            onPress={handleMarkAllRead}
-                            disabled={markingAll}
-                        >
-                            {markingAll
-                                ? <ActivityIndicator size="small" color="#4f46e5" />
-                                : <Ionicons name="checkmark-done" size={16} color="#4f46e5" />
-                            }
-                            <Text className="text-primary text-xs font-semibold">Mark all read</Text>
+        <View style={{ flex: 1, backgroundColor: BG }}>
+            {/* Header */}
+            <View style={{
+                backgroundColor: 'white', paddingHorizontal: 20, paddingTop: insets.top + 12,
+                paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: BORDER,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+                <View>
+                    <Text style={{ fontSize: 24, fontWeight: '700', color: FG }}>Notifications</Text>
+                    {unreadCount > 0 && <Text style={{ fontSize: 12, color: MUTED_FG, marginTop: 2 }}>{unreadCount} unread</Text>}
+                </View>
+                {unreadCount > 0 && (
+                    <TouchableOpacity
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: '#ede9fe' }}
+                        onPress={handleMarkAllRead}
+                        disabled={markingAll}
+                    >
+                        {markingAll
+                            ? <ActivityIndicator size="small" color={BRAND} />
+                            : <Ionicons name="checkmark-done" size={16} color={BRAND} />}
+                        <Text style={{ color: BRAND, fontSize: 12, fontWeight: '600' }}>Mark all read</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+
+            {/* Search */}
+            <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+                <View style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    backgroundColor: 'white', borderWidth: 1, borderColor: BORDER,
+                    borderRadius: 12, paddingHorizontal: 12, height: 44,
+                }}>
+                    <Ionicons name="search" size={18} color={MUTED_FG} />
+                    <TextInput
+                        placeholder="Search notifications..."
+                        placeholderTextColor="#9ca3af"
+                        value={search}
+                        onChangeText={setSearch}
+                        style={{ flex: 1, fontSize: 14, color: FG }}
+                    />
+                    {search ? (
+                        <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
+                            <Ionicons name="close-circle" size={18} color="#9ca3af" />
                         </TouchableOpacity>
-                    )}
+                    ) : null}
                 </View>
             </View>
 
+            {/* Filter tabs */}
+            <View style={{
+                marginHorizontal: 16, marginTop: 12,
+                flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 12, padding: 4,
+            }}>
+                {([
+                    { key: 'all', label: 'All' },
+                    { key: 'unread', label: `Unread${unreadCount ? ` (${unreadCount})` : ''}` },
+                    { key: 'read', label: 'Read' },
+                ] as { key: Filter; label: string }[]).map(t => {
+                    const active = filter === t.key;
+                    return (
+                        <TouchableOpacity
+                            key={t.key}
+                            style={[{ flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center', backgroundColor: active ? 'white' : 'transparent' }, active ? SOFT_SM : null]}
+                            onPress={() => setFilter(t.key)}
+                        >
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: active ? FG : MUTED_FG }}>{t.label}</Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+
             {loading ? (
-                <View className="flex-1 items-center justify-center">
-                    <ActivityIndicator size="large" color="#4f46e5" />
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator size="large" color={BRAND} />
                 </View>
             ) : (
                 <FlatList
-                    data={notifications}
+                    data={filtered}
                     keyExtractor={item => item.id}
                     renderItem={renderItem}
-                    contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 }}
+                    contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 24 }}
                     refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={() => { setRefreshing(true); fetchNotifications(); }}
-                            tintColor="#4f46e5"
-                        />
+                        <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotifications(); }} tintColor={BRAND} />
                     }
                     ListEmptyComponent={
-                        <View className="items-center justify-center py-20">
-                            <Ionicons name="notifications-off-outline" size={48} color="#d1d5db" />
-                            <Text className="text-foreground font-medium mt-3">No notifications</Text>
-                            <Text className="text-muted text-sm mt-1">You're all caught up!</Text>
+                        <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80 }}>
+                            <View style={{ width: 64, height: 64, borderRadius: 999, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                                <Ionicons name="notifications-off-outline" size={30} color="#9ca3af" />
+                            </View>
+                            <Text style={{ fontSize: 16, fontWeight: '600', color: FG }}>No notifications found</Text>
+                            <Text style={{ color: MUTED_FG, fontSize: 13, marginTop: 4 }}>
+                                {search ? 'Try adjusting your search.' : "You're all caught up!"}
+                            </Text>
                         </View>
                     }
+                    showsVerticalScrollIndicator={false}
                 />
             )}
         </View>

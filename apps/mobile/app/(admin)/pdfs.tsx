@@ -4,11 +4,24 @@ import {
     RefreshControl, ActivityIndicator, Linking, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { pdfsApi } from '@shared/api/index.js';
 import { formatBytes } from '@shared/utils/format.js';
 import Constants from 'expo-constants';
 
-const API_URL = Constants.expoConfig?.extra?.apiUrl ?? 'http://localhost:8001';
+/* Design tokens mirrored from apps/web (index.css / tailwind.config.js) */
+const API_URL = Constants.expoConfig?.extra?.apiUrl ?? 'http://localhost:8000';
+const BRAND = '#5b5ff1';
+const BG = '#fbfcff';
+const FG = '#111827';
+const MUTED_FG = '#6b7280';
+const BORDER = '#e5e7eb';
+const CARD_BORDER = '#eef0f3';
+const ROSE = '#f43f5e';
+const SOFT_SM = {
+    shadowColor: '#111a2e', shadowOpacity: 0.06, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 2,
+};
 
 interface PDF {
     id: string;
@@ -29,16 +42,17 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; icon: string }> 
 };
 
 function StatusBadge({ status }: { status: string }) {
-    const s = STATUS_STYLES[status] ?? { bg: '#f3f4f6', text: '#6b7280', icon: 'ellipse-outline' };
+    const s = STATUS_STYLES[status] ?? { bg: '#f3f4f6', text: MUTED_FG, icon: 'ellipse-outline' };
     return (
-        <View className="flex-row items-center gap-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: s.bg }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: s.bg }}>
             <Ionicons name={s.icon as any} size={10} color={s.text} />
-            <Text className="text-xs font-semibold capitalize" style={{ color: s.text }}>{status}</Text>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: s.text, textTransform: 'capitalize' }}>{status}</Text>
         </View>
     );
 }
 
 export default function PDFsScreen() {
+    const insets = useSafeAreaInsets();
     const [pdfs, setPdfs] = useState<PDF[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -97,30 +111,30 @@ export default function PDFsScreen() {
     const pendingCount = pdfs.filter(p => p.status === 'pending').length;
 
     const renderItem = ({ item }: { item: PDF }) => (
-        <View className="bg-white mx-4 mb-3 rounded-2xl p-4 border border-border">
-            <View className="flex-row items-start gap-3">
-                <View className="w-10 h-10 rounded-xl bg-rose-100 items-center justify-center mt-0.5 shrink-0">
-                    <Ionicons name="document-text" size={20} color="#e11d48" />
+        <View style={[{ backgroundColor: 'white', marginHorizontal: 16, marginBottom: 12, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: CARD_BORDER }, SOFT_SM]}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: ROSE + '1a', alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
+                    <Ionicons name="document-text" size={20} color={ROSE} />
                 </View>
-                <View className="flex-1 min-w-0">
-                    <Text className="font-semibold text-foreground" numberOfLines={2}>{item.fileName}</Text>
-                    <View className="flex-row flex-wrap items-center gap-2 mt-1.5">
+                <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: FG }} numberOfLines={2}>{item.fileName}</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 6 }}>
                         <StatusBadge status={item.status} />
-                        {item.fileSize ? <Text className="text-xs text-muted">{formatBytes(item.fileSize)}</Text> : null}
-                        <Text className="text-xs text-muted">v{item.currentVersion ?? 1}</Text>
+                        {item.fileSize ? <Text style={{ fontSize: 12, color: MUTED_FG }}>{formatBytes(item.fileSize)}</Text> : null}
+                        <Text style={{ fontSize: 12, color: MUTED_FG }}>v{item.currentVersion ?? 1}</Text>
                     </View>
                 </View>
-                <View className="flex-row gap-1.5">
+                <View style={{ flexDirection: 'row', gap: 6 }}>
                     {item.status === 'pending' && !actionLoading[item.id] && (
                         <>
                             <TouchableOpacity
-                                className="w-9 h-9 rounded-xl bg-emerald-100 items-center justify-center"
+                                style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: '#d1fae5', alignItems: 'center', justifyContent: 'center' }}
                                 onPress={() => handleApprove(item)}
                             >
                                 <Ionicons name="checkmark" size={18} color="#059669" />
                             </TouchableOpacity>
                             <TouchableOpacity
-                                className="w-9 h-9 rounded-xl bg-red-100 items-center justify-center"
+                                style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center' }}
                                 onPress={() => handleReject(item)}
                             >
                                 <Ionicons name="close" size={18} color="#dc2626" />
@@ -128,13 +142,15 @@ export default function PDFsScreen() {
                         </>
                     )}
                     {actionLoading[item.id] && (
-                        <ActivityIndicator size="small" color="#4f46e5" />
+                        <View style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+                            <ActivityIndicator size="small" color={BRAND} />
+                        </View>
                     )}
                     <TouchableOpacity
-                        className="w-9 h-9 rounded-xl bg-primary/10 items-center justify-center"
+                        style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: BRAND + '1a', alignItems: 'center', justifyContent: 'center' }}
                         onPress={() => Linking.openURL(`${API_URL}/api/pdfs/${item.id}/download`)}
                     >
-                        <Ionicons name="download-outline" size={18} color="#4f46e5" />
+                        <Ionicons name="download-outline" size={18} color={BRAND} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -142,21 +158,24 @@ export default function PDFsScreen() {
     );
 
     return (
-        <View className="flex-1 bg-background">
-            <View className="bg-white px-5 pt-14 pb-4 border-b border-border">
-                <View className="flex-row items-center justify-between mb-3">
-                    <Text className="text-2xl font-bold text-foreground">Content Library</Text>
+        <View style={{ flex: 1, backgroundColor: BG }}>
+            <View style={{ backgroundColor: 'white', paddingHorizontal: 20, paddingTop: insets.top + 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <View>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 4 }}>Content Management</Text>
+                        <Text style={{ fontSize: 24, fontWeight: '700', color: FG }}>Content Library</Text>
+                    </View>
                     {pendingCount > 0 && (
-                        <View className="flex-row items-center gap-1.5 bg-amber-100 px-3 py-1.5 rounded-xl">
-                            <View className="w-2 h-2 rounded-full bg-amber-500" />
-                            <Text className="text-xs text-amber-700 font-semibold">{pendingCount} pending</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fef3c7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#f59e0b' }} />
+                            <Text style={{ fontSize: 12, color: '#b45309', fontWeight: '600' }}>{pendingCount} pending</Text>
                         </View>
                     )}
                 </View>
-                <View className="flex-row items-center bg-gray-100 rounded-xl px-3 mb-3">
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 12, paddingHorizontal: 12, marginBottom: 12 }}>
                     <Ionicons name="search" size={16} color="#9ca3af" />
                     <TextInput
-                        className="flex-1 py-2.5 px-2 text-foreground text-sm"
+                        style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 8, color: FG, fontSize: 14 }}
                         placeholder="Search PDFs..."
                         placeholderTextColor="#9ca3af"
                         value={search}
@@ -164,34 +183,37 @@ export default function PDFsScreen() {
                     />
                 </View>
                 {/* Filter tabs */}
-                <View className="flex-row bg-gray-100 rounded-xl p-1">
-                    {(['all', 'pending', 'approved', 'rejected'] as FilterStatus[]).map(f => (
-                        <TouchableOpacity
-                            key={f}
-                            className={`flex-1 py-1.5 rounded-lg items-center ${filterStatus === f ? 'bg-white shadow-sm' : ''}`}
-                            onPress={() => setFilterStatus(f)}
-                        >
-                            <Text className={`text-xs font-semibold capitalize ${filterStatus === f ? 'text-foreground' : 'text-muted'}`}>{f}</Text>
-                        </TouchableOpacity>
-                    ))}
+                <View style={{ flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 12, padding: 4 }}>
+                    {(['all', 'pending', 'approved', 'rejected'] as FilterStatus[]).map(f => {
+                        const active = filterStatus === f;
+                        return (
+                            <TouchableOpacity
+                                key={f}
+                                style={[{ flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center' }, active && { backgroundColor: 'white', ...SOFT_SM }]}
+                                onPress={() => setFilterStatus(f)}
+                            >
+                                <Text style={{ fontSize: 12, fontWeight: '600', textTransform: 'capitalize', color: active ? FG : MUTED_FG }}>{f}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
             </View>
 
             {loading ? (
-                <View className="flex-1 items-center justify-center">
-                    <ActivityIndicator size="large" color="#4f46e5" />
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator size="large" color={BRAND} />
                 </View>
             ) : (
                 <FlatList
                     data={filtered}
                     keyExtractor={item => item.id}
                     renderItem={renderItem}
-                    contentContainerStyle={{ paddingTop: 12, paddingBottom: 24 }}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchPdfs(); }} tintColor="#4f46e5" />}
+                    contentContainerStyle={{ paddingTop: 16, paddingBottom: insets.bottom + 24 }}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchPdfs(); }} tintColor={BRAND} />}
                     ListEmptyComponent={
-                        <View className="items-center justify-center py-20">
+                        <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 80 }}>
                             <Ionicons name="document-text-outline" size={48} color="#d1d5db" />
-                            <Text className="text-foreground font-medium mt-3">No PDFs found</Text>
+                            <Text style={{ color: FG, fontWeight: '600', marginTop: 12 }}>No PDFs found</Text>
                         </View>
                     }
                 />

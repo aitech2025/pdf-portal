@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Web**: React 18.3.1, Vite 7.3.1, Tailwind CSS 3.4.17, Radix UI components
 - **Auth**: JWT (Fastify-JWT 10.0.0), bcryptjs password hashing
 - **Notifications**: Email (Nodemailer 8.0.7), WhatsApp, in-app
-- **Mobile**: Capacitor 6.2.1 (iOS/Android)
+- **Mobile**: Expo / React Native (expo-router file-based routing, NativeWind), standalone native app under `apps/mobile` — not a web wrapper
 
 ### Key Features
 - Multi-tenant school onboarding with program/class/subject hierarchies
@@ -50,7 +50,7 @@ pdf-portal/
 │   │   ├── package.json
 │   │   ├── vite.config.js
 │   │   └── Dockerfile
-│   └── mobile/            # Capacitor mobile wrapper
+│   └── mobile/            # Expo / React Native app (expo-router)
 ├── packages/shared/       # Shared TypeScript types
 └── package.json          # Root monorepo config
 `
@@ -71,10 +71,10 @@ pdf-portal/
 - **Lint**: pnpm -F web lint
 - **Lint warnings**: pnpm -F web lint:warn
 
-### Mobile (with Capacitor)
-- **Add platform**: pnpm -F web mobile:add:android or mobile:add:ios
-- **Run**: pnpm -F web mobile:run:android or mobile:run:ios
-- **Dev with live reload**: pnpm -F web mobile:dev:android
+### Mobile (Expo / React Native, apps/mobile)
+- **Start dev server**: pnpm -F mobile start (Expo)
+- **Run**: pnpm -F mobile android or pnpm -F mobile ios
+- Screens live in apps/mobile/app using expo-router groups: (auth), (admin), (school). Styling via inline styles + NativeWind; icons via @expo/vector-icons.
 
 ### Monorepo
 - **Install all**: pnpm install
@@ -320,6 +320,6 @@ All models: unique string id, created/updated timestamps, no __v version key.
 
 6. **Vite Dev**: Port 3000, proxies /api to http://localhost:8000. Update if backend elsewhere.
 
-7. **Capacitor**: Mobile wrapper around web SPA. Native features need plugin calls in React.
+7. **Mobile (Expo)**: Standalone React Native app in apps/mobile — NOT a web wrapper. Screens are hand-written RN mirrors of the web pages (expo-router). It shares the backend API and packages/shared types, but has its own UI. Keep it in visual/functional parity with apps/web when web screens change.
 
 8. **CSV Export**: Custom csvEscape() handles quotes + newlines. Max 50k rows per call.

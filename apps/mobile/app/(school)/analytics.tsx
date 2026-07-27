@@ -1,109 +1,237 @@
-import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import {
+    View, Text, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../../src/lib/apiClient';
 
-interface SchoolStats {
-    totalUsers: number; totalDownloads: number; totalPdfs?: number;
-    activeUsers?: number; pendingRequests?: number;
-    downloadsByMonth?: { month: string; count: number }[];
+/* Design tokens mirrored from apps/web */
+const BRAND = '#5b5ff1';
+const BG = '#fbfcff';
+const FG = '#111827';
+const MUTED_FG = '#6b7280';
+const CARD_BORDER = '#eef0f3';
+const BORDER = '#e8ebf0';
+const SUCCESS = '#22c55e';
+const ACCENT = '#8b5cf6';
+const ROSE = '#f43f5e';
+const RADIUS_LG = 16;
+const SOFT_SM = {
+    shadowColor: '#111a2e', shadowOpacity: 0.06, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 2,
+};
+const CHART_COLORS = [BRAND, ACCENT, SUCCESS, '#f59e0b', ROSE, '#0ea5e9'];
+
+interface PdfRow {
+    id?: string; fileName?: string; file_name?: string;
+    className?: string; class_name?: string;
+    subjectName?: string; subject_name?: string;
+    fileSize?: number; file_size?: number;
+    lastViewed?: string; last_viewed?: string;
+}
+interface SchoolAnalytics {
+    available_pdfs?: number; new_pdfs_last_7d?: number;
+    downloads_last_30d?: number; my_downloads?: number;
+    recent_uploads?: PdfRow[]; recently_viewed?: PdfRow[];
+    downloads_by_category?: { category_name?: string; count: number }[];
 }
 
-const STAT_TILES = [
-    { key: 'totalUsers', label: 'Total Users', icon: 'people', color: '#7c3aed', bg: '#ede9fe' },
-    { key: 'activeUsers', label: 'Active Users', icon: 'person-circle', color: '#2563eb', bg: '#dbeafe' },
-    { key: 'totalDownloads', label: 'Downloads', icon: 'download', color: '#059669', bg: '#d1fae5' },
-    { key: 'pendingRequests', label: 'Pending Requests', icon: 'time', color: '#d97706', bg: '#fef3c7' },
-];
+function formatBytes(bytes?: number) {
+    if (!bytes) return '—';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+const Card = ({ children, style }: { children: React.ReactNode; style?: any }) => (
+    <View style={[{
+        backgroundColor: 'white', borderRadius: RADIUS_LG,
+        borderWidth: 1, borderColor: CARD_BORDER, padding: 16,
+    }, SOFT_SM, style]}>
+        {children}
+    </View>
+);
 
 export default function SchoolAnalyticsScreen() {
-    const [stats, setStats] = useState<SchoolStats | null>(null);
+    const insets = useSafeAreaInsets();
+    const [data, setData] = useState<SchoolAnalytics | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    const fetchStats = async () => {
+    const fetchStats = useCallback(async () => {
         try {
-            const res = await apiFetch('/api/analytics/school');
-            setStats(res);
+            const res: any = await apiFetch('/api/analytics/school');
+            setData(res);
         } catch (e) { console.error(e); }
         finally { setLoading(false); setRefreshing(false); }
-    };
+    }, []);
 
-    useEffect(() => { fetchStats(); }, []);
+    useEffect(() => { fetchStats(); }, [fetchStats]);
 
-    if (loading) return (
-        <View className="flex-1 items-center justify-center bg-background">
-            <ActivityIndicator size="large" color="#4f46e5" />
-        </View>
-    );
+    if (loading) {
+        return (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: BG }}>
+                <ActivityIndicator size="large" color={BRAND} />
+            </View>
+        );
+    }
+
+    const recentUploads = data?.recent_uploads ?? [];
+    const recentlyViewed = data?.recently_viewed ?? [];
+    const categoryData = (data?.downloads_by_category ?? []).filter(d => d.count > 0);
+    const maxDl = Math.max(...categoryData.map(d => d.count), 1);
+
+    const metrics = [
+        { title: 'PDFs Available', value: data?.available_pdfs ?? 0, sub: data?.new_pdfs_last_7d ? `+${data.new_pdfs_last_7d} this week` : null, icon: 'document-text-outline', color: BRAND },
+        { title: 'Downloads (30 days)', value: data?.downloads_last_30d ?? 0, sub: null, icon: 'download-outline', color: SUCCESS },
+        { title: 'My Downloads', value: data?.my_downloads ?? 0, sub: null, icon: 'people-outline', color: ACCENT },
+    ] as const;
 
     return (
         <ScrollView
-            className="flex-1 bg-background"
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchStats(); }} tintColor="#4f46e5" />}
+            style={{ flex: 1, backgroundColor: BG }}
+            contentContainerStyle={{ paddingTop: insets.top + 16, paddingHorizontal: 16, paddingBottom: insets.bottom + 24, gap: 20 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchStats(); }} tintColor={BRAND} />}
+            showsVerticalScrollIndicator={false}
         >
-            <View className="bg-white px-5 pt-14 pb-5 border-b border-border">
-                <Text className="text-2xl font-bold text-foreground">Analytics</Text>
-                <Text className="text-sm text-muted mt-0.5">Your school's activity overview</Text>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 6 }}>
+                        School portal
+                    </Text>
+                    <Text style={{ fontSize: 26, fontWeight: '700', color: FG }}>Analytics</Text>
+                    <Text style={{ fontSize: 14, color: MUTED_FG, marginTop: 4, lineHeight: 20 }}>
+                        Resource utilization and engagement insights for your institution.
+                    </Text>
+                </View>
+                <TouchableOpacity
+                    onPress={() => { setRefreshing(true); fetchStats(); }}
+                    style={{ width: 40, height: 40, borderRadius: 12, borderWidth: 1, borderColor: BORDER, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center' }}
+                >
+                    <Ionicons name="refresh" size={18} color={FG} />
+                </TouchableOpacity>
             </View>
 
-            <View className="p-4 space-y-4">
-                {/* Stat tiles */}
-                <View className="flex-row flex-wrap gap-3">
-                    {STAT_TILES.map(tile => (
-                        <View key={tile.key} className="flex-1 min-w-[44%] rounded-2xl p-4" style={{ backgroundColor: tile.bg }}>
-                            <View className="w-10 h-10 rounded-xl items-center justify-center mb-3" style={{ backgroundColor: tile.color + '22' }}>
-                                <Ionicons name={tile.icon as any} size={20} color={tile.color} />
+            {/* Metric cards */}
+            <View style={{ gap: 12 }}>
+                {metrics.map(m => (
+                    <Card key={m.title}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: m.color + '1a', alignItems: 'center', justifyContent: 'center' }}>
+                                <Ionicons name={m.icon as any} size={24} color={m.color} />
                             </View>
-                            <Text className="text-3xl font-bold" style={{ color: tile.color }}>
-                                {stats?.[tile.key as keyof SchoolStats] ?? 0}
-                            </Text>
-                            <Text className="text-xs mt-0.5 font-medium" style={{ color: tile.color + 'cc' }}>{tile.label}</Text>
+                            {m.sub ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: SUCCESS + '1a', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 }}>
+                                    <Ionicons name="arrow-up-outline" size={12} color={SUCCESS} style={{ transform: [{ rotate: '45deg' }] }} />
+                                    <Text style={{ fontSize: 12, fontWeight: '600', color: SUCCESS }}>{m.sub}</Text>
+                                </View>
+                            ) : null}
                         </View>
-                    ))}
-                </View>
+                        <Text style={{ fontSize: 30, fontWeight: '700', color: FG, marginTop: 12 }}>{m.value}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '500', color: MUTED_FG, marginTop: 2 }}>{m.title}</Text>
+                    </Card>
+                ))}
+            </View>
 
-                {/* Summary card */}
-                <View className="bg-primary rounded-2xl p-5">
-                    <View className="flex-row items-center gap-2 mb-4">
-                        <Ionicons name="bar-chart" size={20} color="white" />
-                        <Text className="text-white font-semibold text-base">School Summary</Text>
+            {/* Recently Added Content */}
+            <Card>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: FG }}>Recently Added Content</Text>
+                <Text style={{ fontSize: 13, color: MUTED_FG, marginTop: 2, marginBottom: 14 }}>Latest PDFs available to your institution</Text>
+                {recentUploads.length === 0 ? (
+                    <View style={{ alignItems: 'center', paddingVertical: 28 }}>
+                        <Ionicons name="document-text-outline" size={40} color="#d1d5db" style={{ marginBottom: 8 }} />
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: MUTED_FG }}>No content available yet.</Text>
                     </View>
-                    {[
-                        { label: 'Total Users', value: stats?.totalUsers ?? 0 },
-                        { label: 'Active Users', value: stats?.activeUsers ?? 0 },
-                        { label: 'Total Downloads', value: stats?.totalDownloads ?? 0 },
-                        { label: 'Pending Requests', value: stats?.pendingRequests ?? 0 },
-                    ].map((item, idx) => (
-                        <View key={item.label} className={`flex-row justify-between py-2.5 ${idx < 3 ? 'border-b border-white/20' : ''}`}>
-                            <Text className="text-white/80 text-sm">{item.label}</Text>
-                            <Text className="text-white font-bold text-sm">{item.value.toLocaleString()}</Text>
-                        </View>
-                    ))}
-                </View>
-
-                {/* Downloads by month if available */}
-                {stats?.downloadsByMonth && stats.downloadsByMonth.length > 0 && (
-                    <View className="bg-white rounded-2xl border border-border overflow-hidden">
-                        <Text className="text-base font-semibold text-foreground px-4 pt-4 pb-2">Downloads by Month</Text>
-                        {stats.downloadsByMonth.map((item, idx) => {
-                            const max = Math.max(...stats.downloadsByMonth!.map(d => d.count), 1);
-                            const pct = (item.count / max) * 100;
-                            return (
-                                <View key={item.month} className={`px-4 py-3 ${idx < stats.downloadsByMonth!.length - 1 ? 'border-b border-border/50' : ''}`}>
-                                    <View className="flex-row items-center justify-between mb-1.5">
-                                        <Text className="text-sm text-foreground">{item.month}</Text>
-                                        <Text className="text-sm font-bold text-primary">{item.count}</Text>
-                                    </View>
-                                    <View className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                        <View className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                ) : (
+                    <View style={{ gap: 8 }}>
+                        {recentUploads.map((pdf, idx) => (
+                            <View key={pdf.id ?? idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 }}>
+                                <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: ROSE + '1a', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Ionicons name="document-text" size={15} color={ROSE} />
+                                </View>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text style={{ fontSize: 14, fontWeight: '500', color: FG }} numberOfLines={1}>
+                                        {pdf.fileName ?? pdf.file_name ?? '—'}
+                                    </Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                                        {(pdf.className ?? pdf.class_name) ? (
+                                            <Text style={{ fontSize: 12, color: MUTED_FG }}>{pdf.className ?? pdf.class_name}</Text>
+                                        ) : null}
+                                        {(pdf.subjectName ?? pdf.subject_name) ? (
+                                            <Text style={{ fontSize: 12, color: BRAND }}>{pdf.subjectName ?? pdf.subject_name}</Text>
+                                        ) : null}
                                     </View>
                                 </View>
-                            );
-                        })}
+                                <Text style={{ fontSize: 12, color: MUTED_FG }}>{formatBytes(pdf.fileSize ?? pdf.file_size)}</Text>
+                            </View>
+                        ))}
                     </View>
                 )}
-            </View>
+            </Card>
+
+            {/* Downloads by Program */}
+            <Card>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: FG }}>Downloads by Program</Text>
+                <Text style={{ fontSize: 13, color: MUTED_FG, marginTop: 2, marginBottom: 14 }}>Distribution of your school's downloads</Text>
+                {categoryData.length === 0 ? (
+                    <View style={{ alignItems: 'center', paddingVertical: 28 }}>
+                        <Ionicons name="alert-circle-outline" size={40} color="#d1d5db" style={{ marginBottom: 8 }} />
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: MUTED_FG }}>No download activity yet.</Text>
+                        <Text style={{ fontSize: 12, color: MUTED_FG, marginTop: 2, textAlign: 'center' }}>
+                            Downloads will appear here once your users access content.
+                        </Text>
+                    </View>
+                ) : (
+                    <View style={{ gap: 12 }}>
+                        {categoryData.map((d, idx) => (
+                            <View key={(d.category_name ?? '') + idx} style={{ gap: 6 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <Text style={{ fontSize: 14, fontWeight: '500', color: FG, flex: 1, paddingRight: 8 }} numberOfLines={1}>
+                                        {d.category_name || 'Unknown'}
+                                    </Text>
+                                    <Text style={{ fontSize: 14, color: MUTED_FG }}>{d.count}</Text>
+                                </View>
+                                <View style={{ height: 8, backgroundColor: '#eef0f3', borderRadius: 4, overflow: 'hidden' }}>
+                                    <View style={{ height: '100%', width: `${(d.count / maxDl) * 100}%`, backgroundColor: CHART_COLORS[idx % CHART_COLORS.length], borderRadius: 4 }} />
+                                </View>
+                            </View>
+                        ))}
+                    </View>
+                )}
+            </Card>
+
+            {/* Recently Viewed */}
+            {recentlyViewed.length > 0 && (
+                <Card>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: FG }}>Recently Viewed</Text>
+                    <Text style={{ fontSize: 13, color: MUTED_FG, marginTop: 2, marginBottom: 14 }}>PDFs you've opened recently</Text>
+                    <View style={{ gap: 8 }}>
+                        {recentlyViewed.map((pdf, idx) => (
+                            <View key={pdf.id ?? idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 }}>
+                                <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: BRAND + '1a', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Ionicons name="eye-outline" size={15} color={BRAND} />
+                                </View>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                    <Text style={{ fontSize: 14, fontWeight: '500', color: FG }} numberOfLines={1}>
+                                        {pdf.fileName ?? pdf.file_name ?? '—'}
+                                    </Text>
+                                    {(pdf.lastViewed ?? pdf.last_viewed) ? (
+                                        <Text style={{ fontSize: 12, color: MUTED_FG, marginTop: 2 }}>
+                                            {new Date(pdf.lastViewed ?? pdf.last_viewed ?? '').toLocaleDateString()}
+                                        </Text>
+                                    ) : null}
+                                </View>
+                                {(pdf.className ?? pdf.class_name) ? (
+                                    <Text style={{ fontSize: 12, color: MUTED_FG }}>{pdf.className ?? pdf.class_name}</Text>
+                                ) : null}
+                            </View>
+                        ))}
+                    </View>
+                </Card>
+            )}
         </ScrollView>
     );
 }

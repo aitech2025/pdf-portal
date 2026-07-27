@@ -5,8 +5,22 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '@shared/api/index.js';
 import { ROLE_LABELS } from '@shared/constants/roles.js';
+
+/* Design tokens mirrored from apps/web (index.css / tailwind.config.js) */
+const BRAND = '#5b5ff1';
+const BG = '#fbfcff';
+const FG = '#111827';
+const MUTED_FG = '#6b7280';
+const BORDER = '#e5e7eb';
+const CARD_BORDER = '#eef0f3';
+const DESTRUCTIVE = '#e11d48';
+const SOFT_SM = {
+    shadowColor: '#111a2e', shadowOpacity: 0.06, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 2,
+};
 
 type Tab = 'schools' | 'users';
 
@@ -46,8 +60,14 @@ const newUserRow = (): UserRow => ({
     name: '', email: '', role: 'school_admin', schoolId: '',
 });
 
+const inputStyle = {
+    backgroundColor: '#f9fafb', borderWidth: 1, borderColor: BORDER, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10, color: FG, fontSize: 14,
+};
+
 export default function BulkScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const [activeTab, setActiveTab] = useState<Tab>('schools');
 
     // Schools tab
@@ -178,47 +198,88 @@ export default function BulkScreen() {
     const createdCount = (results: ResultRow[] | null) => results?.filter(r => r.status === 'created').length ?? 0;
     const errorCount = (results: ResultRow[] | null) => results?.filter(r => r.status === 'error').length ?? 0;
 
+    const card = [{ backgroundColor: 'white', marginBottom: 12, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: CARD_BORDER }, SOFT_SM];
+
+    const renderResults = (results: ResultRow[]) => (
+        <View style={card}>
+            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
+                <View style={{ flex: 1, backgroundColor: '#ecfdf5', borderRadius: 12, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#a7f3d0' }}>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#047857' }}>{createdCount(results)}</Text>
+                    <Text style={{ fontSize: 12, color: '#059669' }}>Created</Text>
+                </View>
+                <View style={{ flex: 1, backgroundColor: '#fef2f2', borderRadius: 12, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#fecaca' }}>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#dc2626' }}>{errorCount(results)}</Text>
+                    <Text style={{ fontSize: 12, color: '#ef4444' }}>Errors</Text>
+                </View>
+            </View>
+            {results.map(r => (
+                <View key={r.index} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: CARD_BORDER }}>
+                    <Ionicons
+                        name={r.status === 'created' ? 'checkmark-circle' : 'close-circle'}
+                        size={16}
+                        color={r.status === 'created' ? '#059669' : '#ef4444'}
+                    />
+                    <Text style={{ fontSize: 14, color: FG, flex: 1 }} numberOfLines={1}>{r.label}</Text>
+                    {r.error ? <Text style={{ fontSize: 12, color: '#ef4444', flex: 1 }} numberOfLines={1}>{r.error}</Text> : null}
+                </View>
+            ))}
+        </View>
+    );
+
+    const primaryBtn = (disabled: boolean) => ({
+        borderRadius: 12, height: 50, alignItems: 'center' as const, justifyContent: 'center' as const,
+        flexDirection: 'row' as const, gap: 8, backgroundColor: disabled ? BRAND + '80' : BRAND,
+    });
+
+    const addRowBtn = {
+        borderWidth: 2, borderStyle: 'dashed' as const, borderColor: BRAND + '4d', borderRadius: 16,
+        paddingVertical: 16, alignItems: 'center' as const, flexDirection: 'row' as const,
+        justifyContent: 'center' as const, gap: 8, marginBottom: 12, backgroundColor: BRAND + '0d',
+    };
+
     return (
-        <View className="flex-1 bg-background">
-            <View className="bg-white px-5 pt-14 pb-4 border-b border-border">
-                <View className="flex-row items-center gap-3 mb-3">
-                    <TouchableOpacity onPress={() => router.back()} className="w-9 h-9 rounded-xl bg-gray-100 items-center justify-center">
+        <View style={{ flex: 1, backgroundColor: BG }}>
+            <View style={{ backgroundColor: 'white', paddingHorizontal: 20, paddingTop: insets.top + 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                    <TouchableOpacity onPress={() => router.back()} style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
                         <Ionicons name="arrow-back" size={20} color="#374151" />
                     </TouchableOpacity>
                     <View>
-                        <Text className="text-2xl font-bold text-foreground">Bulk Create</Text>
-                        <Text className="text-xs text-muted">Create multiple records at once</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: BRAND, textTransform: 'uppercase', letterSpacing: 2 }}>Admin</Text>
+                        <Text style={{ fontSize: 22, fontWeight: '700', color: FG }}>Bulk Create</Text>
                     </View>
                 </View>
                 {/* Tabs */}
-                <View className="flex-row bg-gray-100 rounded-xl p-1">
-                    {(['schools', 'users'] as Tab[]).map(tab => (
-                        <TouchableOpacity
-                            key={tab}
-                            className={`flex-1 py-2 rounded-lg items-center ${activeTab === tab ? 'bg-white shadow-sm' : ''}`}
-                            onPress={() => setActiveTab(tab)}
-                        >
-                            <Text className={`text-sm font-semibold ${activeTab === tab ? 'text-primary' : 'text-muted'}`}>
-                                {tab === 'schools' ? 'Schools' : 'Users'}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                <View style={{ flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 12, padding: 4 }}>
+                    {(['schools', 'users'] as Tab[]).map(tab => {
+                        const active = activeTab === tab;
+                        return (
+                            <TouchableOpacity
+                                key={tab}
+                                style={[{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' }, active && { backgroundColor: 'white', ...SOFT_SM }]}
+                                onPress={() => setActiveTab(tab)}
+                            >
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: active ? BRAND : MUTED_FG }}>
+                                    {tab === 'schools' ? 'Schools' : 'Users'}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
                 </View>
             </View>
 
-            <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
 
                     {activeTab === 'schools' ? (
                         <>
-                            {/* School Rows */}
                             {schoolRows.map((row, idx) => (
-                                <View key={row.id} className="bg-white mb-3 rounded-2xl p-4 border border-border">
-                                    <View className="flex-row items-center justify-between mb-3">
-                                        <Text className="text-sm font-semibold text-foreground">School #{idx + 1}</Text>
+                                <View key={row.id} style={card}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                        <Text style={{ fontSize: 14, fontWeight: '700', color: FG }}>School #{idx + 1}</Text>
                                         {schoolRows.length > 1 && (
-                                            <TouchableOpacity onPress={() => removeSchoolRow(row.id)} className="w-7 h-7 rounded-lg bg-red-50 items-center justify-center">
-                                                <Ionicons name="close" size={16} color="#ef4444" />
+                                            <TouchableOpacity onPress={() => removeSchoolRow(row.id)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: DESTRUCTIVE + '14', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Ionicons name="close" size={16} color={DESTRUCTIVE} />
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -229,10 +290,10 @@ export default function BulkScreen() {
                                         { field: 'contactName', label: 'Contact Name', placeholder: 'John Doe', keyboard: 'default' },
                                         { field: 'phone', label: 'Phone', placeholder: '+91 9876543210', keyboard: 'phone-pad' },
                                     ].map(f => (
-                                        <View key={f.field} className="mb-3">
-                                            <Text className="text-xs font-medium text-muted mb-1">{f.label}</Text>
+                                        <View key={f.field} style={{ marginBottom: 12 }}>
+                                            <Text style={{ fontSize: 12, fontWeight: '500', color: MUTED_FG, marginBottom: 4 }}>{f.label}</Text>
                                             <TextInput
-                                                className="bg-gray-50 border border-border rounded-xl px-3 py-2.5 text-foreground text-sm"
+                                                style={inputStyle}
                                                 placeholder={f.placeholder}
                                                 placeholderTextColor="#9ca3af"
                                                 value={row[f.field as keyof SchoolRow]}
@@ -245,64 +306,30 @@ export default function BulkScreen() {
                                 </View>
                             ))}
 
-                            {/* Add Row */}
-                            <TouchableOpacity
-                                className="border-2 border-dashed border-primary/30 rounded-2xl py-4 items-center flex-row justify-center gap-2 mb-3 bg-primary/5"
-                                onPress={() => setSchoolRows(r => [...r, newSchoolRow()])}
-                            >
-                                <Ionicons name="add-circle-outline" size={20} color="#4f46e5" />
-                                <Text className="text-sm font-semibold text-primary">Add Another School</Text>
+                            <TouchableOpacity style={addRowBtn} onPress={() => setSchoolRows(r => [...r, newSchoolRow()])}>
+                                <Ionicons name="add-circle-outline" size={20} color={BRAND} />
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: BRAND }}>Add Another School</Text>
                             </TouchableOpacity>
 
-                            {/* Results */}
-                            {schoolResults && (
-                                <View className="bg-white mb-3 rounded-2xl p-4 border border-border">
-                                    <View className="flex-row items-center gap-3 mb-3">
-                                        <View className="flex-1 bg-emerald-50 rounded-xl py-2 items-center border border-emerald-200">
-                                            <Text className="text-lg font-bold text-emerald-700">{createdCount(schoolResults)}</Text>
-                                            <Text className="text-xs text-emerald-600">Created</Text>
-                                        </View>
-                                        <View className="flex-1 bg-red-50 rounded-xl py-2 items-center border border-red-200">
-                                            <Text className="text-lg font-bold text-red-600">{errorCount(schoolResults)}</Text>
-                                            <Text className="text-xs text-red-500">Errors</Text>
-                                        </View>
-                                    </View>
-                                    {schoolResults.map(r => (
-                                        <View key={r.index} className={`flex-row items-center gap-2 py-2 border-b border-border/30`}>
-                                            <Ionicons
-                                                name={r.status === 'created' ? 'checkmark-circle' : 'close-circle'}
-                                                size={16}
-                                                color={r.status === 'created' ? '#059669' : '#ef4444'}
-                                            />
-                                            <Text className="text-sm text-foreground flex-1" numberOfLines={1}>{r.label}</Text>
-                                            {r.error && <Text className="text-xs text-red-500 flex-1" numberOfLines={1}>{r.error}</Text>}
-                                        </View>
-                                    ))}
-                                </View>
-                            )}
+                            {schoolResults && renderResults(schoolResults)}
 
-                            <TouchableOpacity
-                                className={`rounded-2xl py-4 items-center flex-row justify-center gap-2 ${submittingSchools ? 'bg-primary/50' : 'bg-primary'}`}
-                                onPress={handleSubmitSchools}
-                                disabled={submittingSchools}
-                            >
+                            <TouchableOpacity style={primaryBtn(submittingSchools)} onPress={handleSubmitSchools} disabled={submittingSchools}>
                                 {submittingSchools ? (
-                                    <><ActivityIndicator color="white" size="small" /><Text className="text-white font-semibold text-base">Creating...</Text></>
+                                    <><ActivityIndicator color="white" size="small" /><Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Creating...</Text></>
                                 ) : (
-                                    <><Ionicons name="business-outline" size={18} color="white" /><Text className="text-white font-semibold text-base">Create {schoolRows.length} School{schoolRows.length !== 1 ? 's' : ''}</Text></>
+                                    <><Ionicons name="business-outline" size={18} color="white" /><Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Create {schoolRows.length} School{schoolRows.length !== 1 ? 's' : ''}</Text></>
                                 )}
                             </TouchableOpacity>
                         </>
                     ) : (
                         <>
-                            {/* User Rows */}
                             {userRows.map((row, idx) => (
-                                <View key={row.id} className="bg-white mb-3 rounded-2xl p-4 border border-border">
-                                    <View className="flex-row items-center justify-between mb-3">
-                                        <Text className="text-sm font-semibold text-foreground">User #{idx + 1}</Text>
+                                <View key={row.id} style={card}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                        <Text style={{ fontSize: 14, fontWeight: '700', color: FG }}>User #{idx + 1}</Text>
                                         {userRows.length > 1 && (
-                                            <TouchableOpacity onPress={() => removeUserRow(row.id)} className="w-7 h-7 rounded-lg bg-red-50 items-center justify-center">
-                                                <Ionicons name="close" size={16} color="#ef4444" />
+                                            <TouchableOpacity onPress={() => removeUserRow(row.id)} style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: DESTRUCTIVE + '14', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Ionicons name="close" size={16} color={DESTRUCTIVE} />
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -311,10 +338,10 @@ export default function BulkScreen() {
                                         { field: 'email', label: 'Email *', placeholder: 'jane@school.com', keyboard: 'email-address' },
                                         { field: 'schoolId', label: 'School ID', placeholder: 'school_id_here', keyboard: 'default' },
                                     ].map(f => (
-                                        <View key={f.field} className="mb-3">
-                                            <Text className="text-xs font-medium text-muted mb-1">{f.label}</Text>
+                                        <View key={f.field} style={{ marginBottom: 12 }}>
+                                            <Text style={{ fontSize: 12, fontWeight: '500', color: MUTED_FG, marginBottom: 4 }}>{f.label}</Text>
                                             <TextInput
-                                                className="bg-gray-50 border border-border rounded-xl px-3 py-2.5 text-foreground text-sm"
+                                                style={inputStyle}
                                                 placeholder={f.placeholder}
                                                 placeholderTextColor="#9ca3af"
                                                 value={row[f.field as keyof UserRow]}
@@ -325,64 +352,31 @@ export default function BulkScreen() {
                                         </View>
                                     ))}
                                     {/* Role picker */}
-                                    <View className="mb-1">
-                                        <Text className="text-xs font-medium text-muted mb-1">Role</Text>
+                                    <View>
+                                        <Text style={{ fontSize: 12, fontWeight: '500', color: MUTED_FG, marginBottom: 4 }}>Role</Text>
                                         <TouchableOpacity
-                                            className="bg-gray-50 border border-border rounded-xl px-3 py-2.5 flex-row items-center justify-between"
+                                            style={{ ...inputStyle, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
                                             onPress={() => setShowRolePicker(row.id)}
                                         >
-                                            <Text className="text-sm text-foreground">{ROLE_LABELS[row.role] ?? row.role}</Text>
-                                            <Ionicons name="chevron-down" size={14} color="#6b7280" />
+                                            <Text style={{ fontSize: 14, color: FG }}>{ROLE_LABELS[row.role] ?? row.role}</Text>
+                                            <Ionicons name="chevron-down" size={14} color={MUTED_FG} />
                                         </TouchableOpacity>
                                     </View>
                                 </View>
                             ))}
 
-                            {/* Add Row */}
-                            <TouchableOpacity
-                                className="border-2 border-dashed border-primary/30 rounded-2xl py-4 items-center flex-row justify-center gap-2 mb-3 bg-primary/5"
-                                onPress={() => setUserRows(r => [...r, newUserRow()])}
-                            >
-                                <Ionicons name="add-circle-outline" size={20} color="#4f46e5" />
-                                <Text className="text-sm font-semibold text-primary">Add Another User</Text>
+                            <TouchableOpacity style={addRowBtn} onPress={() => setUserRows(r => [...r, newUserRow()])}>
+                                <Ionicons name="add-circle-outline" size={20} color={BRAND} />
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: BRAND }}>Add Another User</Text>
                             </TouchableOpacity>
 
-                            {/* Results */}
-                            {userResults && (
-                                <View className="bg-white mb-3 rounded-2xl p-4 border border-border">
-                                    <View className="flex-row items-center gap-3 mb-3">
-                                        <View className="flex-1 bg-emerald-50 rounded-xl py-2 items-center border border-emerald-200">
-                                            <Text className="text-lg font-bold text-emerald-700">{createdCount(userResults)}</Text>
-                                            <Text className="text-xs text-emerald-600">Created</Text>
-                                        </View>
-                                        <View className="flex-1 bg-red-50 rounded-xl py-2 items-center border border-red-200">
-                                            <Text className="text-lg font-bold text-red-600">{errorCount(userResults)}</Text>
-                                            <Text className="text-xs text-red-500">Errors</Text>
-                                        </View>
-                                    </View>
-                                    {userResults.map(r => (
-                                        <View key={r.index} className="flex-row items-center gap-2 py-2 border-b border-border/30">
-                                            <Ionicons
-                                                name={r.status === 'created' ? 'checkmark-circle' : 'close-circle'}
-                                                size={16}
-                                                color={r.status === 'created' ? '#059669' : '#ef4444'}
-                                            />
-                                            <Text className="text-sm text-foreground flex-1" numberOfLines={1}>{r.label}</Text>
-                                            {r.error && <Text className="text-xs text-red-500 flex-1" numberOfLines={1}>{r.error}</Text>}
-                                        </View>
-                                    ))}
-                                </View>
-                            )}
+                            {userResults && renderResults(userResults)}
 
-                            <TouchableOpacity
-                                className={`rounded-2xl py-4 items-center flex-row justify-center gap-2 ${submittingUsers ? 'bg-primary/50' : 'bg-primary'}`}
-                                onPress={handleSubmitUsers}
-                                disabled={submittingUsers}
-                            >
+                            <TouchableOpacity style={primaryBtn(submittingUsers)} onPress={handleSubmitUsers} disabled={submittingUsers}>
                                 {submittingUsers ? (
-                                    <><ActivityIndicator color="white" size="small" /><Text className="text-white font-semibold text-base">Creating...</Text></>
+                                    <><ActivityIndicator color="white" size="small" /><Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Creating...</Text></>
                                 ) : (
-                                    <><Ionicons name="people-outline" size={18} color="white" /><Text className="text-white font-semibold text-base">Create {userRows.length} User{userRows.length !== 1 ? 's' : ''}</Text></>
+                                    <><Ionicons name="people-outline" size={18} color="white" /><Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Create {userRows.length} User{userRows.length !== 1 ? 's' : ''}</Text></>
                                 )}
                             </TouchableOpacity>
                         </>
@@ -392,23 +386,23 @@ export default function BulkScreen() {
 
             {/* Role Picker Modal */}
             <Modal visible={!!showRolePicker} transparent animationType="fade">
-                <TouchableOpacity className="flex-1 bg-black/50 justify-center px-6" activeOpacity={1} onPress={() => setShowRolePicker(null)}>
-                    <View className="bg-white rounded-2xl overflow-hidden">
-                        <Text className="text-base font-bold text-foreground px-5 py-4 border-b border-border">Select Role</Text>
+                <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 24 }} activeOpacity={1} onPress={() => setShowRolePicker(null)}>
+                    <View style={{ backgroundColor: 'white', borderRadius: 16, overflow: 'hidden' }}>
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: FG, paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>Select Role</Text>
                         {USER_ROLES.map(role => {
                             const currentRow = userRows.find(r => r.id === showRolePicker);
                             const isSelected = currentRow?.role === role;
                             return (
                                 <TouchableOpacity
                                     key={role}
-                                    className={`px-5 py-3.5 border-b border-border/50 flex-row items-center justify-between ${isSelected ? 'bg-primary/5' : ''}`}
+                                    style={{ paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: isSelected ? BRAND + '0d' : 'transparent' }}
                                     onPress={() => {
                                         if (showRolePicker) updateUserRow(showRolePicker, 'role', role);
                                         setShowRolePicker(null);
                                     }}
                                 >
-                                    <Text className={`text-sm ${isSelected ? 'text-primary font-semibold' : 'text-foreground'}`}>{ROLE_LABELS[role] ?? role}</Text>
-                                    {isSelected && <Ionicons name="checkmark" size={18} color="#4f46e5" />}
+                                    <Text style={{ fontSize: 14, color: isSelected ? BRAND : FG, fontWeight: isSelected ? '600' : '400' }}>{ROLE_LABELS[role] ?? role}</Text>
+                                    {isSelected && <Ionicons name="checkmark" size={18} color={BRAND} />}
                                 </TouchableOpacity>
                             );
                         })}

@@ -27,7 +27,10 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 
 const EnhancedPDFViewer = ({ pdfRecord, versionId = null, onClose, className }) => {
-  const pdfId = versionId ? null : pdfRecord?.id;
+  const isZip = !versionId && (pdfRecord?.fileType === 'zip'
+    || (pdfRecord?.fileName || '').toLowerCase().endsWith('.zip'));
+  // Skip the PDF fetch/parse for archives — they cannot be rendered by pdfjs.
+  const pdfId = (versionId || isZip) ? null : pdfRecord?.id;
   const { file, blobUrl, loading, error } = usePdfDocument({ pdfId, versionId });
 
   const [numPages, setNumPages] = useState(null);
@@ -168,6 +171,41 @@ const EnhancedPDFViewer = ({ pdfRecord, versionId = null, onClose, className }) 
           <FileWarning className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-foreground mb-1">No Document Selected</h3>
           <p className="text-sm text-muted-foreground">Select a PDF from the list to view it here.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isZip) {
+    return (
+      <div className={cn('pdf-viewer-container flex flex-col h-full bg-card shadow-soft-lg', className)}>
+        <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 bg-background/95 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            {onClose && (
+              <Button variant="ghost" size="icon" onClick={onClose} className="lg:hidden shrink-0">
+                <ChevronLeft className="w-5 h-5" />
+              </Button>
+            )}
+            <h3 className="font-semibold text-sm truncate">{pdfRecord.fileName}</h3>
+            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 shrink-0">ZIP</Badge>
+          </div>
+          {onClose && (
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 hidden lg:inline-flex">
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+        <div className="flex-1 min-h-0 flex items-center justify-center bg-muted/30 p-8">
+          <div className="text-center max-w-sm">
+            <FileWarning className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-1">ZIP archive</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              This file is a ZIP archive and can't be previewed. Download it to open the contents.
+            </p>
+            <Button onClick={handleDownload}>
+              <Download className="w-4 h-4 mr-2" /> Download
+            </Button>
+          </div>
         </div>
       </div>
     );
