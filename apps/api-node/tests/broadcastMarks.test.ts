@@ -14,7 +14,22 @@ describe("buildMarksTemplateParams", () => {
       valid: true
     });
 
-    expect(params).toEqual(["Ravi Kumar", "Maths: 88\nScience: 91", "179"]);
+    expect(params).toEqual(["Ravi Kumar", "Maths: 88, Science: 91", "179"]);
+  });
+
+  it("strips whitespace Meta rejects from parameter values", () => {
+    const params = buildMarksTemplateParams({
+      studentName: "  Priya\tS  ",
+      mobileNumber: "9876500011",
+      subjects: [
+        { subject: "Maths\nTheory", marks: "90\t/ 100" },
+        { subject: "Science", marks: "95" }
+      ],
+      total: "185",
+      valid: true
+    });
+
+    expect(params).toEqual(["Priya S", "Maths Theory: 90 / 100, Science: 95", "185"]);
   });
 
   it("uses a safe fallback when total is missing", () => {

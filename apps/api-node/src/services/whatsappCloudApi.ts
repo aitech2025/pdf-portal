@@ -81,6 +81,9 @@ const toE164 = (phone: string): string => {
   return digits;
 };
 
+const sanitizeTemplateText = (value: string): string =>
+  value.replace(/[\r\n\t]+/g, " ").replace(/ {5,}/g, "    ").trim();
+
 // ---------------------------------------------------------------------------
 // Core HTTP helper
 // ---------------------------------------------------------------------------
@@ -104,8 +107,10 @@ const postToCloudApi = async (
       const errObj = data.error as Record<string, unknown> | undefined;
       const msg = (errObj?.message as string) ?? `HTTP ${res.status}`;
       const code = (errObj?.code as number) ?? res.status;
+      const details = (errObj?.error_data as Record<string, unknown> | undefined)?.details as string | undefined;
+      const error = details ? `${msg}: ${details}` : msg;
       console.error(`[WA Cloud] API error ${code}: ${msg}`, JSON.stringify(data));
-      return { ok: false, error: msg, errorCode: code, data };
+      return { ok: false, error, errorCode: code, data };
     }
     return { ok: true, data };
   } catch (err) {
@@ -176,15 +181,16 @@ export const sendWhatsAppTemplate = async (
   const to = toE164(phone);
   if (!to) return { ok: false, error: "Invalid phone number" };
 
+  const sanitizedBodyParams = bodyParams.map(sanitizeTemplateText);
   const components: Record<string, unknown>[] = [];
-  if (bodyParams.length > 0) {
+  if (sanitizedBodyParams.length > 0) {
     components.push({
       type: "body",
-      parameters: bodyParams.map(text => ({ type: "text", text }))
+      parameters: sanitizedBodyParams.map(text => ({ type: "text", text }))
     });
   }
 
-  console.log(`[WA Cloud] Sending template "${templateName}" (lang=${languageCode}, params=${bodyParams.length}) to ${to}`);
+  console.log(`[WA Cloud] Sending template "${templateName}" (lang=${languageCode}, params=${sanitizedBodyParams.length}) to ${to}`);
   const result = await postToCloudApi(cfg, {
     messaging_product: "whatsapp",
     to,

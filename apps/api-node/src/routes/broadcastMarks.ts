@@ -68,10 +68,20 @@ const parseSheet = (buffer: Buffer): MarksRow[] => {
   }).filter((r) => r.studentName || r.mobileNumber || r.subjects.length); // drop fully-empty rows
 };
 
-// WhatsApp template parameters
+const sanitizeTemplateParam = (value: string): string =>
+  value.replace(/[\r\n\t]+/g, " ").replace(/ {5,}/g, "    ").trim();
+
+// WhatsApp template parameters. Keep each parameter single-line; Meta rejects
+// newlines/tabs inside template parameter values with error #132018.
 export const buildMarksTemplateParams = (row: MarksRow): string[] => {
-  const marksLines = row.subjects.map((s) => `${s.subject}: ${s.marks}`).join("\n");
-  return [row.studentName, marksLines, row.total || "-"];
+  const marksText = row.subjects
+    .map((s) => `${sanitizeTemplateParam(s.subject)}: ${sanitizeTemplateParam(s.marks)}`)
+    .join(", ");
+  return [
+    sanitizeTemplateParam(row.studentName),
+    marksText || "-",
+    sanitizeTemplateParam(row.total || "-")
+  ];
 };
 
 export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promise<void> => {
