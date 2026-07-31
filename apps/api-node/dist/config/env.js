@@ -38,6 +38,8 @@ const EnvSchema = z.object({
     // Pre-approved template name for new content upload notifications
     WHATSAPP_NEW_CONTENT_TEMPLATE: z.string().default("new_content_notification"),
     // Pre-approved template name for admin broadcast messages
-    WHATSAPP_BROADCAST_TEMPLATE: z.string().default("broadcast_announcement")
+    WHATSAPP_BROADCAST_TEMPLATE: z.string().default("broadcast_announcement"),
+    // Pre-approved single-variable template for student marks broadcasts ({{1}} = composed message)
+    WHATSAPP_MARKS_TEMPLATE: z.string().default("student_marks")
 });
 export const env = EnvSchema.parse(process.env);

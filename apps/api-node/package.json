@@ -23,6 +23,7 @@
     "mongoose": "^8.19.3",
     "nanoid": "^5.1.6",
     "nodemailer": "^8.0.7",
+    "xlsx": "^0.18.5",
     "zod": "^4.1.12"
   },
   "devDependencies": {

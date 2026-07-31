@@ -6,6 +6,7 @@ import { registerBulkRoutes } from "./bulk.js";
 import { registerCategoryRoutes } from "./categories.js";
 import { registerMaintenanceRoutes } from "./maintenance.js";
 import { registerNotificationRoutes } from "./notifications.js";
+import { registerBroadcastMarksRoutes } from "./broadcastMarks.js";
 import { registerPdfVersionRoutes } from "./pdfVersions.js";
 import { registerPdfRoutes } from "./pdfs.js";
 import { registerProgramRoutes } from "./programs.js";
@@ -36,6 +37,7 @@ export const registerRoutes = async (app: FastifyInstance): Promise<void> => {
   await registerPdfRoutes(app);
   await registerPdfVersionRoutes(app);
   await registerNotificationRoutes(app);
+  await registerBroadcastMarksRoutes(app);
   await registerRequestRoutes(app);
   await registerAnalyticsRoutes(app);
   await registerMaintenanceRoutes(app);

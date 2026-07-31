@@ -15,4 +15,7 @@ export const notificationsApi = {
     apiFetch(`/api/notifications/${id}`, 'DELETE'),
   adminSend: (data) =>
     apiFetch('/api/notifications/admin/send', 'POST', data),
+  // Student marks broadcast — send composed marks to each row's mobile via WhatsApp.
+  sendMarks: (data) =>
+    apiFetch('/api/broadcast/marks/send', 'POST', data),
 };

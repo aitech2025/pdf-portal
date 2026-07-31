@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     View, Text, TextInput, TouchableOpacity, ScrollView,
-    Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
+    Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { schoolsApi, notificationsApi } from '@shared/api/index.js';
+
+const DEFAULT_MARKS_MESSAGE =
+    'Dear Student/Parent,\nMarks for {name}:\n{marks}\nTotal: {total}\n— i-icon Academy';
 
 /* Design tokens mirrored from apps/web (index.css / tailwind.config.js) */
 const BRAND = '#5b5ff1';
@@ -80,6 +87,14 @@ export default function BroadcastScreen() {
     const [showSchoolPicker, setShowSchoolPicker] = useState(false);
     const [lastResult, setLastResult] = useState<string | null>(null);
 
+    // Mode: announcement (existing) vs student marks broadcast
+    const [mode, setMode] = useState<'announcement' | 'marks'>('announcement');
+    const [marksRows, setMarksRows] = useState<any[]>([]);
+    const [marksSummary, setMarksSummary] = useState<{ total: number; valid: number; invalid: number } | null>(null);
+    const [marksMessage, setMarksMessage] = useState(DEFAULT_MARKS_MESSAGE);
+    const [marksFileName, setMarksFileName] = useState('');
+    const [marksBusy, setMarksBusy] = useState(false);
+
     useEffect(() => {
         schoolsApi.listSchools({ per_page: 500, sort: 'schoolName' })
             .then((res: any) => setSchools(res.items ?? []))
@@ -151,6 +166,77 @@ export default function BroadcastScreen() {
         ]);
     };
 
+    // ── Student marks broadcast ──
+    const apiUrl = Constants.expoConfig?.extra?.apiUrl ?? 'http://localhost:8000';
+
+    const downloadMarksTemplate = async () => {
+        try {
+            setMarksBusy(true);
+            const token = await SecureStore.getItemAsync('auth_token');
+            const fileUri = `${FileSystem.documentDirectory}marks-template.xlsx`;
+            const { uri } = await FileSystem.downloadAsync(
+                `${apiUrl}/api/broadcast/marks/template`,
+                fileUri,
+                { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+            );
+            await Linking.openURL(uri);
+        } catch (err: any) {
+            Alert.alert('Download failed', err?.message ?? 'Could not download the template.');
+        } finally { setMarksBusy(false); }
+    };
+
+    const pickAndPreviewMarks = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'],
+                copyToCacheDirectory: true,
+            });
+            if (result.canceled) return;
+            const asset = result.assets?.[0];
+            if (!asset) return;
+
+            setMarksBusy(true);
+            const token = await SecureStore.getItemAsync('auth_token');
+            const formData = new FormData();
+            formData.append('file', { uri: asset.uri, name: asset.name, type: asset.mimeType ?? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } as any);
+            const res = await fetch(`${apiUrl}/api/broadcast/marks/preview`, {
+                method: 'POST',
+                headers: { Authorization: token ? `Bearer ${token}` : '' },
+                body: formData,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: res.statusText }));
+                throw new Error(err.detail ?? 'Failed to parse the Excel file');
+            }
+            const data = await res.json();
+            setMarksRows(data.rows ?? []);
+            setMarksSummary(data.summary ?? null);
+            setMarksFileName(asset.name);
+        } catch (err: any) {
+            Alert.alert('Upload failed', err?.message ?? 'Could not read the Excel file.');
+            setMarksRows([]); setMarksSummary(null); setMarksFileName('');
+        } finally { setMarksBusy(false); }
+    };
+
+    const sendMarks = async () => {
+        const validRows = marksRows.filter(r => r.valid);
+        if (validRows.length === 0) { Alert.alert('Nothing to send', 'No valid rows found.'); return; }
+        Alert.alert('Confirm', `Send marks to ${validRows.length} student(s) via WhatsApp?`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Send', onPress: async () => {
+                    setMarksBusy(true);
+                    try {
+                        const result: any = await notificationsApi.sendMarks({ rows: validRows, messageTemplate: marksMessage });
+                        Alert.alert('Done', `${result?.sent ?? 0} sent, ${result?.failed ?? 0} failed.`);
+                    } catch (err: any) {
+                        Alert.alert('Error', err?.message ?? 'Failed to send marks.');
+                    } finally { setMarksBusy(false); }
+                },
+            },
+        ]);
+    };
+
     const templates = isEmail ? EMAIL_TEMPLATES : WHATSAPP_TEMPLATES;
     const accent = isEmail ? BRAND : WA_GREEN;
 
@@ -172,7 +258,24 @@ export default function BroadcastScreen() {
                         <Text style={{ fontSize: 22, fontWeight: '700', color: FG }}>Broadcast Messages</Text>
                     </View>
                 </View>
+                {/* Mode toggle: Announcement vs Marks */}
+                <View style={{ flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 12, padding: 4, marginBottom: 8 }}>
+                    {([['announcement', 'Announcement', 'megaphone-outline'], ['marks', 'Student Marks', 'school-outline']] as const).map(([m, label, icon]) => {
+                        const active = mode === m;
+                        return (
+                            <TouchableOpacity
+                                key={m}
+                                style={[{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }, active && { backgroundColor: 'white', ...SOFT_SM }]}
+                                onPress={() => setMode(m)}
+                            >
+                                <Ionicons name={icon as any} size={16} color={active ? BRAND : MUTED_FG} />
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: active ? FG : MUTED_FG }}>{label}</Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
                 {/* Channel tabs */}
+                {mode === 'announcement' && (
                 <View style={{ flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 12, padding: 4 }}>
                     {(['email', 'whatsapp'] as Channel[]).map(c => {
                         const active = channel === c;
@@ -188,11 +291,83 @@ export default function BroadcastScreen() {
                         );
                     })}
                 </View>
+                )}
             </View>
 
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
                 <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }} showsVerticalScrollIndicator={false}>
 
+                    {mode === 'marks' ? (
+                    <>
+                        {/* Step 1: template + upload */}
+                        <View style={card}>
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: FG, marginBottom: 4 }}>Broadcast Student Marks</Text>
+                            <Text style={{ fontSize: 12, color: MUTED_FG, marginBottom: 14 }}>Download the template, fill marks & mobile numbers, upload it back, then send.</Text>
+                            <TouchableOpacity
+                                disabled={marksBusy}
+                                onPress={downloadMarksTemplate}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: BORDER, borderRadius: 12, paddingVertical: 12, marginBottom: 10 }}
+                            >
+                                <Ionicons name="download-outline" size={18} color={BRAND} />
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: FG }}>Download Excel Template</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                disabled={marksBusy}
+                                onPress={pickAndPreviewMarks}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: BRAND, borderRadius: 12, paddingVertical: 12 }}
+                            >
+                                {marksBusy ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="cloud-upload-outline" size={18} color="white" />}
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: 'white' }}>Upload Filled Excel</Text>
+                            </TouchableOpacity>
+                            {!!marksFileName && (
+                                <Text style={{ fontSize: 12, color: MUTED_FG, marginTop: 8 }} numberOfLines={1}>📄 {marksFileName}</Text>
+                            )}
+                        </View>
+
+                        {/* Step 2: preview */}
+                        {marksSummary && (
+                            <View style={card}>
+                                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                                    <Text style={{ fontSize: 12, fontWeight: '600', color: FG, backgroundColor: '#f3f4f6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>{marksSummary.total} rows</Text>
+                                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#15803d', backgroundColor: '#dcfce7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>{marksSummary.valid} valid</Text>
+                                    {marksSummary.invalid > 0 && (
+                                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#b91c1c', backgroundColor: '#fee2e2', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>{marksSummary.invalid} skipped</Text>
+                                    )}
+                                </View>
+                                {marksRows.slice(0, 50).map((r, i) => (
+                                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: CARD_BORDER }}>
+                                        <View style={{ flex: 1, paddingRight: 8 }}>
+                                            <Text style={{ fontSize: 14, fontWeight: '600', color: FG }} numberOfLines={1}>{r.studentName || '—'}</Text>
+                                            <Text style={{ fontSize: 11, color: MUTED_FG }} numberOfLines={1}>{r.mobileNumber || '—'}  ·  Total: {r.total || '—'}</Text>
+                                        </View>
+                                        <Ionicons name={r.valid ? 'checkmark-circle' : 'close-circle'} size={20} color={r.valid ? SUCCESS : '#ef4444'} />
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+
+                        {/* Step 3: message + send */}
+                        <View style={card}>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: FG, marginBottom: 8 }}>Message Template</Text>
+                            <TextInput
+                                style={[inputStyle, { minHeight: 120, textAlignVertical: 'top' }]}
+                                multiline
+                                value={marksMessage}
+                                onChangeText={setMarksMessage}
+                            />
+                            <Text style={{ fontSize: 11, color: MUTED_FG, marginTop: 8 }}>Placeholders: {'{name}'}, {'{marks}'}, {'{total}'}. Sent via the approved <Text style={{ fontWeight: '600' }}>student_marks</Text> WhatsApp template.</Text>
+                            <TouchableOpacity
+                                disabled={marksBusy || !(marksSummary?.valid ?? 0)}
+                                onPress={sendMarks}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: (marksSummary?.valid ?? 0) ? WA_GREEN : '#9ca3af', borderRadius: 12, paddingVertical: 14, marginTop: 14 }}
+                            >
+                                {marksBusy ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="logo-whatsapp" size={18} color="white" />}
+                                <Text style={{ fontSize: 15, fontWeight: '700', color: 'white' }}>Send WhatsApp{marksSummary?.valid ? ` (${marksSummary.valid})` : ''}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </>
+                    ) : (
+                    <>
                     {/* Compose */}
                     <View style={card}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -331,6 +506,8 @@ export default function BroadcastScreen() {
                             </>
                         )}
                     </TouchableOpacity>
+                    </>
+                    )}
                 </ScrollView>
             </KeyboardAvoidingView>
 

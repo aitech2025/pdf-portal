@@ -1,0 +1,35 @@
+# Never ship host-installed dependencies into the image. They contain
+# platform-specific native binaries (esbuild, etc.) built for the host OS and
+# will clobber the fresh, Linux-correct node_modules installed inside the build.
+**/node_modules
+
+# Build outputs
+**/dist
+dist/
+apps/web/dist/
+apps/api-node/dist/
+
+# Local env / secrets
+**/.env
+**/.env.*
+!**/.env.example
+
+# VCS & tooling
+.git
+.gitignore
+**/.expo
+**/.turbo
+**/.cache
+
+# Logs & OS cruft
+**/*.log
+**/npm-debug.log*
+**/.DS_Store
+Thumbs.db
+
+# Editor
+.vscode
+.idea
+
+# Mobile app is not built via Docker
+apps/mobile

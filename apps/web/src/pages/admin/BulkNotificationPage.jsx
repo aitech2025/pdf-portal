@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import PageTransition from '@/components/PageTransition.jsx';
 import PageHeader from '@/components/PageHeader.jsx';
-import { Send, Mail, MessageSquare, AlertCircle, BellRing, ChevronDown, CheckCircle2, XCircle, Settings, Loader2 } from 'lucide-react';
+import { Send, Mail, MessageSquare, AlertCircle, BellRing, ChevronDown, CheckCircle2, XCircle, Settings, Loader2, FileSpreadsheet, Download, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 
@@ -88,6 +88,9 @@ const WHATSAPP_TEMPLATES = [
   },
 ];
 
+const DEFAULT_MARKS_MESSAGE =
+  'Dear Student/Parent,\nMarks for {name}:\n{marks}\nTotal: {total}\n— i-icon Academy';
+
 const BulkNotificationPage = () => {
   const navigate = useNavigate();
 
@@ -111,6 +114,15 @@ const BulkNotificationPage = () => {
   // WhatsApp Cloud API status
   const [waStatus, setWaStatus] = useState(null);
   const [waStatusLoading, setWaStatusLoading] = useState(true);
+
+  // Student marks broadcast
+  const [marksRows, setMarksRows] = useState([]);
+  const [marksSummary, setMarksSummary] = useState(null);
+  const [marksMessage, setMarksMessage] = useState(DEFAULT_MARKS_MESSAGE);
+  const [marksFileName, setMarksFileName] = useState('');
+  const [marksParsing, setMarksParsing] = useState(false);
+  const [marksSending, setMarksSending] = useState(false);
+  const [marksResult, setMarksResult] = useState(null);
 
   useEffect(() => {
     const loadSchools = async () => {
@@ -202,6 +214,75 @@ const BulkNotificationPage = () => {
     }
   };
 
+  // ── Student marks broadcast handlers ──
+  const downloadMarksTemplate = async () => {
+    try {
+      const res = await fetch('/api/broadcast/marks/template', {
+        headers: client.token ? { Authorization: `Bearer ${client.token}` } : {},
+      });
+      if (!res.ok) throw new Error('Failed to download template');
+      const blob = await res.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'marks-template.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      toast.error(err.message || 'Could not download template');
+    }
+  };
+
+  const handleMarksFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setMarksParsing(true);
+    setMarksResult(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await client.fetch('/broadcast/marks/preview', 'POST', formData);
+      setMarksRows(res.rows || []);
+      setMarksSummary(res.summary || null);
+      setMarksFileName(file.name);
+      if (res.summary?.invalid > 0) {
+        toast.warning(`${res.summary.invalid} row(s) have issues and will be skipped`);
+      } else {
+        toast.success(`Parsed ${res.summary?.valid ?? 0} student(s)`);
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to parse the Excel file');
+      setMarksRows([]);
+      setMarksSummary(null);
+      setMarksFileName('');
+    } finally {
+      setMarksParsing(false);
+    }
+  };
+
+  const sendMarks = async () => {
+    const validRows = marksRows.filter((r) => r.valid);
+    if (validRows.length === 0) {
+      toast.error('No valid rows to send');
+      return;
+    }
+    setMarksSending(true);
+    setMarksResult(null);
+    try {
+      const res = await client.fetch('/broadcast/marks/send', 'POST', {
+        rows: validRows,
+        messageTemplate: marksMessage,
+      });
+      setMarksResult(res);
+      toast.success(`${res.sent} sent, ${res.failed} failed`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to send marks');
+    } finally {
+      setMarksSending(false);
+    }
+  };
+
   const TargetingPanel = () => (
     <Card className="shadow-soft border-border/50">
       <CardHeader>
@@ -269,12 +350,15 @@ const BulkNotificationPage = () => {
       />
 
       <Tabs defaultValue="email" className="space-y-6">
-        <TabsList className="grid w-full max-w-xs grid-cols-2">
+        <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="email" className="flex items-center gap-2">
             <Mail className="w-4 h-4" /> Email
           </TabsTrigger>
           <TabsTrigger value="whatsapp" className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4" /> WhatsApp
+          </TabsTrigger>
+          <TabsTrigger value="marks" className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4" /> Student Marks
           </TabsTrigger>
         </TabsList>
 
@@ -519,6 +603,141 @@ const BulkNotificationPage = () => {
                   <p>• Messages reach schools even without a prior 24-hour service window</p>
                   <p>• Keep message under 1024 characters (template parameter limit)</p>
                   <p>• Delivered to the school's registered mobile number</p>
+                  <p>• Configure credentials in <button onClick={() => navigate('/admin/settings?tab=whatsapp')} className="text-primary hover:underline">Settings → WhatsApp</button></p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── STUDENT MARKS TAB ─────────────────────────────── */}
+        <TabsContent value="marks" className="space-y-0">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <Card className="shadow-soft border-border/50">
+                <CardHeader>
+                  <CardTitle>Broadcast Student Marks</CardTitle>
+                  <CardDescription>
+                    Download the template, fill in each student's marks and mobile number, upload it back, then send.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {/* Step 1: template */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button variant="outline" onClick={downloadMarksTemplate} className="flex items-center gap-2">
+                      <Download className="w-4 h-4" /> Download Excel Template
+                    </Button>
+                    <label className="inline-flex">
+                      <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleMarksFile} />
+                      <span className={cn(
+                        'inline-flex items-center gap-2 h-10 px-4 rounded-md text-sm font-medium cursor-pointer border border-input bg-background hover:bg-muted transition-colors',
+                        marksParsing && 'opacity-60 pointer-events-none'
+                      )}>
+                        {marksParsing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                        {marksParsing ? 'Parsing…' : 'Upload Filled Excel'}
+                      </span>
+                    </label>
+                    {marksFileName && (
+                      <Badge variant="secondary" className="text-xs">{marksFileName}</Badge>
+                    )}
+                  </div>
+
+                  {/* Step 2: preview */}
+                  {marksSummary && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2 text-sm">
+                        <Badge variant="secondary">{marksSummary.total} rows</Badge>
+                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">{marksSummary.valid} valid</Badge>
+                        {marksSummary.invalid > 0 && (
+                          <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100">{marksSummary.invalid} skipped</Badge>
+                        )}
+                      </div>
+                      <div className="border rounded-lg overflow-hidden">
+                        <div className="max-h-72 overflow-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50 sticky top-0">
+                              <tr className="text-left">
+                                <th className="px-3 py-2 font-medium">Student</th>
+                                <th className="px-3 py-2 font-medium">Mobile</th>
+                                <th className="px-3 py-2 font-medium">Marks</th>
+                                <th className="px-3 py-2 font-medium">Total</th>
+                                <th className="px-3 py-2 font-medium">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {marksRows.map((r, i) => (
+                                <tr key={i} className={cn('border-t', !r.valid && 'bg-rose-50/60')}>
+                                  <td className="px-3 py-2">{r.studentName || '—'}</td>
+                                  <td className="px-3 py-2 font-mono text-xs">{r.mobileNumber || '—'}</td>
+                                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                                    {(r.subjects || []).map((s) => `${s.subject}: ${s.marks}`).join(', ') || '—'}
+                                  </td>
+                                  <td className="px-3 py-2">{r.total || '—'}</td>
+                                  <td className="px-3 py-2">
+                                    {r.valid
+                                      ? <span className="inline-flex items-center gap-1 text-emerald-600 text-xs"><CheckCircle2 className="w-3.5 h-3.5" /> Ready</span>
+                                      : <span className="inline-flex items-center gap-1 text-rose-600 text-xs" title={r.error}><XCircle className="w-3.5 h-3.5" /> {r.error}</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 3: message + send */}
+                  <div className="space-y-2">
+                    <Label>Message Template</Label>
+                    <Textarea
+                      rows={5}
+                      value={marksMessage}
+                      onChange={(e) => setMarksMessage(e.target.value)}
+                      className="bg-background font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Placeholders: <Badge variant="secondary" className="text-xs font-mono">{'{name}'}</Badge>{' '}
+                      <Badge variant="secondary" className="text-xs font-mono">{'{marks}'}</Badge>{' '}
+                      <Badge variant="secondary" className="text-xs font-mono">{'{total}'}</Badge>
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={sendMarks}
+                    disabled={marksSending || !(marksSummary?.valid > 0)}
+                    className="flex items-center gap-2"
+                  >
+                    {marksSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    {marksSending ? 'Sending…' : `Send WhatsApp${marksSummary?.valid ? ` (${marksSummary.valid})` : ''}`}
+                  </Button>
+
+                  {/* Result */}
+                  {marksResult && (
+                    <div className="rounded-lg border p-4 space-y-2 text-sm">
+                      <p className="font-medium">{marksResult.sent} sent · {marksResult.failed} failed</p>
+                      {marksResult.results?.filter((x) => !x.ok).slice(0, 20).map((x, i) => (
+                        <p key={i} className="text-xs text-rose-600">
+                          {x.studentName} ({x.mobileNumber}): {x.error || 'failed'}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              <Card className="border-border/50">
+                <CardHeader>
+                  <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">How it works</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground space-y-2">
+                  <p>1. Download the template and fill one row per student.</p>
+                  <p>2. Columns after <span className="font-mono text-xs">Mobile Number</span> are treated as subjects; <span className="font-mono text-xs">Total</span> is optional (auto-summed if blank).</p>
+                  <p>3. Upload to preview and validate rows.</p>
+                  <p>4. Send — each student's marks go to their mobile via WhatsApp.</p>
+                  <p className="pt-2">• Sent via Meta Cloud API using the <code className="text-xs font-mono bg-muted px-1 rounded">student_marks</code> template (must be approved in Meta).</p>
                   <p>• Configure credentials in <button onClick={() => navigate('/admin/settings?tab=whatsapp')} className="text-primary hover:underline">Settings → WhatsApp</button></p>
                 </CardContent>
               </Card>
