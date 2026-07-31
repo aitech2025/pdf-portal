@@ -8,11 +8,11 @@ import { PERMISSIONS } from "../lib/permissions.js";
 import { env } from "../config/env.js";
 import { sendWhatsAppTemplate } from "../services/whatsappCloudApi.js";
 
-// xlsx (SheetJS) is CJS — load via createRequire so it works under Node ESM and Vite SSR (vitest).
+// xlsx (SheetJS) is CJS - load via createRequire so it works under Node ESM and Vite SSR (vitest).
 const nodeRequire = createRequire(import.meta.url);
 const XLSX = nodeRequire("xlsx") as typeof import("xlsx");
 
-// ─── Column normalisation ────────────────────────────────────────────────────
+// Column normalisation
 // Everything that is NOT one of these reserved columns is treated as a subject.
 const NAME_KEYS = ["student name", "name", "student", "student_name"];
 const MOBILE_KEYS = ["mobile number", "mobile", "phone", "mobile_number", "phone number", "contact"];
@@ -68,21 +68,14 @@ const parseSheet = (buffer: Buffer): MarksRow[] => {
   }).filter((r) => r.studentName || r.mobileNumber || r.subjects.length); // drop fully-empty rows
 };
 
-// ─── Message composition ─────────────────────────────────────────────────────
-const DEFAULT_TEMPLATE =
-  "Dear Student/Parent,\nMarks for {name}:\n{marks}\nTotal: {total}\n— i-icon Academy";
-
-const composeMessage = (row: MarksRow, template?: string): string => {
+// WhatsApp template parameters
+export const buildMarksTemplateParams = (row: MarksRow): string[] => {
   const marksLines = row.subjects.map((s) => `${s.subject}: ${s.marks}`).join("\n");
-  const tpl = template && template.trim() ? template : DEFAULT_TEMPLATE;
-  return tpl
-    .replace(/\{name\}/g, row.studentName)
-    .replace(/\{marks\}/g, marksLines)
-    .replace(/\{total\}/g, row.total || "—");
+  return [row.studentName, marksLines, row.total || "-"];
 };
 
 export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promise<void> => {
-  // ─── Download the blank Excel template ─────────────────────────────────────
+  // Download the blank Excel template
   app.get(
     "/api/broadcast/marks/template",
     { preHandler: requirePermission(PERMISSIONS.NOTIFICATION_SEND) },
@@ -105,7 +98,7 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
     }
   );
 
-  // ─── Upload + parse an Excel file, return normalised rows for preview ───────
+  // Upload + parse an Excel file, return normalised rows for preview
   app.post(
     "/api/broadcast/marks/preview",
     { preHandler: requirePermission(PERMISSIONS.NOTIFICATION_SEND) },
@@ -131,7 +124,7 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
     }
   );
 
-  // ─── Send WhatsApp marks messages to the provided rows ─────────────────────
+  // Send WhatsApp marks messages to the provided rows
   app.post(
     "/api/broadcast/marks/send",
     { preHandler: requirePermission(PERMISSIONS.NOTIFICATION_SEND) },
@@ -141,6 +134,7 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
 
       const body = z
         .object({
+          // Accepted for older mobile builds; Meta template wording is approved separately.
           messageTemplate: z.string().optional(),
           rows: z
             .array(
@@ -175,9 +169,7 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
           results.push({ studentName: row.studentName, mobileNumber: row.mobileNumber, ok: false, error: "Invalid name or mobile number" });
           continue;
         }
-
-        const message = composeMessage(row, body.messageTemplate);
-        const res = await sendWhatsAppTemplate(row.mobileNumber, env.WHATSAPP_MARKS_TEMPLATE, [message]);
+        const res = await sendWhatsAppTemplate(row.mobileNumber, env.WHATSAPP_MARKS_TEMPLATE, buildMarksTemplateParams(row));
         if (res.ok) sent += 1;
         else failed += 1;
         results.push({ studentName: row.studentName, mobileNumber: row.mobileNumber, ok: res.ok, error: res.error });
@@ -195,3 +187,4 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
     }
   );
 };
+
