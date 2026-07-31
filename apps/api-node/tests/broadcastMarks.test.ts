@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildMarksTemplateParams } from "../src/routes/broadcastMarks.js";
 
 describe("buildMarksTemplateParams", () => {
-  it("builds the three body params expected by the student_marks template", () => {
+  it("builds the three body params expected by the student_marks_v2 template", () => {
     const params = buildMarksTemplateParams({
       studentName: "Ravi Kumar",
       mobileNumber: "9550432743",

@@ -737,7 +737,7 @@ const BulkNotificationPage = () => {
                   <p>2. Columns after <span className="font-mono text-xs">Mobile Number</span> are treated as subjects; <span className="font-mono text-xs">Total</span> is optional (auto-summed if blank).</p>
                   <p>3. Upload to preview and validate rows.</p>
                   <p>4. Send — each student's marks go to their mobile via WhatsApp.</p>
-                  <p className="pt-2">• Sent via Meta Cloud API using the <code className="text-xs font-mono bg-muted px-1 rounded">student_marks</code> template (must be approved in Meta).</p>
+                  <p className="pt-2">• Sent via Meta Cloud API using the <code className="text-xs font-mono bg-muted px-1 rounded">student_marks_v2</code> template (must be approved in Meta).</p>
                   <p>• Configure credentials in <button onClick={() => navigate('/admin/settings?tab=whatsapp')} className="text-primary hover:underline">Settings → WhatsApp</button></p>
                 </CardContent>
               </Card>

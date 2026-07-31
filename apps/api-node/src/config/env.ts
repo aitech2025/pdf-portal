@@ -42,7 +42,7 @@ const EnvSchema = z.object({
   // Pre-approved template name for admin broadcast messages
   WHATSAPP_BROADCAST_TEMPLATE: z.string().default("broadcast_announcement"),
   // Pre-approved template for student marks broadcasts ({{1}} = name, {{2}} = marks, {{3}} = total)
-  WHATSAPP_MARKS_TEMPLATE: z.string().default("student_marks")
+  WHATSAPP_MARKS_TEMPLATE: z.string().default("student_marks_v2")
 });
 
 export const env = EnvSchema.parse(process.env);
