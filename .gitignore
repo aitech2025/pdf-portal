@@ -41,6 +41,7 @@ apps/web/android/app/release/
 *.aab
 *.keystore
 *.jks
+google-service-account.json
 
 # iOS
 apps/web/ios/App/Pods/

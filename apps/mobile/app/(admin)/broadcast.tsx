@@ -13,7 +13,7 @@ import Constants from 'expo-constants';
 import { schoolsApi, notificationsApi } from '@shared/api/index.js';
 
 const DEFAULT_MARKS_MESSAGE =
-    'Dear Student/Parent,\nMarks for {name}:\n{marks}\nTotal: {total}\n— i-icon Academy';
+    'Dear Parent,\nYour child {name} appeared for {program}.\nCheck results below:\n\n{marks}\n\nTotal: {total}\n\nI-icon academy';
 
 /* Design tokens mirrored from apps/web (index.css / tailwind.config.js) */
 const BRAND = '#5b5ff1';
@@ -338,7 +338,8 @@ export default function BroadcastScreen() {
                                     <View key={i} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: CARD_BORDER }}>
                                         <View style={{ flex: 1, paddingRight: 8 }}>
                                             <Text style={{ fontSize: 14, fontWeight: '600', color: FG }} numberOfLines={1}>{r.studentName || '—'}</Text>
-                                            <Text style={{ fontSize: 11, color: MUTED_FG }} numberOfLines={1}>{r.mobileNumber || '—'}  ·  Total: {r.total || '—'}</Text>
+                                            <Text style={{ fontSize: 10, color: MUTED_FG }} numberOfLines={1}>{r.programName || '—'}</Text>
+                                            <Text style={{ fontSize: 11, color: MUTED_FG, marginTop: 2 }} numberOfLines={1}>{(r.subjects || []).map((s) => `${s.subject}: ${s.obtained}/${s.outOf}`).join(', ') || '—'}</Text>
                                         </View>
                                         <Ionicons name={r.valid ? 'checkmark-circle' : 'close-circle'} size={20} color={r.valid ? SUCCESS : '#ef4444'} />
                                     </View>
@@ -355,7 +356,7 @@ export default function BroadcastScreen() {
                                 value={marksMessage}
                                 onChangeText={setMarksMessage}
                             />
-                            <Text style={{ fontSize: 11, color: MUTED_FG, marginTop: 8 }}>Placeholders: {'{name}'}, {'{marks}'}, {'{total}'}. Sent via the approved <Text style={{ fontWeight: '600' }}>student_marks_v2</Text> WhatsApp template.</Text>
+                            <Text style={{ fontSize: 11, color: MUTED_FG, marginTop: 8 }}>Placeholders: {'{name}'}, {'{program}'}, {'{marks}'}, {'{total}'}. Sent via the approved <Text style={{ fontWeight: '600' }}>student_marks_v2</Text> WhatsApp template.</Text>
                             <TouchableOpacity
                                 disabled={marksBusy || !(marksSummary?.valid ?? 0)}
                                 onPress={sendMarks}

@@ -8,24 +8,25 @@ import { PERMISSIONS } from "../lib/permissions.js";
 import { env } from "../config/env.js";
 import { sendWhatsAppTemplate } from "../services/whatsappCloudApi.js";
 
-// xlsx (SheetJS) is CJS - load via createRequire so it works under Node ESM and Vite SSR (vitest).
+// xlsx (SheetJS) is CJS — load via createRequire so it works under Node ESM and Vite SSR (vitest).
 const nodeRequire = createRequire(import.meta.url);
 const XLSX = nodeRequire("xlsx") as typeof import("xlsx");
 
-// Column normalisation
-// Everything that is NOT one of these reserved columns is treated as a subject.
+// ─── Column normalisation ────────────────────────────────────────────────────
 const NAME_KEYS = ["student name", "name", "student", "student_name"];
 const MOBILE_KEYS = ["mobile number", "mobile", "phone", "mobile_number", "phone number", "contact"];
-const TOTAL_KEYS = ["total", "total marks", "grand total"];
+const PROGRAM_KEYS = ["program name", "program", "test name", "exam name"];
+const TOTAL_KEYS = ["grand total", "total", "total marks"];
 
 const norm = (s: string): string => s.trim().toLowerCase();
 
-interface Subject { subject: string; marks: string }
+interface SubjectResult { subject: string; obtained: string; outOf: string }
 interface MarksRow {
   studentName: string;
   mobileNumber: string;
-  subjects: Subject[];
-  total: string;
+  programName: string;
+  subjects: SubjectResult[];
+  grandTotal: string;
   valid: boolean;
   error?: string;
 }
@@ -40,63 +41,79 @@ const parseSheet = (buffer: Buffer): MarksRow[] => {
   return json.map((raw) => {
     let studentName = "";
     let mobileNumber = "";
-    let total = "";
-    const subjects: Subject[] = [];
+    let programName = "";
+    let grandTotal = "";
+    const subjectPairs = new Map<string, { obtained: string; outOf: string }>();
 
+    // First pass: identify reserved columns and subject pairs.
     for (const [key, value] of Object.entries(raw)) {
       const k = norm(key);
       const v = value === null || value === undefined ? "" : String(value).trim();
       if (NAME_KEYS.includes(k)) studentName = v;
       else if (MOBILE_KEYS.includes(k)) mobileNumber = v;
-      else if (TOTAL_KEYS.includes(k)) total = v;
-      else if (v !== "") subjects.push({ subject: key.trim(), marks: v });
+      else if (PROGRAM_KEYS.includes(k)) programName = v;
+      else if (TOTAL_KEYS.includes(k)) grandTotal = v;
     }
 
-    // Auto-compute total from subject marks when the column is blank.
-    if (!total && subjects.length) {
-      const sum = subjects.reduce((acc, s) => acc + (Number(s.marks) || 0), 0);
-      if (sum > 0) total = String(sum);
+    // Second pass: match "X Marks" / "X Out Of" pairs to build subject list.
+    const columnNames = Object.keys(raw);
+    for (let i = 0; i < columnNames.length; i++) {
+      const col = columnNames[i];
+      const colNorm = norm(col);
+      if (colNorm.endsWith(" marks") || colNorm.endsWith("_marks")) {
+        const subjName = colNorm.replace(/ marks$|_marks$/, "").replace(/_/g, " ").trim();
+        const obtained = raw[col] === null || raw[col] === undefined ? "" : String(raw[col]).trim();
+        // Look for a corresponding "X Out Of" or "X Total" column.
+        let outOf = "";
+        for (const col2 of columnNames) {
+          const col2Norm = norm(col2);
+          const subj2 = col2Norm.replace(/ out of$|_out of$|_out_of$| total$|_total$/, "").replace(/_/g, " ").trim();
+          if ((col2Norm.endsWith(" out of") || col2Norm.endsWith("_out of") || col2Norm.endsWith("_out_of") || col2Norm.endsWith(" total") || col2Norm.endsWith("_total")) && subj2 === subjName) {
+            outOf = raw[col2] === null || raw[col2] === undefined ? "" : String(raw[col2]).trim();
+            break;
+          }
+        }
+        if (obtained) subjectPairs.set(subjName, { obtained, outOf: outOf || "?" });
+      }
     }
 
+    // Convert pairs to sorted subject list.
+    const subjects: SubjectResult[] = Array.from(subjectPairs.entries())
+      .map(([subj, { obtained, outOf }]) => ({ subject: subj, obtained, outOf }));
+
+    // Validate the row.
     const digits = mobileNumber.replace(/\D/g, "");
     let error: string | undefined;
     if (!studentName) error = "Missing student name";
+    else if (!programName) error = "Missing program name";
     else if (digits.length < 10) error = "Invalid or missing mobile number";
     else if (subjects.length === 0) error = "No subject marks found";
 
-    return { studentName, mobileNumber, subjects, total, valid: !error, error };
-  }).filter((r) => r.studentName || r.mobileNumber || r.subjects.length); // drop fully-empty rows
+    return { studentName, mobileNumber, programName, subjects, grandTotal, valid: !error, error };
+  }).filter((r) => r.studentName || r.mobileNumber || r.subjects.length);
 };
 
-const sanitizeTemplateParam = (value: string): string =>
-  value.replace(/[\r\n\t]+/g, " ").replace(/ {5,}/g, "    ").trim();
-
-// WhatsApp template parameters. Keep each parameter single-line; Meta rejects
-// newlines/tabs inside template parameter values with error #132018.
-export const buildMarksTemplateParams = (row: MarksRow): string[] => {
-  const marksText = row.subjects
-    .map((s) => `${sanitizeTemplateParam(s.subject)}: ${sanitizeTemplateParam(s.marks)}`)
-    .join(", ");
-  return [
-    sanitizeTemplateParam(row.studentName),
-    marksText || "-",
-    sanitizeTemplateParam(row.total || "-")
-  ];
-};
+// Sanitize for Meta WhatsApp template parameters (no newlines, no multiple spaces).
+const sanitizeParam = (value: string): string =>
+  value.replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
 
 export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promise<void> => {
-  // Download the blank Excel template
+  // ─── Download the blank Excel template ─────────────────────────────────────
   app.get(
     "/api/broadcast/marks/template",
     { preHandler: requirePermission(PERMISSIONS.NOTIFICATION_SEND) },
     async (_request, reply) => {
       const rows = [
-        ["Student Name", "Mobile Number", "Maths", "Science", "English", "Total"],
-        ["Ravi Kumar", "9876543210", 88, 91, 79, 258],
-        ["Priya S", "9876500011", 95, 84, 90, 269]
+        ["Student Name", "Mobile Number", "Program Name", "Maths Marks", "Maths Out Of", "Physics Marks", "Physics Out Of", "Chemistry Marks", "Chemistry Out Of", "Grand Total"],
+        ["Ravi Kumar", "9876543210", "IIT Weekly Test 1", 88, 30, 91, 20, 79, 20, 258],
+        ["Priya S", "9876500011", "IIT Weekly Test 1", 95, 30, 84, 20, 90, 20, 269]
       ];
       const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws["!cols"] = [{ wch: 22 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
+      ws["!cols"] = [
+        { wch: 20 }, { wch: 16 }, { wch: 22 },
+        { wch: 14 }, { wch: 12 }, { wch: 15 }, { wch: 12 },
+        { wch: 17 }, { wch: 12 }, { wch: 12 }
+      ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Marks");
       const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
@@ -108,7 +125,7 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
     }
   );
 
-  // Upload + parse an Excel file, return normalised rows for preview
+  // ─── Upload + parse an Excel file, return normalised rows for preview ───────
   app.post(
     "/api/broadcast/marks/preview",
     { preHandler: requirePermission(PERMISSIONS.NOTIFICATION_SEND) },
@@ -134,7 +151,7 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
     }
   );
 
-  // Send WhatsApp marks messages to the provided rows
+  // ─── Send WhatsApp marks messages to the provided rows ─────────────────────
   app.post(
     "/api/broadcast/marks/send",
     { preHandler: requirePermission(PERMISSIONS.NOTIFICATION_SEND) },
@@ -144,15 +161,14 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
 
       const body = z
         .object({
-          // Accepted for older mobile builds; Meta template wording is approved separately.
-          messageTemplate: z.string().optional(),
           rows: z
             .array(
               z.object({
                 studentName: z.string(),
                 mobileNumber: z.string(),
-                subjects: z.array(z.object({ subject: z.string(), marks: z.union([z.string(), z.number()]) })).default([]),
-                total: z.union([z.string(), z.number()]).optional()
+                programName: z.string(),
+                subjects: z.array(z.object({ subject: z.string(), obtained: z.union([z.string(), z.number()]), outOf: z.union([z.string(), z.number()]) })).default([]),
+                grandTotal: z.union([z.string(), z.number()]).optional()
               })
             )
             .min(1)
@@ -168,18 +184,29 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
         const row: MarksRow = {
           studentName: r.studentName,
           mobileNumber: r.mobileNumber,
-          subjects: r.subjects.map((s) => ({ subject: s.subject, marks: String(s.marks) })),
-          total: r.total !== undefined ? String(r.total) : "",
+          programName: r.programName,
+          subjects: r.subjects.map((s) => ({ subject: s.subject, obtained: String(s.obtained), outOf: String(s.outOf) })),
+          grandTotal: r.grandTotal !== undefined ? String(r.grandTotal) : "",
           valid: true
         };
 
         const digits = row.mobileNumber.replace(/\D/g, "");
-        if (!row.studentName || digits.length < 10) {
+        if (!row.studentName || !row.programName || digits.length < 10) {
           failed += 1;
-          results.push({ studentName: row.studentName, mobileNumber: row.mobileNumber, ok: false, error: "Invalid name or mobile number" });
+          results.push({ studentName: row.studentName, mobileNumber: row.mobileNumber, ok: false, error: "Invalid name, program, or mobile number" });
           continue;
         }
-        const res = await sendWhatsAppTemplate(row.mobileNumber, env.WHATSAPP_MARKS_TEMPLATE, buildMarksTemplateParams(row));
+
+        // Build WhatsApp template parameters.
+        // Send 4 params: {{1}}=student_name, {{2}}=program_name, {{3}}=results, {{4}}=total
+        const studentParam = sanitizeParam(row.studentName);
+        const programParam = sanitizeParam(row.programName);
+        // Multi-line subject results (newline-separated)
+        const subjectResults = row.subjects.map((s) => `${sanitizeParam(s.subject)}: ${sanitizeParam(s.obtained)} / ${sanitizeParam(s.outOf)}`).join("\n");
+        const totalParam = `${sanitizeParam(row.grandTotal || "0")} / ${row.subjects.reduce((sum, s) => sum + (Number(s.outOf) || 0), 0)}`;
+
+        const params = [studentParam, programParam, subjectResults, totalParam];
+        const res = await sendWhatsAppTemplate(row.mobileNumber, env.WHATSAPP_MARKS_TEMPLATE, params);
         if (res.ok) sent += 1;
         else failed += 1;
         results.push({ studentName: row.studentName, mobileNumber: row.mobileNumber, ok: res.ok, error: res.error });
@@ -197,4 +224,3 @@ export const registerBroadcastMarksRoutes = async (app: FastifyInstance): Promis
     }
   );
 };
-

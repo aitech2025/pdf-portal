@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "i-icon academy",
+    "name": "iicon academy",
     "slug": "educontent",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -29,9 +29,11 @@
       "package": "com.iiconacademy.app",
       "versionCode": 1,
       "permissions": [
-        "INTERNET",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "android.permission.INTERNET",              
+        "android.permission.READ_EXTERNAL_STORAGE", 
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",                
+        "android.permission.ACCESS_NETWORK_STATE"   
       ]
     },
     "plugins": [

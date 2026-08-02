@@ -89,7 +89,7 @@ const WHATSAPP_TEMPLATES = [
 ];
 
 const DEFAULT_MARKS_MESSAGE =
-  'Dear Student/Parent,\nMarks for {name}:\n{marks}\nTotal: {total}\n— i-icon Academy';
+  'Dear Parent,\nYour child {name} appeared for {program}.\nCheck results below:\n\n{marks}\n\nTotal: {total}\n\nI-icon academy';
 
 const BulkNotificationPage = () => {
   const navigate = useNavigate();
@@ -658,8 +658,8 @@ const BulkNotificationPage = () => {
                             <thead className="bg-muted/50 sticky top-0">
                               <tr className="text-left">
                                 <th className="px-3 py-2 font-medium">Student</th>
-                                <th className="px-3 py-2 font-medium">Mobile</th>
-                                <th className="px-3 py-2 font-medium">Marks</th>
+                                <th className="px-3 py-2 font-medium">Program</th>
+                                <th className="px-3 py-2 font-medium">Subjects</th>
                                 <th className="px-3 py-2 font-medium">Total</th>
                                 <th className="px-3 py-2 font-medium">Status</th>
                               </tr>
@@ -668,11 +668,11 @@ const BulkNotificationPage = () => {
                               {marksRows.map((r, i) => (
                                 <tr key={i} className={cn('border-t', !r.valid && 'bg-rose-50/60')}>
                                   <td className="px-3 py-2">{r.studentName || '—'}</td>
-                                  <td className="px-3 py-2 font-mono text-xs">{r.mobileNumber || '—'}</td>
+                                  <td className="px-3 py-2 text-xs text-muted-foreground">{r.programName || '—'}</td>
                                   <td className="px-3 py-2 text-xs text-muted-foreground">
-                                    {(r.subjects || []).map((s) => `${s.subject}: ${s.marks}`).join(', ') || '—'}
+                                    {(r.subjects || []).map((s) => `${s.subject}: ${s.obtained}/${s.outOf}`).join(', ') || '—'}
                                   </td>
-                                  <td className="px-3 py-2">{r.total || '—'}</td>
+                                  <td className="px-3 py-2">{r.grandTotal || '—'}</td>
                                   <td className="px-3 py-2">
                                     {r.valid
                                       ? <span className="inline-flex items-center gap-1 text-emerald-600 text-xs"><CheckCircle2 className="w-3.5 h-3.5" /> Ready</span>
@@ -698,6 +698,7 @@ const BulkNotificationPage = () => {
                     />
                     <p className="text-xs text-muted-foreground">
                       Placeholders: <Badge variant="secondary" className="text-xs font-mono">{'{name}'}</Badge>{' '}
+                      <Badge variant="secondary" className="text-xs font-mono">{'{program}'}</Badge>{' '}
                       <Badge variant="secondary" className="text-xs font-mono">{'{marks}'}</Badge>{' '}
                       <Badge variant="secondary" className="text-xs font-mono">{'{total}'}</Badge>
                     </p>
