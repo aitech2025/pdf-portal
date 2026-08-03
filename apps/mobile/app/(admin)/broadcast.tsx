@@ -356,7 +356,7 @@ export default function BroadcastScreen() {
                                 value={marksMessage}
                                 onChangeText={setMarksMessage}
                             />
-                            <Text style={{ fontSize: 11, color: MUTED_FG, marginTop: 8 }}>Placeholders: {'{name}'}, {'{program}'}, {'{marks}'}, {'{total}'}. Sent via the approved <Text style={{ fontWeight: '600' }}>student_marks_v2</Text> WhatsApp template.</Text>
+                            <Text style={{ fontSize: 11, color: MUTED_FG, marginTop: 8 }}>Placeholders: {'{name}'}, {'{program}'}, {'{marks}'}, {'{total}'}. Sent via the approved <Text style={{ fontWeight: '600' }}>student_marks_v3</Text> WhatsApp template.</Text>
                             <TouchableOpacity
                                 disabled={marksBusy || !(marksSummary?.valid ?? 0)}
                                 onPress={sendMarks}
