@@ -658,6 +658,7 @@ const BulkNotificationPage = () => {
                             <thead className="bg-muted/50 sticky top-0">
                               <tr className="text-left">
                                 <th className="px-3 py-2 font-medium">Student</th>
+                                <th className="px-3 py-2 font-medium">Class</th>
                                 <th className="px-3 py-2 font-medium">Program</th>
                                 <th className="px-3 py-2 font-medium">Subjects</th>
                                 <th className="px-3 py-2 font-medium">Total</th>
@@ -668,6 +669,7 @@ const BulkNotificationPage = () => {
                               {marksRows.map((r, i) => (
                                 <tr key={i} className={cn('border-t', !r.valid && 'bg-rose-50/60')}>
                                   <td className="px-3 py-2">{r.studentName || '—'}</td>
+                                  <td className="px-3 py-2 text-xs text-muted-foreground">{r.className || '—'}</td>
                                   <td className="px-3 py-2 text-xs text-muted-foreground">{r.programName || '—'}</td>
                                   <td className="px-3 py-2 text-xs text-muted-foreground">
                                     {(r.subjects || []).map((s) => `${s.subject}: ${s.obtained}/${s.outOf}`).join(', ') || '—'}
@@ -734,11 +736,11 @@ const BulkNotificationPage = () => {
                   <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">How it works</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground space-y-2">
-                  <p>1. Download the template and fill one row per student.</p>
-                  <p>2. Columns after <span className="font-mono text-xs">Mobile Number</span> are treated as subjects; <span className="font-mono text-xs">Total</span> is optional (auto-summed if blank).</p>
+                  <p>1. Download the template and fill one row per student, including the <span className="font-mono text-xs">Class</span> column.</p>
+                  <p>2. Add as many subject columns as you need (e.g. <span className="font-mono text-xs">English Marks</span> / <span className="font-mono text-xs">English Out Of</span>); <span className="font-mono text-xs">Grand Total</span> is optional (auto-summed if blank).</p>
                   <p>3. Upload to preview and validate rows.</p>
                   <p>4. Send — each student's marks go to their mobile via WhatsApp.</p>
-                  <p className="pt-2">• Sent via Meta Cloud API using the <code className="text-xs font-mono bg-muted px-1 rounded">student_marks_v2</code> template (must be approved in Meta).</p>
+                  <p className="pt-2">• Sent via Meta Cloud API using the <code className="text-xs font-mono bg-muted px-1 rounded">student_marks_v3</code> template (must be approved in Meta with a placeholder for class).</p>
                   <p>• Configure credentials in <button onClick={() => navigate('/admin/settings?tab=whatsapp')} className="text-primary hover:underline">Settings → WhatsApp</button></p>
                 </CardContent>
               </Card>
