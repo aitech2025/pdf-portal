@@ -1,10 +1,18 @@
 
 import React, { useRef, useState } from 'react';
 import { UploadCloud, FileText, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
-const FileUploadZone = ({ onFileSelect, accept = ".pdf", maxFiles = 10, multiple = true, disabled = false }) => {
+const ARCHIVE_EXTENSIONS = ['.zip', '.rar', '.7z'];
+const ARCHIVE_MIME_TYPES = [
+  'application/zip', 'application/x-zip-compressed',
+  'application/vnd.rar', 'application/x-rar-compressed', 'application/x-rar',
+  'application/x-7z-compressed'
+];
+
+const FileUploadZone = ({ onFileSelect, accept = ".pdf", maxFiles = 10, multiple = true, disabled = false, disabledHint = null }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -20,8 +28,11 @@ const FileUploadZone = ({ onFileSelect, accept = ".pdf", maxFiles = 10, multiple
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    if (disabled) return;
-    
+    if (disabled) {
+      if (disabledHint) toast.error(disabledHint);
+      return;
+    }
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFiles(Array.from(e.dataTransfer.files));
     }
@@ -38,15 +49,19 @@ const FileUploadZone = ({ onFileSelect, accept = ".pdf", maxFiles = 10, multiple
     const acceptsZip = accept.includes('.zip') || accept.includes('zip');
     const validFiles = files.filter(f => {
       const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
-      const isZip = f.type === 'application/zip' || f.type === 'application/x-zip-compressed'
-        || f.name.toLowerCase().endsWith('.zip');
+      const lowerName = f.name.toLowerCase();
+      const isArchive = ARCHIVE_MIME_TYPES.includes(f.type) || ARCHIVE_EXTENSIONS.some(ext => lowerName.endsWith(ext));
       if (accept === '.pdf') return isPdf;
-      if (acceptsZip) return isPdf || isZip;
+      if (acceptsZip) return isPdf || isArchive;
       return true;
     }).slice(0, maxFiles);
 
     if (validFiles.length > 0) {
       onFileSelect(validFiles);
+    } else if (files.length > 0) {
+      // Never fail silently — every selection must produce visible feedback.
+      const names = files.map(f => f.name).join(', ');
+      toast.error(`Unsupported file type. Accepted: ${accept} — got ${names}`);
     }
   };
 
@@ -60,7 +75,13 @@ const FileUploadZone = ({ onFileSelect, accept = ".pdf", maxFiles = 10, multiple
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onClick={() => !disabled && fileInputRef.current?.click()}
+      onClick={() => {
+        if (disabled) {
+          if (disabledHint) toast.error(disabledHint);
+          return;
+        }
+        fileInputRef.current?.click();
+      }}
     >
       <input
         type="file"
@@ -78,7 +99,7 @@ const FileUploadZone = ({ onFileSelect, accept = ".pdf", maxFiles = 10, multiple
         {isDragging ? "Drop files here" : "Click or drag files to upload"}
       </h3>
       <p className="text-sm text-muted-foreground text-center max-w-sm">
-        Supports {accept} files. Max {maxFiles} files per batch.
+        {disabled && disabledHint ? disabledHint : `Supports ${accept} files. Max ${maxFiles} files per batch.`}
       </p>
     </div>
   );

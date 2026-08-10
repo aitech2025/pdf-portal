@@ -241,6 +241,42 @@ class ApiClient {
         return this.fetch("/pdfs", "POST", formData);
     }
 
+    /** Upload a new PDF/archive via multipart form, reporting real byte-level progress (0-1). */
+    async uploadPdfWithProgress(formData, onProgress) {
+        if (!formData.has("file") && formData.has("pdfFile")) {
+            const f = formData.get("pdfFile");
+            formData.append("file", f);
+        }
+        const send = () => new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", `${API_BASE}/pdfs`);
+            if (this.authStore.token) xhr.setRequestHeader("Authorization", `Bearer ${this.authStore.token}`);
+            xhr.upload.onprogress = (e) => {
+                if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total);
+            };
+            xhr.onload = () => {
+                let data = null;
+                try { data = JSON.parse(xhr.responseText); } catch { /* empty/non-JSON body */ }
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve(data);
+                } else {
+                    reject(new ApiError(xhr.status, data?.detail || data?.message || xhr.statusText || "Upload failed", data));
+                }
+            };
+            xhr.onerror = () => reject(new ApiError(0, "Network error during upload", null));
+            xhr.send(formData);
+        });
+
+        try {
+            return await send();
+        } catch (error) {
+            if (error?.status !== 401 || !this.authStore.refreshToken) throw error;
+            const refreshed = await this.refreshToken();
+            if (!refreshed) throw error;
+            return send();
+        }
+    }
+
     /** Authenticated fetch shorthand */
     async fetch(path, method = "GET", body = null, params = null) {
         try {

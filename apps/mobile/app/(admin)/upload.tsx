@@ -94,7 +94,12 @@ export default function UploadScreen() {
     const handlePickFile = async () => {
         try {
             const result = await DocumentPicker.getDocumentAsync({
-                type: ['application/pdf', 'application/zip', 'application/x-zip-compressed'],
+                type: [
+                    'application/pdf',
+                    'application/zip', 'application/x-zip-compressed',
+                    'application/vnd.rar', 'application/x-rar-compressed', 'application/x-rar',
+                    'application/x-7z-compressed'
+                ],
                 copyToCacheDirectory: true,
             });
             if (result.canceled) return;
@@ -107,7 +112,7 @@ export default function UploadScreen() {
                 size: asset.size,
             });
             // Pre-fill the (optional) display name with the file's base name.
-            setForm(p => ({ ...p, fileName: asset.name.replace(/\.(pdf|zip)$/i, '') }));
+            setForm(p => ({ ...p, fileName: asset.name.replace(/\.(pdf|zip|rar|7z)$/i, '') }));
         } catch (err: any) {
             Alert.alert('Error', err.message ?? 'Failed to pick file.');
         }
@@ -233,7 +238,7 @@ export default function UploadScreen() {
                                         <Ionicons name="cloud-upload-outline" size={24} color={BRAND} />
                                     </View>
                                     <Text style={{ fontSize: 14, fontWeight: '600', color: FG }}>Tap to select file</Text>
-                                    <Text style={{ fontSize: 12, color: MUTED_FG, marginTop: 4 }}>PDF or ZIP files</Text>
+                                    <Text style={{ fontSize: 12, color: MUTED_FG, marginTop: 4 }}>PDF, ZIP, RAR or 7Z files</Text>
                                 </>
                             )}
                         </TouchableOpacity>

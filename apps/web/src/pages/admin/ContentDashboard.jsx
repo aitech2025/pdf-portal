@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import pb from '@/lib/apiClient';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,13 +10,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   FileText, BookOpen, FolderTree, UploadCloud, ArrowRight, HardDrive, BarChart3,
-  Eye, GraduationCap, Search
+  Eye, GraduationCap, Search, Trash2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '@/components/PageTransition.jsx';
 import { Skeleton } from '@/components/ui/skeleton';
 import EnhancedPDFViewer from '@/components/EnhancedPDFViewer.jsx';
 import VersionHistoryModal from '@/components/admin/pdfs/VersionHistoryModal.jsx';
+import ConfirmationModal from '@/components/ConfirmationModal.jsx';
 import PaginationControls from '@/components/PaginationControls.jsx';
 import { formatBytes, cn, getPdfCode } from '@/lib/utils';
 
@@ -43,6 +45,8 @@ const ContentDashboard = () => {
   // Viewer / modal state
   const [selectedPdf, setSelectedPdf] = useState(null);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [pdfToDelete, setPdfToDelete] = useState(null);
 
   // Filters
   const [searchInput, setSearchInput] = useState('');   // raw input
@@ -110,6 +114,20 @@ const ContentDashboard = () => {
   useEffect(() => {
     fetchPdfs();
   }, [fetchPdfs]);
+
+  const confirmDelete = async () => {
+    if (!pdfToDelete) return;
+    try {
+      await pb.fetch(`/pdfs/${pdfToDelete}`, 'DELETE');
+      toast.success('File deleted');
+      if (selectedPdf?.id === pdfToDelete) setSelectedPdf(null);
+      fetchPdfs();
+    } catch {
+      toast.error('Failed to delete file');
+    } finally {
+      setPdfToDelete(null);
+    }
+  };
 
   // Change a filter and reset page to 1
   const changeFilter = (setter) => (value) => {
@@ -295,7 +313,7 @@ const ContentDashboard = () => {
                       {!selectedPdf && <TableHead className="hidden sm:table-cell">Class</TableHead>}
                       {!selectedPdf && <TableHead className="hidden md:table-cell">Subject</TableHead>}
                       {!selectedPdf && <TableHead className="hidden lg:table-cell">Program</TableHead>}
-                      <TableHead className="w-16 text-center">View</TableHead>
+                      <TableHead className="w-24 text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -371,15 +389,26 @@ const ContentDashboard = () => {
                             </TableCell>
                           )}
                           <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                            <Button
-                              variant={isSelected ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7"
-                              title="View PDF"
-                              onClick={() => setSelectedPdf(isSelected ? null : pdf)}
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </Button>
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant={isSelected ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7"
+                                title="View PDF"
+                                onClick={() => setSelectedPdf(isSelected ? null : pdf)}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                title="Delete"
+                                onClick={() => { setPdfToDelete(pdf.id); setDeleteModalOpen(true); }}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -450,6 +479,16 @@ const ContentDashboard = () => {
         onClose={() => setHistoryModalOpen(false)}
         pdf={selectedPdf}
         onVersionChanged={fetchPdfs}
+      />
+
+      <ConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setPdfToDelete(null); }}
+        onConfirm={confirmDelete}
+        title="Delete Resource"
+        description="Permanently delete this file and all its versions? This cannot be undone."
+        confirmText="Delete"
+        isDestructive
       />
     </PageTransition>
   );

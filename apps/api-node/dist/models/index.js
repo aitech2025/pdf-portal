@@ -106,9 +106,12 @@ SubCategorySchema.index({ category_id: 1, sub_category_code: 1 }, { unique: true
 const PdfSchema = new Schema({
     id: { type: String, default: genId, unique: true, index: true },
     file_name: { type: String, required: true },
-    file_type: { type: String, default: "pdf" }, // "pdf" | "zip" — controls download Content-Type & preview handling
+    file_type: { type: String, default: "pdf" }, // "pdf" | "zip" | "rar" | "7z" — controls download Content-Type & preview handling
     file_path: { type: String, default: "" },
     file_data: Buffer,
+    // GridFS file id — used for all new uploads (Buffer above is legacy-only,
+    // kept for documents small enough to have been stored inline pre-migration).
+    file_data_id: { type: String, default: null },
     file_size: Number,
     category_id: { type: String, default: null, index: true },
     sub_category_id: { type: String, default: null, index: true },
@@ -142,6 +145,7 @@ const PdfVersionSchema = new Schema({
     version_number: { type: Number, required: true },
     file_path: { type: String, default: "" },
     file_data: Buffer,
+    file_data_id: { type: String, default: null },
     file_size: Number,
     uploaded_by: { type: String, required: true },
     version_notes: String,

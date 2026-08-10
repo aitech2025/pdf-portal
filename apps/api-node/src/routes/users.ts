@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { School, User } from "../models/index.js";
 import { hashPassword } from "../lib/auth.js";
+import { buildSchoolPassword } from "../lib/schools.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission, requireRole } from "../plugins/auth.js";
 import { PERMISSIONS, PLATFORM_ROLES } from "../lib/permissions.js";
@@ -245,16 +246,20 @@ export const registerUserRoutes = async (app: FastifyInstance): Promise<void> =>
       const params = z.object({ user_id: z.string() }).parse(request.params);
       const body = z
         .object({
-          new_password: z.string().min(6).optional(),
-          newPassword: z.string().min(6).optional(),
           sendVia: z.enum(["email", "whatsapp", "both", "manual"]).optional()
         })
         .parse(request.body ?? {});
 
       const user = await User.findOne({ id: params.user_id });
       if (!user) return reply.status(404).send({ detail: "User not found" });
+      if (!user.mobile_number) {
+        return reply.status(400).send({
+          detail: "User has no mobile number on file — add one before resetting to the standard password"
+        });
+      }
 
-      const newPassword = body.new_password ?? body.newPassword ?? genPassword();
+      // Reset password is always the standard password: "iicon" + last 4 digits of the mobile number.
+      const newPassword = buildSchoolPassword(user.name, user.mobile_number);
       const password_hash = await hashPassword(newPassword);
       user.password_hash = password_hash;
       user.must_change_password = true;

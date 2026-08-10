@@ -187,16 +187,21 @@ const PDFUploadManagement = () => {
       return ext && !custom.toLowerCase().endsWith(ext.toLowerCase()) ? `${custom}${ext}` : custom;
     };
 
-    // Both PDFs and ZIPs are stored as content items via the same endpoint.
+    // Overall progress across the whole batch, blending per-file byte progress in.
+    const setFileProgress = (index, frac) => {
+      setUploadProgress(Math.floor(((index + frac) / files.length) * 100));
+    };
+
+    // Both PDFs and archives (zip/rar/7z) are stored as content items via the same endpoint.
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const isZip = file.name.toLowerCase().endsWith('.zip');
+      const isArchive = /\.(zip|rar|7z)$/i.test(file.name);
       try {
-        setUploadProgress(Math.floor((i / files.length) * 80) + 10);
+        setFileProgress(i, 0);
 
-        // Same-name → new version only applies to PDFs (zips are always new items).
+        // Same-name → new version only applies to PDFs (archives are always new items).
         let existingPdf = null;
-        if (!isZip) {
+        if (!isArchive) {
           const checkParams = new URLSearchParams({ categoryId: uploadProgram, classId: uploadClass });
           if (uploadSubject) checkParams.set('subjectId', uploadSubject);
           const existingRes = await apiFetch(`/api/pdfs?${checkParams}`);
@@ -207,6 +212,7 @@ const PDFUploadManagement = () => {
 
         if (existingPdf) {
           await uploadNewVersion(existingPdf.id, file, versionNotes, currentUser.id);
+          setFileProgress(i, 1);
           successCount++;
           if (i === files.length - 1) {
             const fullRecord = await apiFetch(`/api/pdfs/${existingPdf.id}`);
@@ -224,8 +230,10 @@ const PDFUploadManagement = () => {
           formData.append('versionNotes', versionNotes || 'Initial upload');
           formData.append('file', file);
 
-          const newRecord = await pb.uploadPdf(formData);
+          const newRecord = await pb.uploadPdfWithProgress(formData, frac => setFileProgress(i, frac));
+          setFileProgress(i, 1);
           successCount++;
+          toast.success(`${file.name} uploaded successfully`);
 
           if (i === files.length - 1) {
             const fullRecord = await apiFetch(`/api/pdfs/${newRecord.id}`);
@@ -234,7 +242,7 @@ const PDFUploadManagement = () => {
           }
         }
       } catch (err) {
-        toast.error(`Failed to process ${file.name}: ${err.message || 'Unknown error'}`);
+        toast.error(`Failed to upload ${file.name}: ${err.message || 'Unknown error'}`);
       }
     }
 
@@ -245,8 +253,10 @@ const PDFUploadManagement = () => {
       setVersionNotes('');
       setCustomFileName('');
       if (successCount > 0) {
-        toast.success(`Successfully processed ${successCount} file(s)`);
         fetchPdfs();
+      }
+      if (successCount < files.length) {
+        toast.error(`${files.length - successCount} of ${files.length} file(s) failed to upload`);
       }
     }, 500);
   };
@@ -416,14 +426,19 @@ const PDFUploadManagement = () => {
                 <div className="pt-1">
                   <FileUploadZone
                     onFileSelect={handleFileUpload}
-                    accept=".pdf,.zip"
+                    accept=".pdf,.zip,.rar,.7z"
                     disabled={uploading || !uploadProgram || !uploadClass}
+                    disabledHint={
+                      uploading
+                        ? 'Upload in progress…'
+                        : (!uploadProgram || !uploadClass) ? 'Select Program and Class above before uploading' : null
+                    }
                     maxFiles={20}
                     className="border-primary/50 bg-primary/5 hover:bg-primary/10 hover:border-primary"
                   />
                   {uploading && (
                     <div className="mt-4 p-4 rounded-lg bg-muted/50 border border-border/50 space-y-2">
-                      <ProgressIndicator value={uploadProgress} label="Processing files..." />
+                      <ProgressIndicator value={uploadProgress} label="Uploading…" />
                     </div>
                   )}
                 </div>

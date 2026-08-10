@@ -22,8 +22,11 @@ interface PDF {
     categoryId?: string; classId?: string; subjectId?: string;
 }
 
+const ARCHIVE_TYPES = ['zip', 'rar', '7z'];
 const isZipItem = (p: PDF) =>
-    p.fileType === 'zip' || (p.fileName || '').toLowerCase().endsWith('.zip');
+    (!!p.fileType && ARCHIVE_TYPES.includes(p.fileType)) || /\.(zip|rar|7z)$/i.test(p.fileName || '');
+const archiveExt = (p: PDF): string =>
+    (p.fileType && ARCHIVE_TYPES.includes(p.fileType)) ? p.fileType : ((p.fileName || '').toLowerCase().match(/\.(zip|rar|7z)$/)?.[1] ?? 'zip');
 interface Program { id: string; name: string; }
 interface ClassItem { classId: string; className: string; subjects: SubjectItem[]; }
 interface SubjectItem { subjectId: string; subjectName: string; }
@@ -136,10 +139,10 @@ export default function SchoolPortal() {
             setDownloadingId(item.id);
             const token = await SecureStore.getItemAsync('auth_token');
             if (!token) { Alert.alert('Session expired', 'Please login again.'); return; }
-            // Preserve the real extension: zips download as .zip, everything else .pdf.
+            // Preserve the real extension: archives download as .zip/.rar/.7z, everything else .pdf.
             const baseName = item.fileName || item.id;
-            const hasExt = /\.(pdf|zip)$/i.test(baseName);
-            const fileUri = `${FileSystem.documentDirectory}${hasExt ? baseName : `${baseName}.${isZipItem(item) ? 'zip' : 'pdf'}`}`;
+            const hasExt = /\.(pdf|zip|rar|7z)$/i.test(baseName);
+            const fileUri = `${FileSystem.documentDirectory}${hasExt ? baseName : `${baseName}.${isZipItem(item) ? archiveExt(item) : 'pdf'}`}`;
             const { uri } = await FileSystem.downloadAsync(
                 `${API_URL}/api/pdfs/${item.id}/download`,
                 fileUri,

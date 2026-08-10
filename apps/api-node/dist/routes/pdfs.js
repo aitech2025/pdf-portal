@@ -12,12 +12,28 @@ import { enrichPdfs } from "../lib/pdfEnrich.js";
 import { listResponse, serializeDoc } from "../lib/serialize.js";
 import { requireAuth, requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
+import { openReadStream, storeFile } from "../lib/fileStorage.js";
 // archiver is a CJS module; load via createRequire so it works under both Node ESM and Vite SSR (vitest)
 const nodeRequire = createRequire(import.meta.url);
 const archiver = nodeRequire("archiver");
 const watermarkHeaders = () => ({
     "X-Watermark-School": "iicon academy"
 });
+// Non-PDF content items are stored as opaque binary blobs (not extracted/previewed).
+// Maps stored file_type -> extension and download Content-Type.
+const ARCHIVE_CONTENT_TYPES = {
+    zip: "application/zip",
+    rar: "application/vnd.rar",
+    "7z": "application/x-7z-compressed"
+};
+const detectFileType = (filename) => {
+    const lower = filename.toLowerCase();
+    for (const ext of Object.keys(ARCHIVE_CONTENT_TYPES)) {
+        if (lower.endsWith(`.${ext}`))
+            return ext;
+    }
+    return "pdf";
+};
 export const registerPdfRoutes = async (app) => {
     app.get("/api/pdfs", { preHandler: requireAuth }, async (request, reply) => {
         const user = await requireCurrentUser(request, reply);
@@ -130,7 +146,7 @@ export const registerPdfRoutes = async (app) => {
             await auditUnauthorized(user.id, `pdf_${action}`, params.pdf_id, request);
             return reply.status(403).send({ detail: "Insufficient permissions" });
         }
-        if (!pdf.file_data)
+        if (!pdf.file_data && !pdf.file_data_id)
             return reply.status(404).send({ detail: "PDF file data missing" });
         if (action === "preview") {
             pdf.view_count = (pdf.view_count ?? 0) + 1;
@@ -166,12 +182,12 @@ export const registerPdfRoutes = async (app) => {
             });
         }
         const wm = watermarkHeaders();
-        reply.header("Content-Type", pdf.file_type === "zip" ? "application/zip" : "application/pdf");
+        reply.header("Content-Type", ARCHIVE_CONTENT_TYPES[pdf.file_type] ?? "application/pdf");
         reply.header("Content-Disposition", `${disposition}; filename="${pdf.file_name}"`);
         reply.header("Cache-Control", "private, no-store");
         for (const [k, v] of Object.entries(wm))
             reply.header(k, v);
-        return reply.send(pdf.file_data);
+        return reply.send(pdf.file_data_id ? openReadStream(pdf.file_data_id) : pdf.file_data);
     };
     app.get("/api/pdfs/:pdf_id/preview", { preHandler: requireAuth }, (req, rep) => streamPdf(req, rep, "inline", "preview"));
     app.get("/api/pdfs/:pdf_id/download", { preHandler: requireAuth }, (req, rep) => streamPdf(req, rep, "attachment", "download"));
@@ -215,15 +231,20 @@ export const registerPdfRoutes = async (app) => {
         // Build archive and collect successful entries for batch DB writes
         const downloaded = [];
         for (const pdf of pdfs) {
-            if (!pdf.file_data)
+            if (!pdf.file_data && !pdf.file_data_id)
                 continue;
             const entryName = (pdf.file_name ?? `${pdf.pdf_id ?? pdf.id}.pdf`).replace(/[\\/]/g, "_");
-            // pdf.file_data is stored as Mongo Binary; coerce to Node Buffer for archiver
-            const raw = pdf.file_data;
-            const buf = Buffer.isBuffer(raw)
-                ? raw
-                : Buffer.from(raw.buffer ?? raw);
-            archive.append(buf, { name: entryName });
+            if (pdf.file_data_id) {
+                archive.append(openReadStream(pdf.file_data_id), { name: entryName });
+            }
+            else {
+                // pdf.file_data is stored as Mongo Binary; coerce to Node Buffer for archiver
+                const raw = pdf.file_data;
+                const buf = Buffer.isBuffer(raw)
+                    ? raw
+                    : Buffer.from(raw.buffer ?? raw);
+                archive.append(buf, { name: entryName });
+            }
             downloaded.push(pdf);
         }
         // Batch all DB writes in parallel (replaces up to 3N sequential awaits)
@@ -373,11 +394,12 @@ export const registerPdfRoutes = async (app) => {
             try {
                 const pdfCode = await generateMappedPdfCode(cat.category_name, cls.class_name);
                 const checksum = createHash("sha256").update(entry.data).digest("hex");
+                const fileDataId = await storeFile(entry.data, entry.filename, "application/pdf");
                 const doc = await Pdf.create({
                     file_name: entry.filename,
                     original_file_name: entry.filename,
                     file_path: "",
-                    file_data: entry.data,
+                    file_data_id: fileDataId,
                     file_size: entry.data.length,
                     file_checksum: checksum,
                     category_id: categoryId,
@@ -395,7 +417,7 @@ export const registerPdfRoutes = async (app) => {
                     pdf_id: doc.id,
                     version_number: 1,
                     file_path: "",
-                    file_data: entry.data,
+                    file_data_id: fileDataId,
                     file_size: entry.data.length,
                     uploaded_by: user.id,
                     version_notes: versionNotes,
@@ -490,13 +512,14 @@ export const registerPdfRoutes = async (app) => {
             : requestedIsActive === "true" || requestedIsActive === "1";
         const status = requestedStatus ?? (isPlatformRole(user.role) ? "approved" : "pending");
         const checksum = createHash("sha256").update(data).digest("hex");
-        const fileType = originalFilename.toLowerCase().endsWith(".zip") ? "zip" : "pdf";
+        const fileType = detectFileType(originalFilename);
+        const fileDataId = await storeFile(data, originalFilename, ARCHIVE_CONTENT_TYPES[fileType] ?? "application/pdf");
         const doc = await Pdf.create({
             file_name: requestedFileName,
             file_type: fileType,
             original_file_name: originalFilename,
             file_path: "",
-            file_data: data,
+            file_data_id: fileDataId,
             file_size: data.length,
             file_checksum: checksum,
             category_id: categoryId,
@@ -514,7 +537,7 @@ export const registerPdfRoutes = async (app) => {
             pdf_id: doc.id,
             version_number: 1,
             file_path: "",
-            file_data: data,
+            file_data_id: fileDataId,
             file_size: data.length,
             uploaded_by: user.id,
             version_notes: versionNotes,

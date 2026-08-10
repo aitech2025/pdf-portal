@@ -26,9 +26,17 @@ import { usePdfDocument } from '@/hooks/usePdfDocument.js';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 
+const ARCHIVE_TYPES = ['zip', 'rar', '7z'];
+
+const getArchiveLabel = (pdfRecord) => {
+  if (ARCHIVE_TYPES.includes(pdfRecord?.fileType)) return pdfRecord.fileType.toUpperCase();
+  const match = (pdfRecord?.fileName || '').toLowerCase().match(/\.(zip|rar|7z)$/);
+  return match ? match[1].toUpperCase() : null;
+};
+
 const EnhancedPDFViewer = ({ pdfRecord, versionId = null, onClose, className }) => {
-  const isZip = !versionId && (pdfRecord?.fileType === 'zip'
-    || (pdfRecord?.fileName || '').toLowerCase().endsWith('.zip'));
+  const archiveLabel = !versionId ? getArchiveLabel(pdfRecord) : null;
+  const isZip = !!archiveLabel;
   // Skip the PDF fetch/parse for archives — they cannot be rendered by pdfjs.
   const pdfId = (versionId || isZip) ? null : pdfRecord?.id;
   const { file, blobUrl, loading, error } = usePdfDocument({ pdfId, versionId });
@@ -187,7 +195,7 @@ const EnhancedPDFViewer = ({ pdfRecord, versionId = null, onClose, className }) 
               </Button>
             )}
             <h3 className="font-semibold text-sm truncate">{pdfRecord.fileName}</h3>
-            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 shrink-0">ZIP</Badge>
+            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 shrink-0">{archiveLabel}</Badge>
           </div>
           {onClose && (
             <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 hidden lg:inline-flex">
@@ -198,9 +206,9 @@ const EnhancedPDFViewer = ({ pdfRecord, versionId = null, onClose, className }) 
         <div className="flex-1 min-h-0 flex items-center justify-center bg-muted/30 p-8">
           <div className="text-center max-w-sm">
             <FileWarning className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-1">ZIP archive</h3>
+            <h3 className="text-lg font-medium text-foreground mb-1">{archiveLabel} archive</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              This file is a ZIP archive and can't be previewed. Download it to open the contents.
+              This file is a {archiveLabel} archive and can't be previewed. Download it to open the contents.
             </p>
             <Button onClick={handleDownload}>
               <Download className="w-4 h-4 mr-2" /> Download
