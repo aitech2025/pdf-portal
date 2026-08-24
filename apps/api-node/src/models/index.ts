@@ -282,9 +282,11 @@ const SystemSettingsSchema = new Schema(
     security_settings: Schema.Types.Mixed,
     // WhatsApp Cloud API
     whatsapp_enabled: { type: Boolean, default: false },
-    whatsapp_phone_number_id: String,
-    whatsapp_access_token: String,
-    whatsapp_api_version: { type: String, default: "v20.0" }
+    // Gupshup (current provider)
+    gupshup_api_key: String,
+    gupshup_app_name: String,
+    gupshup_source_number: String,
+    gupshup_app_id: String
   },
   commonOptions
 );

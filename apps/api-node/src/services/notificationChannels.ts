@@ -25,7 +25,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { Notification, SystemSettings } from "../models/index.js";
 import { pushNotification } from "./realtime.js";
 import { serializeDoc } from "../lib/serialize.js";
-import { sendWhatsAppText, sendWhatsAppTemplate, getCloudApiStatus } from "./whatsappCloudApi.js";
+import { sendWhatsAppText, sendWhatsAppTemplate, getWhatsAppProviderStatus } from "./gupshupWhatsApp.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -338,14 +338,14 @@ export const validateWhatsAppConfiguration = async (): Promise<{
   source: string;
   details: string;
 }> => {
-  const status = await getCloudApiStatus();
+  const status = await getWhatsAppProviderStatus();
   return {
     configured: status.configured,
-    provider: "whatsapp_cloud_api",
+    provider: "gupshup",
     source: status.source,
     details: status.configured
-      ? `WhatsApp Cloud API configured — Phone Number ID: ${status.phoneNumberId}`
-      : "WhatsApp Cloud API not configured. Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN in environment or System Settings."
+      ? `Gupshup configured — app "${status.appName}" sending from ${status.sourceNumber}`
+      : "Gupshup not configured. Set GUPSHUP_API_KEY, GUPSHUP_APP_NAME and GUPSHUP_SOURCE_NUMBER in environment or System Settings."
   };
 };
 

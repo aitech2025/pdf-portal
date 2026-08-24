@@ -6,7 +6,7 @@ import { writeAudit } from "../lib/audit.js";
 import { requirePermission } from "../plugins/auth.js";
 import { PERMISSIONS } from "../lib/permissions.js";
 import { env } from "../config/env.js";
-import { sendWhatsAppTemplate } from "../services/whatsappCloudApi.js";
+import { sendWhatsAppTemplate } from "../services/gupshupWhatsApp.js";
 
 // xlsx (SheetJS) is CJS — load via createRequire so it works under Node ESM and Vite SSR (vitest).
 const nodeRequire = createRequire(import.meta.url);

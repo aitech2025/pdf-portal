@@ -10,24 +10,26 @@ import { toast } from 'sonner';
 import pb from '@/lib/apiClient';
 
 const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
-  const [cloudStatus, setCloudStatus] = useState(null);
+  const [providerStatus, setProviderStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [testNumber, setTestNumber] = useState('');
   const [testing, setTesting] = useState(false);
+  const [refreshingTemplates, setRefreshingTemplates] = useState(false);
   const [form, setForm] = useState({
     whatsappEnabled: false,
-    whatsappPhoneNumberId: '',
-    whatsappAccessToken: '',
-    whatsappApiVersion: 'v20.0',
+    gupshupApiKey: '',
+    gupshupAppName: '',
+    gupshupSourceNumber: '',
+    gupshupAppId: '',
   });
 
   const fetchStatus = async () => {
     setStatusLoading(true);
     try {
       const res = await pb.fetch('/whatsapp/status', 'GET');
-      setCloudStatus(res);
+      setProviderStatus(res);
     } catch {
-      setCloudStatus(null);
+      setProviderStatus(null);
     } finally {
       setStatusLoading(false);
     }
@@ -37,11 +39,14 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
 
   useEffect(() => {
     if (settings) {
+      // PATCH accepts camelCase, but GET serializes the raw snake_case document —
+      // read both so the form repopulates after a save or reload.
       setForm({
-        whatsappEnabled: settings.whatsappEnabled ?? false,
-        whatsappPhoneNumberId: settings.whatsappPhoneNumberId ?? '',
-        whatsappAccessToken: settings.whatsappAccessToken ?? '',
-        whatsappApiVersion: settings.whatsappApiVersion ?? 'v20.0',
+        whatsappEnabled: settings.whatsappEnabled ?? settings.whatsapp_enabled ?? false,
+        gupshupApiKey: settings.gupshupApiKey ?? settings.gupshup_api_key ?? '',
+        gupshupAppName: settings.gupshupAppName ?? settings.gupshup_app_name ?? '',
+        gupshupSourceNumber: settings.gupshupSourceNumber ?? settings.gupshup_source_number ?? '',
+        gupshupAppId: settings.gupshupAppId ?? settings.gupshup_app_id ?? '',
       });
     }
   }, [settings]);
@@ -49,6 +54,18 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
   const handleSave = async () => {
     await onSave('whatsapp', form);
     setTimeout(fetchStatus, 600);
+  };
+
+  const handleRefreshTemplates = async () => {
+    setRefreshingTemplates(true);
+    try {
+      await pb.fetch('/whatsapp/templates/refresh', 'POST');
+      toast.success('Template cache cleared — newly approved templates will be picked up on the next send');
+    } catch (err) {
+      toast.error(err.message || 'Failed to refresh template cache');
+    } finally {
+      setRefreshingTemplates(false);
+    }
   };
 
   const handleTest = async () => {
@@ -73,10 +90,13 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
     }
   };
 
-  const fromEnv = cloudStatus?.source === 'env';
-  const isConfigured = cloudStatus?.configured === true;
+  const fromEnv = providerStatus?.source === 'env';
+  const isConfigured = providerStatus?.configured === true;
   const isEnabled = form.whatsappEnabled;
   const canTest = isConfigured && isEnabled;
+  const sendingFrom = providerStatus?.sourceNumber
+    ? `app "${providerStatus.appName}" · from ${providerStatus.sourceNumber}`
+    : null;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -85,8 +105,8 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
 
           {/* ── Configuration Status ─────────────────────────────────────────── */}
           <SettingSection
-            title="WhatsApp Cloud API"
-            description="Send WhatsApp messages via the official Meta Cloud API. No QR scanning required — uses a permanent system-user access token."
+            title="WhatsApp via Gupshup"
+            description="Send WhatsApp messages through Gupshup, the Business Solution Provider hosting this number. Templates are created and approved in the Gupshup dashboard."
           >
             {statusLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -102,13 +122,13 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
                   )}
                   <div>
                     <p className="font-medium text-sm">
-                      {isConfigured ? 'Cloud API Configured' : 'Not Configured'}
+                      {isConfigured ? 'Gupshup Configured' : 'Not Configured'}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {fromEnv
-                        ? `Credentials from environment variables · Phone ID: ${cloudStatus?.phoneNumberId}`
+                        ? `Credentials from environment variables · ${sendingFrom}`
                         : isConfigured
-                          ? `Credentials stored in database · Phone ID: ${cloudStatus?.phoneNumberId}`
+                          ? `Credentials stored in database · ${sendingFrom}`
                           : 'Set credentials below or via environment variables'}
                     </p>
                   </div>
@@ -124,8 +144,9 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
                 <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <p className="text-sm text-blue-700 dark:text-blue-400">
                   Credentials are set via environment variables and cannot be edited here.
-                  Update <code className="font-mono text-xs bg-blue-500/10 px-1 rounded">WHATSAPP_PHONE_NUMBER_ID</code> and{' '}
-                  <code className="font-mono text-xs bg-blue-500/10 px-1 rounded">WHATSAPP_ACCESS_TOKEN</code> in your{' '}
+                  Update <code className="font-mono text-xs bg-blue-500/10 px-1 rounded">GUPSHUP_API_KEY</code>,{' '}
+                  <code className="font-mono text-xs bg-blue-500/10 px-1 rounded">GUPSHUP_APP_NAME</code> and{' '}
+                  <code className="font-mono text-xs bg-blue-500/10 px-1 rounded">GUPSHUP_SOURCE_NUMBER</code> in your{' '}
                   <code className="font-mono text-xs">.env</code> file to change them.
                 </p>
               </div>
@@ -135,8 +156,8 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
               <div className="mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                  WhatsApp Cloud API is active. School credential delivery, new content alerts,
-                  and broadcasts will be sent via WhatsApp.
+                  Gupshup delivery is active. School credential delivery, new content alerts,
+                  marks broadcasts, and announcements will be sent via WhatsApp.
                 </p>
               </div>
             )}
@@ -169,31 +190,39 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
           {/* ── Credentials (DB-sourced only) ─────────────────────────────────── */}
           {!fromEnv && (
             <SettingSection
-              title="API Credentials"
-              description="Meta WhatsApp Cloud API credentials. Get these from Meta Developer Portal → Your App → WhatsApp → API Setup."
+              title="Gupshup Credentials"
+              description="Get these from the Gupshup dashboard. The API key is under Dashboard → API Key; the app name and app ID are on the app's detail page."
             >
               <div className="space-y-4">
-                <InputSetting
-                  label="Phone Number ID"
-                  value={form.whatsappPhoneNumberId}
-                  onChange={e => setForm(f => ({ ...f, whatsappPhoneNumberId: e.target.value }))}
-                  placeholder="123456789012345"
-                  description="Found in Meta Developer Portal → WhatsApp → API Setup (this is the numeric ID, not the phone number itself)"
-                  disabled={saving}
-                />
                 <PasswordField
-                  label="Access Token"
-                  value={form.whatsappAccessToken}
-                  onChange={e => setForm(f => ({ ...f, whatsappAccessToken: e.target.value }))}
-                  placeholder="EAAxxxxxxxxxxxxxxxxxxxxx…"
+                  label="API Key"
+                  value={form.gupshupApiKey}
+                  onChange={e => setForm(f => ({ ...f, gupshupApiKey: e.target.value }))}
+                  placeholder="sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                   disabled={saving}
                 />
                 <InputSetting
-                  label="API Version"
-                  value={form.whatsappApiVersion}
-                  onChange={e => setForm(f => ({ ...f, whatsappApiVersion: e.target.value }))}
-                  placeholder="v20.0"
-                  description="Keep at v20.0 unless Meta requires a newer version"
+                  label="App Name"
+                  value={form.gupshupAppName}
+                  onChange={e => setForm(f => ({ ...f, gupshupAppName: e.target.value }))}
+                  placeholder="IiconAcademy"
+                  description="Sent as src.name on every request — must match the app name in Gupshup exactly"
+                  disabled={saving}
+                />
+                <InputSetting
+                  label="Source Number"
+                  value={form.gupshupSourceNumber}
+                  onChange={e => setForm(f => ({ ...f, gupshupSourceNumber: e.target.value }))}
+                  placeholder="919876543210"
+                  description="The migrated WhatsApp number in E.164 digits, without a leading + or spaces"
+                  disabled={saving}
+                />
+                <InputSetting
+                  label="App ID"
+                  value={form.gupshupAppId}
+                  onChange={e => setForm(f => ({ ...f, gupshupAppId: e.target.value }))}
+                  placeholder="c6aecef6-bcb0-4fb1-8100-28c094e3bc6b"
+                  description="Required to resolve template names to Gupshup template IDs. Without it, template sends will fail."
                   disabled={saving}
                 />
               </div>
@@ -211,24 +240,29 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
           {/* ── Message Templates ─────────────────────────────────────────────── */}
           <SettingSection
             title="Active Message Templates"
-            description="Pre-approved Meta templates used for WhatsApp delivery. Template names are configured via environment variables."
+            description="Templates must exist and be APPROVED in the Gupshup dashboard under the same names. Names are configured via environment variables; Gupshup template IDs are resolved automatically and cached for 5 minutes."
           >
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
                 {
                   label: 'Credential Delivery',
                   value: 'school_account',
-                  description: 'Sent when a school admin account is created',
+                  description: '3 variables — school name, user ID, password. Category: Authentication.',
                 },
                 {
                   label: 'New Content Alert',
                   value: 'new_content_notification',
-                  description: 'Sent when a PDF is uploaded for a school\'s program',
+                  description: '2 variables — content title, program name. Category: Marketing.',
                 },
                 {
                   label: 'Broadcast',
                   value: 'broadcast_announcement',
-                  description: 'Sent when admin broadcasts to schools via WhatsApp',
+                  description: '1 variable — the full announcement body. Category: Marketing.',
+                },
+                {
+                  label: 'Student Marks',
+                  value: 'student_marks_v3',
+                  description: '5 variables — student, class, program, results, total. Category: Utility.',
                 },
               ].map(t => (
                 <div key={t.value} className="p-3 rounded-lg border border-border/50 bg-card/50">
@@ -238,12 +272,26 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
                 </div>
               ))}
             </div>
+            <div className="flex justify-end pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefreshTemplates}
+                disabled={refreshingTemplates || !isConfigured}
+                className="bg-background"
+              >
+                {refreshingTemplates
+                  ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  : <RefreshCw className="w-4 h-4 mr-2" />}
+                Refresh template cache
+              </Button>
+            </div>
           </SettingSection>
 
           {/* ── Notification Events ───────────────────────────────────────────── */}
           <SettingSection
             title="Notification Events"
-            description="WhatsApp messages are delivered for these events when the API is configured and enabled."
+            description="WhatsApp messages are delivered for these events when Gupshup is configured and enabled."
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
@@ -251,7 +299,7 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
                 'User creation — credential delivery (template)',
                 'New PDF uploaded — content alert (template)',
                 'Platform broadcast — announcement (template)',
-                'Password reset (admin-triggered)',
+                'Student marks broadcast (template)',
                 'School onboarding approval / rejection',
               ].map(event => (
                 <div key={event} className="flex items-center gap-2 text-sm text-foreground">
@@ -265,7 +313,7 @@ const WhatsAppConfigurationTab = ({ settings, onSave, saving }) => {
           {/* ── Test Message ──────────────────────────────────────────────────── */}
           <SettingSection
             title="Send Test Message"
-            description="Send a test template message to verify your Cloud API credentials. Uses the school_account template with sample values."
+            description="Send a test template message to verify your Gupshup credentials. Uses the school_account template with sample values."
           >
             <div className="flex items-end gap-3 max-w-md">
               <div className="flex-1">

@@ -9,7 +9,7 @@ import {
   validateEmailConfiguration,
   validateWhatsAppConfiguration
 } from "../services/notificationChannels.js";
-import { sendWhatsAppTemplate } from "../services/whatsappCloudApi.js";
+import { sendWhatsAppTemplate } from "../services/gupshupWhatsApp.js";
 import { env } from "../config/env.js";
 
 // Fields that must never appear in a $set — they are either immutable identifiers
@@ -52,9 +52,10 @@ const mapSystemSettingsUpdate = (body: Record<string, unknown>) => {
     featureFlags: "feature_flags",
     securitySettings: "security_settings",
     whatsappEnabled: "whatsapp_enabled",
-    whatsappPhoneNumberId: "whatsapp_phone_number_id",
-    whatsappAccessToken: "whatsapp_access_token",
-    whatsappApiVersion: "whatsapp_api_version"
+    gupshupApiKey: "gupshup_api_key",
+    gupshupAppName: "gupshup_app_name",
+    gupshupSourceNumber: "gupshup_source_number",
+    gupshupAppId: "gupshup_app_id"
   };
 
   for (const [key, raw] of Object.entries(body)) {
@@ -181,13 +182,11 @@ export const registerMaintenanceRoutes = async (app: FastifyInstance): Promise<v
       );
 
       const CODE_HINTS: Record<number, string> = {
-        190: "Access token is invalid or expired. Generate a new permanent System User token in Meta Business Suite → System Users.",
-        132000: `Template "${templateName}" was not found with language "en_US". Check the template name and language code in Meta Business Manager → Account Tools → Message Templates.`,
-        132001: `Template "${templateName}" does not exist. Create it in Meta Business Manager → Account Tools → Message Templates with 3 body variables {{1}}, {{2}}, {{3}}.`,
-        132012: `Template "${templateName}" parameter count mismatch. The template body must have exactly 3 variables: {{1}} (school name), {{2}} (user ID), {{3}} (password).`,
-        132015: `Template "${templateName}" is not yet approved by Meta. Wait for approval or check Meta Business Manager → Account Tools → Message Templates.`,
-        100: "Invalid Phone Number ID. Verify the Phone Number ID in Meta Developer Portal → WhatsApp → API Setup.",
-        200: "Permission denied. Ensure the System User token has 'whatsapp_business_messaging' permission and the WABA is assigned to the System User.",
+        401: "Gupshup authentication failed. Check GUPSHUP_API_KEY (Gupshup dashboard → Dashboard → API Key).",
+        404: `Template "${templateName}" could not be resolved. Confirm it exists and is APPROVED in the Gupshup dashboard → Templates, and that GUPSHUP_APP_ID points at the right app.`,
+        400: `Bad request. Usual causes: GUPSHUP_SOURCE_NUMBER is not the number registered on this Gupshup app, the destination is not a valid E.164 number, or the parameter count does not match the ${templateName} template body.`,
+        403: "Gupshup rejected the request. The number may be restricted at the Meta level — check Business Support Home for an active violation.",
+        429: "Rate limited by Gupshup. Slow the send rate and retry.",
       };
 
       const hint = result.errorCode ? (CODE_HINTS[result.errorCode] ?? null) : null;
